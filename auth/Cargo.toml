@@ -1,0 +1,25 @@
+[package]
+name = "auth"
+version = "0.1.0"
+authors = ["gzp-crey <gzp@creygames.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4"
+env_logger = "0.7.1"
+
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+serde_urlencoded = "0.6.1"
+
+futures = {version = "0.3.1", features =["compat"]}
+
+actix = "0.8.3"
+actix-web = "1.0.9"
+oxide-auth = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
+oxide-auth-actix = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
+
+azure-functions-sdk = "0.11.0"
