@@ -5,6 +5,9 @@ use futures::{Future, TryFuture};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
     frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
+    primitives::authorizer::Authorizer,
+    primitives::grant::Grant,
+    primitives::issuer::{IssuedToken, Issuer},
     primitives::prelude::{AuthMap, Client, ClientMap, ClientUrl, RandomGenerator, Scope, TokenMap},
     primitives::registrar::{BoundClient, Registrar, RegistrarError},
 };
@@ -40,9 +43,45 @@ impl Registrar for MyRegistrar {
     }
 }
 
+struct MyAuthorizer {
+    inner: AuthMap<RandomGenerator>,
+}
+
+impl Authorizer for MyAuthorizer {
+    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
+        log::info!("authorize");
+        self.inner.authorize(grant)
+    }
+
+    fn extract(&mut self, token: &str) -> Result<Option<Grant>, ()> {
+        log::info!("extract");
+        self.inner.extract(token)
+    }
+}
+
+struct MyIssuer {
+    inner: TokenMap<RandomGenerator>,
+}
+
+impl Issuer for MyIssuer {
+    fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
+        log::info!("issue");
+        self.inner.issue(grant)
+    }
+
+    fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        log::info!("recover_token");
+        self.inner.recover_token(token)
+    }
+
+    fn recover_refresh<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {
+        log::info!("recover_refresh");
+        self.inner.recover_refresh(token)
+    }
+}
+
 struct AuthState {
-    endpoint:
-        Generic<MyRegistrar, AuthMap<RandomGenerator>, TokenMap<RandomGenerator>, Vacant, Vec<Scope>, fn() -> OAuthResponse>,
+    endpoint: Generic<MyRegistrar, MyAuthorizer, MyIssuer, Vacant, Vec<Scope>, fn() -> OAuthResponse>,
 }
 
 impl AuthState {
@@ -56,24 +95,19 @@ impl AuthState {
         .collect();
         let registrar = MyRegistrar { inner: registrar };
 
+        let authorizer = AuthMap::new(RandomGenerator::new(16));
+        let authorizer = MyAuthorizer { inner: authorizer };
+
+        let issuer = TokenMap::new(RandomGenerator::new(16));
+        let issuer = MyIssuer { inner: issuer };
+
         AuthState {
             endpoint: Generic {
                 registrar,
-                // Authorization tokens are 16 byte random keys to a memory hash map.
-                authorizer: AuthMap::new(RandomGenerator::new(16)),
-                // Bearer tokens are also random generated but 256-bit tokens, since they live longer
-                // and this example is somewhat paranoid.
-                //
-                // We could also use a `TokenSigner::ephemeral` here to create signed tokens which can
-                // be read and parsed by anyone, but not maliciously created. However, they can not be
-                // revoked and thus don't offer even longer lived refresh tokens.
-                issuer: TokenMap::new(RandomGenerator::new(16)),
-
+                authorizer,
+                issuer,
                 solicitor: Vacant,
-
-                // A single scope that will guard resources for this endpoint
                 scopes: vec!["default-scope".parse().unwrap()],
-
                 response: OAuthResponse::ok,
             },
         }
