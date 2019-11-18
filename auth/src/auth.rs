@@ -4,7 +4,7 @@ use futures::compat::{Compat, Compat01As03};
 use futures::{Future, TryFuture};
 use oxide_auth::{
     endpoint::{Endpoint, OwnerConsent, OwnerSolicitor, PreGrant},
-    frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic, Vacant},
+    frontends::simple::endpoint::{ErrorInto, FnSolicitor, Generic},
     primitives::authorizer::Authorizer,
     primitives::grant::Grant,
     primitives::issuer::{IssuedToken, Issuer},
@@ -12,12 +12,6 @@ use oxide_auth::{
     primitives::registrar::{BoundClient, Registrar, RegistrarError},
 };
 use oxide_auth_actix::{Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
-
-enum AuthExtras {
-    AuthGet,
-    AuthPost(String),
-    Nothing,
-}
 
 struct MyRegistrar {
     inner: ClientMap,
@@ -80,8 +74,23 @@ impl Issuer for MyIssuer {
     }
 }
 
+struct MySolicitor {
+}
+
+impl OwnerSolicitor<OAuthRequest> for MySolicitor {
+    fn check_consent(&mut self, request: &mut OAuthRequest, pre_grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+        log::info!("check_consent: {:?}, {:?}", request, pre_grant);
+        OwnerConsent::InProgress(
+            OAuthResponse::ok()
+                .content_type("text/html")
+                .unwrap()
+                .body(&consent_page_html("/authorize".into(), pre_grant)),
+        )
+    }
+}
+
 struct AuthState {
-    endpoint: Generic<MyRegistrar, MyAuthorizer, MyIssuer, Vacant, Vec<Scope>, fn() -> OAuthResponse>,
+    endpoint: Generic<MyRegistrar, MyAuthorizer, MyIssuer, MySolicitor, Vec<Scope>, fn() -> OAuthResponse>,
 }
 
 impl AuthState {
@@ -101,30 +110,18 @@ impl AuthState {
         let issuer = TokenMap::new(RandomGenerator::new(16));
         let issuer = MyIssuer { inner: issuer };
 
+        let solicitor = MySolicitor{};
+
         AuthState {
             endpoint: Generic {
                 registrar,
                 authorizer,
                 issuer,
-                solicitor: Vacant,
+                solicitor: solicitor,
                 scopes: vec!["default-scope".parse().unwrap()],
                 response: OAuthResponse::ok,
             },
         }
-    }
-
-    pub fn with_solicitor<'a, S>(&'a mut self, solicitor: S) -> impl Endpoint<OAuthRequest, Error = WebError> + 'a
-    where
-        S: OwnerSolicitor<OAuthRequest> + 'static,
-    {
-        ErrorInto::new(Generic {
-            authorizer: &mut self.endpoint.authorizer,
-            registrar: &mut self.endpoint.registrar,
-            issuer: &mut self.endpoint.issuer,
-            solicitor,
-            scopes: &mut self.endpoint.scopes,
-            response: OAuthResponse::ok,
-        })
     }
 }
 
@@ -132,43 +129,15 @@ impl Actor for AuthState {
     type Context = Context<Self>;
 }
 
-impl<Op> Handler<OAuthMessage<Op, AuthExtras>> for AuthState
+impl<Op> Handler<OAuthMessage<Op, ()>> for AuthState
 where
     Op: OAuthOperation,
 {
     type Result = Result<Op::Item, Op::Error>;
 
-    fn handle(&mut self, msg: OAuthMessage<Op, AuthExtras>, _: &mut Self::Context) -> Self::Result {
-        let (op, ex) = msg.into_inner();
-
-        match ex {
-            AuthExtras::AuthGet => {
-                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, pre_grant: &PreGrant| {
-                    // This will display a page to the user asking for his permission to proceed. The submitted form
-                    // will then trigger the other authorization handler which actually completes the flow.
-                    OwnerConsent::InProgress(
-                        OAuthResponse::ok()
-                            .content_type("text/html")
-                            .unwrap()
-                            .body(&consent_page_html("/authorize".into(), pre_grant)),
-                    )
-                });
-
-                op.run(self.with_solicitor(solicitor))
-            }
-            AuthExtras::AuthPost(query_string) => {
-                let solicitor = FnSolicitor(move |_: &mut OAuthRequest, _: &PreGrant| {
-                    if query_string.contains("allow") {
-                        OwnerConsent::Authorized("dummy user".to_owned())
-                    } else {
-                        OwnerConsent::Denied
-                    }
-                });
-
-                op.run(self.with_solicitor(solicitor))
-            }
-            _ => op.run(&mut self.endpoint),
-        }
+    fn handle(&mut self, msg: OAuthMessage<Op, ()>, _: &mut Self::Context) -> Self::Result {
+        let (op, _) = msg.into_inner();
+        op.run(&mut self.endpoint)
     }
 }
 
@@ -206,14 +175,8 @@ fn get_authorization(
     oath_req: OAuthRequest,
     state: web::Data<State>,
 ) -> impl TryFuture<Ok = Result<OAuthResponse, WebError>, Error = MailboxError> {
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
     log::info!("get_authorization");
-    Compat01As03::new(state.auth.send(Authorize(oath_req).wrap(AuthExtras::AuthGet)))
+    Compat01As03::new(state.auth.send(Authorize(oath_req).wrap(())))
 }
 
 fn post_authorization(
@@ -222,17 +185,11 @@ fn post_authorization(
     state: web::Data<State>,
 ) -> impl TryFuture<Ok = Result<OAuthResponse, WebError>, Error = MailboxError> {
     log::info!("post_authorization");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
     // Some authentication should be performed here in production cases
     Compat01As03::new(
         state
             .auth
-            .send(Authorize(oath_req).wrap(AuthExtras::AuthPost(req.query_string().to_owned()))),
+            .send(Authorize(oath_req).wrap(())),
     )
 }
 
@@ -241,14 +198,14 @@ fn post_token(
     state: web::Data<State>,
 ) -> impl TryFuture<Ok = Result<OAuthResponse, WebError>, Error = MailboxError> {
     log::info!("post_token");
-    Compat01As03::new(state.auth.send(Token(oath_req).wrap(AuthExtras::Nothing)))
+    Compat01As03::new(state.auth.send(Token(oath_req).wrap(())))
 }
 
 fn post_refresh(
     oath_req: OAuthRequest,
     state: web::Data<State>,
 ) -> impl TryFuture<Ok = Result<OAuthResponse, WebError>, Error = MailboxError> {
-    Compat01As03::new(state.auth.send(Refresh(oath_req).wrap(AuthExtras::Nothing)))
+    Compat01As03::new(state.auth.send(Refresh(oath_req).wrap(())))
 }
 
 pub fn configure_service(cfg: &mut web::ServiceConfig) {
