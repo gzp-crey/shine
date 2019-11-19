@@ -21,28 +21,13 @@ use oxide_auth_actix::{Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OA
 use std::sync::Arc;
 use tera::Tera;
 
+use authorizer::MyAuthorizer;
 use regsitrar::MyRegistrar;
 
 enum AuthError {
     Web(WebError),
     OAuth(OAuthError),
     Internal(String),
-}
-
-struct MyAuthorizer {
-    inner: AuthMap<RandomGenerator>,
-}
-
-impl Authorizer for MyAuthorizer {
-    fn authorize(&mut self, grant: Grant) -> Result<String, ()> {
-        log::info!("authorize");
-        self.inner.authorize(grant)
-    }
-
-    fn extract(&mut self, token: &str) -> Result<Option<Grant>, ()> {
-        log::info!("extract");
-        self.inner.extract(token)
-    }
 }
 
 struct MyIssuer {
@@ -177,17 +162,12 @@ where
 
 impl AuthState {
     fn new() -> Self {
-        let registrar = MyRegistrar::new();
-
-        let authorizer = AuthMap::new(RandomGenerator::new(16));
-        let authorizer = MyAuthorizer { inner: authorizer };
-
         let issuer = TokenMap::new(RandomGenerator::new(16));
         let issuer = MyIssuer { inner: issuer };
 
         AuthState {
-            registrar,
-            authorizer,
+            registrar: MyRegistrar::new(),
+            authorizer: MyAuthorizer::new(),
             issuer,
             scopes: vec!["default-scope".parse().unwrap()],
         }
