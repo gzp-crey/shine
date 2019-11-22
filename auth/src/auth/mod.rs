@@ -4,16 +4,18 @@ mod issuer;
 mod regsitrar;
 mod solicitor;
 
-use crate::usersession::UserId;
+use crate::session::UserId;
 use actix::{Actor, Addr, MailboxError};
 use actix_session::Session;
-use actix_web::{web, HttpRequest};
+use actix_web::{web, Error as ActixError, HttpRequest, HttpResponse};
+use actix_web_httpauth::extractors::basic::BasicAuth;
 use futures::compat::{Compat, Compat01As03, Future01CompatExt};
-use futures::{Future, TryFuture};
+use futures::TryFuture;
 use handler::AuthState;
+use oxide_auth::endpoint::OAuthError;
 use oxide_auth::frontends::simple::endpoint::Vacant;
 use oxide_auth_actix::{Authorize, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
-use solicitor::{AuthorizeWithLogin, RequestAuthorizeWithLogin};
+use solicitor::{AuthorizeUser, RequestWithAuthorizedUser, RequestWithUserLogin};
 use std::sync::Arc;
 use tera::Tera;
 
@@ -40,27 +42,59 @@ async fn get_authorization(session: Session, oath_req: OAuthRequest, state: web:
     log::info!("get_authorization");
     let user = UserId::from_session(&session).map_err(|_| WebError::Mailbox)?;
     if let Some(user) = user {
-        log::info!("hi {}", user.name);
+        state
+            .auth
+            .send(Authorize(oath_req).wrap(RequestWithAuthorizedUser::new(state.tera.clone(), user)))
+            .compat()
+            .await?
+    } else {
+        state
+            .auth
+            .send(Authorize(oath_req).wrap(RequestWithUserLogin::new(state.tera.clone())))
+            .compat()
+            .await?
     }
-
-    state
-        .auth
-        .send(Authorize(oath_req).wrap(RequestAuthorizeWithLogin::new(state.tera.clone())))
-        .compat()
-        .await?
 }
 
-fn post_authorization(
+async fn post_authorization(
+    session: Session,
     _req: HttpRequest,
     oath_req: OAuthRequest,
     state: web::Data<State>,
-) -> impl TryFuture<Ok = Result<OAuthResponse, WebError>, Error = MailboxError> {
+) -> Result<OAuthResponse, WebError> {
     log::info!("post_authorization");
-    Compat01As03::new(
+    let user = UserId::from_session(&session).map_err(|_| WebError::Mailbox)?;
+    if let Some(user) = user {
         state
             .auth
-            .send(Authorize(oath_req).wrap(AuthorizeWithLogin::new(state.tera.clone()))),
-    )
+            .send(Authorize(oath_req).wrap(AuthorizeUser::new(user)))
+            .compat()
+            .await?
+    } else {
+        Err(WebError::Endpoint(OAuthError::DenySilently))
+    }
+}
+
+fn login(session: Session, auth: BasicAuth, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
+    log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
+    UserId::new(auth.user_id().to_owned().to_string(), "a".to_string(), vec![]).to_session(&session)?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+fn index(session: Session, req: HttpRequest) -> actix_web::Result<&'static str> {
+    println!("{:?}", req);
+
+    // RequestSession trait is used for session access
+    let mut counter = 1;
+    if let Some(count) = session.get::<i32>("counter")? {
+        println!("SESSION value: {}", count);
+        counter = count + 1;
+        session.set("counter", counter)?;
+    } else {
+        session.set("counter", counter)?;
+    }
+
+    Ok("welcome!")
 }
 
 fn post_token(
@@ -87,9 +121,11 @@ pub fn configure_service(cfg: &mut web::ServiceConfig) {
             .service(
                 web::resource("authorize")
                     .route(web::get().to_async(|a, b, c| get_authorization(a, b, c).boxed_local().compat()))
-                    .route(web::post().to_async(|a, b, c| Compat::new(post_authorization(a, b, c)))),
+                    .route(web::post().to_async(|a, b, c, d| post_authorization(a, b, c, d).boxed_local().compat())),
             )
             .service(web::resource("refresh").route(web::post().to_async(|a, b| Compat::new(post_refresh(a, b)))))
-            .service(web::resource("token").route(web::post().to_async(|a, b| Compat::new(post_token(a, b))))),
+            .service(web::resource("token").route(web::post().to_async(|a, b| Compat::new(post_token(a, b)))))
+            .service(web::resource("login").route(web::post().to(login)))
+            .service(web::resource("hi").to(index)),
     );
 }
