@@ -18,6 +18,7 @@ futures = {version = "0.3.1", features =["compat"]}
 tera = "1.0.0-beta"
 actix = "0.8.3"
 actix-web = "1.0.9"
+actix-session = "0.2.0"
 oxide-auth = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
 oxide-auth-actix = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
 

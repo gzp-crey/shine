@@ -3,6 +3,7 @@ use std::env;
 
 mod auth;
 mod config;
+mod usersession;
 
 /// Example of a main function of a actix server supporting oauth.
 pub fn main() {
@@ -17,9 +18,12 @@ pub fn main() {
     let service_config = config::Config::default();
 
     let _ = HttpServer::new(move || {
-        App::new().wrap(middleware::Logger::default()).configure(|cfg| {
-            auth::configure_service(cfg);
-        })
+        App::new()
+            .wrap(middleware::Logger::default())
+            //.wrap(usersession::UserId::cookie_session(&service_config.secret_user_id))
+            .configure(|cfg| {
+                auth::configure_service(cfg);
+            })
     })
     .workers(service_config.worker_count)
     .bind(service_config.get_bind_address())
