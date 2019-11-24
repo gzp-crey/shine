@@ -15,10 +15,7 @@ pub struct State {
 
 impl State {
     fn new() -> Result<State, String> {
-        let tera = match Tera::new("tera_web/**/*") {
-            Ok(t) => t,
-            Err(e) => return Err(format!("Tera template parsing error(s): {}", e)),
-        };
+        let tera = Tera::new("tera_web/**/*").map_err(|err| format!("Tera template parsing error(s): {}", err))?;
 
         Ok(State {
             auth: AuthState::new().start(),
@@ -41,6 +38,7 @@ pub fn configure_service(cfg: &mut web::ServiceConfig) {
             .service(web::resource("refresh").route(web::post().to_async(|a, b| post_refresh(a, b).boxed_local().compat())))
             .service(web::resource("token").route(web::post().to_async(|a, b| post_token(a, b).boxed_local().compat())))
             .service(web::resource("login").route(web::post().to_async(|a, b, c| login(a, b, c).boxed_local().compat())))
-            .service(web::resource("register").route(web::post().to_async(|a, b, c| register(a, b, c).boxed_local().compat()))),
+            .service(web::resource("register").route(web::post().to_async(|a, b, c| register(a, b, c).boxed_local().compat())))
+            .service(web::resource("test").route(web::post().to_async(|a| test_az(a).boxed_local().compat()))),
     );
 }

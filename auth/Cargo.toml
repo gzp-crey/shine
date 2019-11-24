@@ -8,6 +8,9 @@ edition = "2018"
 log = "0.4"
 env_logger = "0.7.1"
 
+base64 = "0.11.0"
+bytes = "0.4.12"
+
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -20,9 +23,10 @@ actix = "0.8.3"
 actix-web = "1.0.9"
 actix-session = "0.2.0"
 actix-web-httpauth = "0.3.2"
-base64 = "0.11.0"
-bytes = "0.4.12"
+
 oxide-auth = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
 oxide-auth-actix = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
 
-azure-functions-sdk = "0.11.0"
+azure_sdk_core = { git = "https://github.com/zpgaal/AzureSDKForRust.git", branch = "gzp" }
+azure_sdk_storage_core = { git = "https://github.com/zpgaal/AzureSDKForRust.git", branch = "gzp" }
+azure_sdk_storage_table = { git = "https://github.com/zpgaal/AzureSDKForRust.git", branch = "gzp" }
