@@ -38,7 +38,9 @@ impl Config {
 
         s.merge(Environment::new().separator("--"))?;
 
-        s.merge(File::from(Path::new("../../secret.config.json")))?;
+        println!("The current directory is {:?}", std::env::current_dir());
+
+        let _ = s.merge(File::from(Path::new("../secret.config.json")));
 
         s.try_into()
     }
