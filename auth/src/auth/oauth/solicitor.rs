@@ -2,16 +2,17 @@ use crate::session::UserId;
 use oxide_auth::endpoint::{OwnerConsent, OwnerSolicitor, PreGrant};
 use oxide_auth_actix::{OAuthRequest, OAuthResponse, WebError};
 use std::sync::Arc;
+use std::rc::Rc;
 use tera::Tera;
 
 /// Perform authorization request with a signed in user
 pub struct RequestWithAuthorizedUser {
-    tera: Arc<Tera>,
+    tera: Rc<Tera>,
     user: UserId,
 }
 
 impl RequestWithAuthorizedUser {
-    pub fn new(tera: Arc<Tera>, user: UserId) -> Self {
+    pub fn new(tera: Rc<Tera>, user: UserId) -> RequestWithAuthorizedUser {
         RequestWithAuthorizedUser { tera, user }
     }
 }
@@ -38,11 +39,11 @@ impl<'a> OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
 
 /// Perform authorization request with user login
 pub struct RequestWithUserLogin {
-    tera: Arc<Tera>,
+    tera: Rc<Tera>,
 }
 
 impl RequestWithUserLogin {
-    pub fn new(tera: Arc<Tera>) -> Self {
+    pub fn new(tera: Rc<Tera>) -> Self {
         RequestWithUserLogin { tera }
     }
 }
@@ -68,3 +69,4 @@ impl<'a> OwnerSolicitor<OAuthRequest> for AuthorizeUser {
         unimplemented!()
     }
 }
+

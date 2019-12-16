@@ -1,7 +1,9 @@
 mod authorizer;
 mod issuer;
 mod registrar;
+mod solicitor;
 
+use self::solicitor::*;
 use super::identity::IdentityDB;
 use super::{AuthConfig, AuthError};
 use crate::session::UserId;
@@ -17,11 +19,13 @@ use oxide_auth::{
     primitives::scope::Scope,
 };
 use oxide_auth_actix::{Authorize, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
+use std::cell::RefCell;
+use std::rc::Rc;
 use tera::Tera;
 
 pub struct State {
-    pub tera: Tera,
-    pub identity_db: IdentityDB,
+    pub tera: Rc<Tera>,
+    pub identity_db: Rc<IdentityDB>,
 
     pub registrar: ClientMap,
     pub authorizer: AuthMap<RandomGenerator>,
@@ -44,8 +48,8 @@ impl State {
         let issuer = TokenMap::new(RandomGenerator::new(16));
 
         State {
-            tera,
-            identity_db,
+            tera: Rc::new(tera),
+            identity_db: Rc::new(identity_db),
             registrar,
             authorizer,
             issuer,
@@ -145,24 +149,17 @@ where
 pub async fn get_authorization(
     session: Session,
     oath_req: OAuthRequest,
-    state: web::Data<State>,
+    state: web::Data<RefCell<State>>,
 ) -> Result<OAuthResponse, WebError> {
     log::info!("get_authorization");
     let user = UserId::from_session(&session).map_err(|err| WebError::InternalError(Some(format!("session: {:?}", err))))?;
+
+    let state = &mut state.borrow_mut();
+    let tera = state.tera.clone();
     if let Some(user) = user {
-        unimplemented!()
-    /*state
-    .auth
-    .send(Authorize(oath_req).wrap(RequestWithAuthorizedUser::new(state.tera.clone(), user)))
-    .compat()
-    .await?*/
+        Authorize(oath_req).run(state.with_solicitor(RequestWithAuthorizedUser::new(tera, user)))
     } else {
-        unimplemented!()
-        /*state
-        .auth
-        .send(Authorize(oath_req).wrap(RequestWithUserLogin::new(state.tera.clone())))
-        .compat()
-        .await?*/
+        Authorize(oath_req).run(state.with_solicitor(RequestWithUserLogin::new(tera)))
     }
 }
 
