@@ -23,12 +23,12 @@ impl Config {
                 "bind_host": "0.0.0.0",
                 "bind_port": "12345",
                 "worker_count": "4",
-                "user_id_secret" : "c2VyZmV0",
+                "user_id_secret" : "ERROR: provide secret from secret.config.json",
                 "auth" : {
                     "identity": {
-                        "password_pepper": "012",
-                        "storage_account": "120",
-                        "storage_account_key": "c2VyZmV0"
+                        "password_pepper": "ERROR: provide secret from secret.config.json",
+                        "storage_account": "ERROR: provide secret from secret.config.json",
+                        "storage_account_key": "ERROR: provide secret from secret.config.json"
                     }
                 }
             }
@@ -38,9 +38,12 @@ impl Config {
 
         s.merge(Environment::new().separator("--"))?;
 
-        println!("The current directory is {:?}", std::env::current_dir());
+        log::info!("The current directory is {:?}", std::env::current_dir());
 
-        let _ = s.merge(File::from(Path::new("../secret.config.json")));
+        match s.merge(File::from(Path::new("secret.config.json"))) {
+            Ok(_) => {}
+            Err(err) => log::warn!("Faild to parse secret config: {}", err),
+        };
 
         s.try_into()
     }

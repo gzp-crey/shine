@@ -28,7 +28,7 @@ impl<'a> OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
             Ok(html) => html,
             Err(e) => {
                 log::error!("Tera render error: {}", e);
-                return OwnerConsent::Error(WebError::Mailbox);
+                return OwnerConsent::Error(WebError::InternalError(None));
             }
         };
 

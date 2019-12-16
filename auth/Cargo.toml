@@ -21,14 +21,16 @@ serde_urlencoded = "0.6"
 config ="0.9"
 
 tera = "1.0.0-beta"
-actix = "0.8"
-actix-web = "1.0"
-actix-session = "0.2"
-actix-web-httpauth = "0.3"
+actix-rt = "1.0.0"
+actix-web = "2.0.0-alpha.5"
+actix-session = "0.3.0-alpha.3"
+mount = "0.4.0"
+router = "0.6.0"
 
-oxide-auth = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
-oxide-auth-actix = { git = "https://github.com/HeroicKatora/oxide-auth/", branch = "next" }
+url = "1.7"
+oxide-auth = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_16_actix_2" }
+oxide-auth-actix = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_16_actix_2" }
 
-azure_sdk_core = { git = "https://github.com/zpgaal/AzureSDKForRust.git", branch = "gzp" }
-azure_sdk_storage_core = { git = "https://github.com/zpgaal/AzureSDKForRust.git", branch = "gzp" }
-azure_sdk_storage_table = { git = "https://github.com/zpgaal/AzureSDKForRust.git", branch = "gzp" }
+azure_sdk_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
+azure_sdk_storage_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
+azure_sdk_storage_table = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }

@@ -4,7 +4,6 @@ use crate::session::UserId;
 use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::table::{TableService, TableStorage};
-use futures::compat::Future01CompatExt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -15,48 +14,70 @@ fn ignore_409(err: AzureError) -> Result<(), AzureError> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum State {
     Active,
     Disabled,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct IdentityUser {
-    id: String,
+    partition_key: String,
+    row_key: String,
     state: State,
-    name: String,
-    email: Option<String>,
-    email_validate: bool,
-    password_hash: String,
-    roles: Vec<String>,
+
+    pub name: String,
+    pub email: Option<String>,
+    pub email_validate: bool,
+    pub password_hash: String,
+    //pub roles: Vec<String>,
+}
+
+impl IdentityUser {
+    fn new(id: String, name: String, email: Option<String>, password_hash: String) -> IdentityUser {
+        IdentityUser {
+            partition_key: id.clone(),
+            row_key: id.clone(),
+            state: State::Active,
+            name,
+            email,
+            email_validate: false,
+            password_hash,
+            //roles: vec![],
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.row_key
+    }
 }
 
 impl From<IdentityUser> for UserId {
     fn from(user: IdentityUser) -> Self {
-        UserId::new(user.id, user.name, user.roles)
+        UserId::new(user.row_key, user.name, vec![] /*user.roles*/)
     }
 }
 
+#[derive(Clone)]
 pub struct IdentityDB {
     password_pepper: String,
-
     users: TableStorage,
     email_index: TableStorage,
     name_index: TableStorage,
 }
 
 impl IdentityDB {
-    pub async fn new(config: &IdentityConfig) -> Result<Self, IdentityError> {
+    pub async fn new(config: IdentityConfig) -> Result<Self, IdentityError> {
         let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
         let table_service = TableService::new(client.clone());
         let users = TableStorage::new(table_service.clone(), "users");
         let email_index = TableStorage::new(table_service.clone(), "usersemailIndex");
         let name_index = TableStorage::new(table_service.clone(), "usersnameIndex");
 
-        users.create_table().compat().await.or_else(ignore_409)?;
-        email_index.create_table().compat().await.or_else(ignore_409)?;
-        name_index.create_table().compat().await.or_else(ignore_409)?;
+        users.create_table().await.or_else(ignore_409)?;
+        email_index.create_table().await.or_else(ignore_409)?;
+        name_index.create_table().await.or_else(ignore_409)?;
 
         Ok(IdentityDB {
             password_pepper: config.password_pepper.clone(),
@@ -72,17 +93,18 @@ impl IdentityDB {
         log::info!("Creating new user: {}", id);
         let password_hash = password;
 
-        let mut user = IdentityUser {
-            id,
-            state: State::Active,
-            name,
-            email,
-            email_validate: false,
-            password_hash,
-            roles: vec![],
-        };
+        let user = IdentityUser::new(id, name, email, password_hash);
 
-        self.users.insert_entity(&user).compat().await?;
+        log::info!("res1: {:?}", &serde_json::to_string(&user));
+        /*log::info!(
+            "res: {:?}",
+            self.users
+                .get_entity::<std::collections::HashMap<String, String>>("hello", "world")
+                .compat()
+                .await
+        );
+
+        self.users.insert_entity(&user).compat().await?;*/
 
         // create nameindex and ensure uniquiness
         Ok(user)

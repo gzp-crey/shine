@@ -16,7 +16,7 @@ pub fn main() {
         .filter_module("shine_auth", log::LevelFilter::Trace)
         .init();
 
-    let mut sys = actix::System::new("Auth");
+    let mut sys = actix_rt::System::new("Auth");
 
     let service_config = config::Config::new().expect("Service configuration failed");
     log::info!("{:#?}", service_config);

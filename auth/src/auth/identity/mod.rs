@@ -5,7 +5,7 @@ use super::State;
 use crate::session::UserId;
 use actix_session::Session;
 use actix_web::{web, Error as ActixError, HttpResponse};
-use actix_web_httpauth::extractors::basic::BasicAuth;
+//use actix_web_httpauth::extractors::basic::BasicAuth;
 use serde::{Deserialize, Serialize};
 
 pub use self::error::*;
@@ -18,9 +18,9 @@ pub struct IdentityConfig {
     storage_account_key: String,
 }
 
-pub async fn login(session: Session, auth: BasicAuth, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
-    log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
-    UserId::new(auth.user_id().to_owned().to_string(), "a".to_string(), vec![]).to_session(&session)?;
+pub async fn login(session: Session, /*auth: BasicAuth,*/ state: web::Data<State>) -> Result<HttpResponse, ActixError> {
+    //log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
+    //UserId::new(auth.user_id().to_owned().to_string(), "a".to_string(), vec![]).to_session(&session)?;
     Ok(HttpResponse::Ok().finish())
 }
 

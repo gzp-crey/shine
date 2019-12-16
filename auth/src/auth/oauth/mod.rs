@@ -1,37 +1,64 @@
 mod authorizer;
-mod handler;
 mod issuer;
-mod regsitrar;
-mod solicitor;
+mod registrar;
 
-use self::authorizer::MyAuthorizer;
-use self::issuer::MyIssuer;
-use self::regsitrar::MyRegistrar;
-use self::solicitor::{AuthorizeUser, RequestWithAuthorizedUser, RequestWithUserLogin};
-use super::State;
+use super::identity::IdentityDB;
+use super::{AuthConfig, AuthError};
 use crate::session::UserId;
-use actix::{Actor, Context, Handler};
+use actix_rt::SystemRunner;
 use actix_session::Session;
 use actix_web::{web, HttpRequest};
-use futures::compat::Future01CompatExt;
 use oxide_auth::{
     endpoint::{Endpoint, OAuthError, OwnerSolicitor, Scopes, Template},
-    frontends::simple::endpoint::Vacant,
     primitives::authorizer::Authorizer,
     primitives::issuer::Issuer,
+    primitives::prelude::{AuthMap, Client, ClientMap, RandomGenerator, TokenMap},
     primitives::registrar::Registrar,
     primitives::scope::Scope,
 };
-use oxide_auth_actix::{Authorize, OAuthMessage, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
+use oxide_auth_actix::{Authorize, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
+use tera::Tera;
 
-pub struct AuthState {
-    registrar: MyRegistrar,
-    authorizer: MyAuthorizer,
-    issuer: MyIssuer,
-    scopes: Vec<Scope>,
+pub struct State {
+    pub tera: Tera,
+    pub identity_db: IdentityDB,
+
+    pub registrar: ClientMap,
+    pub authorizer: AuthMap<RandomGenerator>,
+    pub issuer: TokenMap<RandomGenerator>,
+    pub scopes: Vec<Scope>,
 }
 
-impl Endpoint<OAuthRequest> for AuthState {
+impl State {
+    pub fn new(tera: Tera, identity_db: IdentityDB) -> State {
+        let registrar = vec![Client::public(
+            "LocalClient",
+            "http://localhost:8021/endpoint".parse().unwrap(),
+            "default-scope".parse().unwrap(),
+        )]
+        .into_iter()
+        .collect();
+
+        let authorizer = AuthMap::new(RandomGenerator::new(16));
+
+        let issuer = TokenMap::new(RandomGenerator::new(16));
+
+        State {
+            tera,
+            identity_db,
+            registrar,
+            authorizer,
+            issuer,
+            scopes: vec!["default-scope".parse().unwrap()],
+        }
+    }
+
+    fn with_solicitor<S: OwnerSolicitor<OAuthRequest>>(&mut self, solicitor: S) -> AuthStateWithSolicitor<'_, S> {
+        AuthStateWithSolicitor { inner: self, solicitor }
+    }
+}
+
+impl Endpoint<OAuthRequest> for State {
     type Error = WebError;
 
     fn registrar(&self) -> Option<&dyn Registrar> {
@@ -68,43 +95,11 @@ impl Endpoint<OAuthRequest> for AuthState {
     }
 }
 
-impl AuthState {
-    pub fn new() -> Self {
-        AuthState {
-            registrar: MyRegistrar::new(),
-            authorizer: MyAuthorizer::new(),
-            issuer: MyIssuer::new(),
-            scopes: vec!["default-scope".parse().unwrap()],
-        }
-    }
-
-    fn with_solicitor<S: OwnerSolicitor<OAuthRequest>>(&mut self, solicitor: S) -> AuthStateWithSolicitor<'_, S> {
-        AuthStateWithSolicitor { inner: self, solicitor }
-    }
-}
-
-impl Actor for AuthState {
-    type Context = Context<Self>;
-}
-
-impl<Op, S> Handler<OAuthMessage<Op, S>> for AuthState
-where
-    Op: OAuthOperation,
-    S: OwnerSolicitor<OAuthRequest>,
-{
-    type Result = Result<Op::Item, Op::Error>;
-
-    fn handle(&mut self, msg: OAuthMessage<Op, S>, _: &mut Self::Context) -> Self::Result {
-        let (op, solicitor) = msg.into_inner();
-        op.run(&mut self.with_solicitor(solicitor))
-    }
-}
-
 struct AuthStateWithSolicitor<'a, S>
 where
     S: OwnerSolicitor<OAuthRequest>,
 {
-    inner: &'a mut AuthState,
+    inner: &'a mut State,
     solicitor: S,
 }
 
@@ -153,19 +148,21 @@ pub async fn get_authorization(
     state: web::Data<State>,
 ) -> Result<OAuthResponse, WebError> {
     log::info!("get_authorization");
-    let user = UserId::from_session(&session).map_err(|_| WebError::Mailbox)?;
+    let user = UserId::from_session(&session).map_err(|err| WebError::InternalError(Some(format!("session: {:?}", err))))?;
     if let Some(user) = user {
-        state
-            .auth
-            .send(Authorize(oath_req).wrap(RequestWithAuthorizedUser::new(state.tera.clone(), user)))
-            .compat()
-            .await?
+        unimplemented!()
+    /*state
+    .auth
+    .send(Authorize(oath_req).wrap(RequestWithAuthorizedUser::new(state.tera.clone(), user)))
+    .compat()
+    .await?*/
     } else {
-        state
-            .auth
-            .send(Authorize(oath_req).wrap(RequestWithUserLogin::new(state.tera.clone())))
-            .compat()
-            .await?
+        unimplemented!()
+        /*state
+        .auth
+        .send(Authorize(oath_req).wrap(RequestWithUserLogin::new(state.tera.clone())))
+        .compat()
+        .await?*/
     }
 }
 
@@ -176,13 +173,14 @@ pub async fn post_authorization(
     state: web::Data<State>,
 ) -> Result<OAuthResponse, WebError> {
     log::info!("post_authorization");
-    let user = UserId::from_session(&session).map_err(|_| WebError::Mailbox)?;
+    let user = UserId::from_session(&session).map_err(|err| WebError::InternalError(Some(format!("session: {:?}", err))))?;
     if let Some(user) = user {
-        state
-            .auth
-            .send(Authorize(oath_req).wrap(AuthorizeUser::new(user)))
-            .compat()
-            .await?
+        unimplemented!()
+    /*state
+    .auth
+    .send(Authorize(oath_req).wrap(AuthorizeUser::new(user)))
+    .compat()
+    .await?*/
     } else {
         Err(WebError::Endpoint(OAuthError::DenySilently))
     }
@@ -190,9 +188,11 @@ pub async fn post_authorization(
 
 pub async fn post_token(oath_req: OAuthRequest, state: web::Data<State>) -> Result<OAuthResponse, WebError> {
     log::info!("post_token");
-    state.auth.send(Token(oath_req).wrap(Vacant)).compat().await?
+    unimplemented!()
+    //state.auth.send(Token(oath_req).wrap(Vacant)).compat().await?
 }
 
 pub async fn post_refresh(oath_req: OAuthRequest, state: web::Data<State>) -> Result<OAuthResponse, WebError> {
-    state.auth.send(Refresh(oath_req).wrap(Vacant)).compat().await?
+    unimplemented!()
+    //state.auth.send(Refresh(oath_req).wrap(Vacant)).compat().await?
 }

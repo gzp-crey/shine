@@ -1,15 +1,12 @@
 mod identity;
 mod oauth;
-mod state;
 
 use self::identity::*;
 use self::oauth::*;
-use self::state::State;
-use actix::SystemRunner;
+use actix_rt::SystemRunner;
 use actix_web::web;
-use futures::future::{FutureExt, TryFutureExt};
 use serde::{Deserialize, Serialize};
-use tera::Error as TeraError;
+use tera::{Error as TeraError, Tera};
 
 pub use self::identity::{IdentityConfig, IdentityError};
 
@@ -38,31 +35,34 @@ impl From<IdentityError> for AuthError {
 
 #[derive(Clone)]
 pub struct AuthService {
-    resources: web::Data<State>,
+    tera: Tera,
+    identity_db: IdentityDB,
 }
 
 impl AuthService {
     pub fn create(sys: &mut SystemRunner, config: &AuthConfig) -> Result<AuthService, AuthError> {
-        let state = State::new(sys, config)?;
-        let resources = web::Data::new(state);
-        Ok(AuthService { resources })
+        let tera = Tera::new("tera_web/**/*")?;
+
+        let identity_cfg = config.identity.clone();
+        let identity_db = sys.block_on(IdentityDB::new(identity_cfg))?;
+        Ok(AuthService { identity_db, tera })
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
+        let state = web::Data::new(State::new(self.tera.clone(), self.identity_db.clone()));
+
         services.service(
             web::scope("auth/api")
-                .register_data(self.resources.clone())
+                .register_data(state)
                 .service(
                     web::resource("authorize")
-                        .route(web::get().to_async(|a, b, c| get_authorization(a, b, c).boxed_local().compat()))
-                        .route(web::post().to_async(|a, b, c, d| post_authorization(a, b, c, d).boxed_local().compat())),
+                        .route(web::get().to(get_authorization))
+                        .route(web::post().to(post_authorization)),
                 )
-                .service(web::resource("refresh").route(web::post().to_async(|a, b| post_refresh(a, b).boxed_local().compat())))
-                .service(web::resource("token").route(web::post().to_async(|a, b| post_token(a, b).boxed_local().compat())))
-                .service(web::resource("login").route(web::post().to_async(|a, b, c| login(a, b, c).boxed_local().compat())))
-                .service(
-                    web::resource("register").route(web::post().to_async(|a, b, c| register(a, b, c).boxed_local().compat())),
-                ),
+                .service(web::resource("refresh").route(web::post().to(post_refresh)))
+                .service(web::resource("token").route(web::post().to(post_token)))
+                .service(web::resource("login").route(web::post().to(login)))
+                .service(web::resource("register").route(web::post().to(register))),
         );
     }
 }
