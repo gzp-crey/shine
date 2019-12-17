@@ -2,11 +2,32 @@ use super::State;
 use oxide_auth::{
     endpoint::PreGrant,
     primitives::prelude::ClientUrl,
+    primitives::prelude::{Client, ClientMap},
     primitives::registrar::{BoundClient, Registrar, RegistrarError},
     primitives::scope::Scope,
 };
+use std::rc::Rc;
 
-impl Registrar for State {
+pub struct OAuthRegistrar {
+    state: Rc<State>,
+    registrar: ClientMap,
+}
+
+impl OAuthRegistrar {
+    pub fn new(state: Rc<State>) -> Self {
+        let registrar = vec![Client::public(
+            "LocalClient",
+            "http://localhost:8021/endpoint".parse().unwrap(),
+            "default-scope".parse().unwrap(),
+        )]
+        .into_iter()
+        .collect();
+
+        OAuthRegistrar { state, registrar }
+    }
+}
+
+impl Registrar for OAuthRegistrar {
     fn bound_redirect<'a>(&self, bound: ClientUrl<'a>) -> Result<BoundClient<'a>, RegistrarError> {
         log::info!("bound_redirect");
         self.registrar.bound_redirect(bound)

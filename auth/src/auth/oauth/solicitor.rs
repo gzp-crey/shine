@@ -1,23 +1,99 @@
+use super::{OAuthAuthorizer, OAuthIssuer, OAuthRegistrar, OAuthScope, State};
 use crate::session::UserId;
-use oxide_auth::endpoint::{OwnerConsent, OwnerSolicitor, PreGrant};
+use oxide_auth::{
+    endpoint::{Endpoint, OAuthError, OwnerConsent, OwnerSolicitor, PreGrant, Scopes, Template},
+    frontends::simple::endpoint::{ResponseCreator, Vacant},
+    primitives::authorizer::Authorizer,
+    primitives::issuer::Issuer,
+    primitives::registrar::Registrar,
+};
 use oxide_auth_actix::{OAuthRequest, OAuthResponse, WebError};
-use std::sync::Arc;
 use std::rc::Rc;
-use tera::Tera;
+use tera;
+
+pub struct OAuthFlow<S> {
+    registrar: OAuthRegistrar,
+    authorizer: OAuthAuthorizer,
+    issuer: OAuthIssuer,
+    scopes: OAuthScope,
+    response: Vacant,
+    solicitor: S,
+}
+
+impl<S> OAuthFlow<S>
+where
+    S: OwnerSolicitor<OAuthRequest>,
+{
+    pub fn new(state: Rc<State>, solicitor: S) -> Self {
+        OAuthFlow {
+            registrar: OAuthRegistrar::new(state.clone()),
+            authorizer: OAuthAuthorizer::new(state.clone()),
+            issuer: OAuthIssuer::new(state.clone()),
+            scopes: OAuthScope::new(state.clone()),
+            response: Vacant,
+            solicitor,
+        }
+    }
+}
+
+impl<S> Endpoint<OAuthRequest> for OAuthFlow<S>
+where
+    S: OwnerSolicitor<OAuthRequest>,
+{
+    type Error = WebError;
+
+    fn registrar(&self) -> Option<&dyn Registrar> {
+        Some(&self.registrar)
+    }
+
+    fn authorizer_mut(&mut self) -> Option<&mut dyn Authorizer> {
+        Some(&mut self.authorizer)
+    }
+
+    fn issuer_mut(&mut self) -> Option<&mut dyn Issuer> {
+        Some(&mut self.issuer)
+    }
+
+    fn owner_solicitor(&mut self) -> Option<&mut dyn OwnerSolicitor<OAuthRequest>> {
+        Some(&mut self.solicitor)
+    }
+
+    fn scopes(&mut self) -> Option<&mut dyn Scopes<OAuthRequest>> {
+        Some(&mut self.scopes)
+    }
+
+    fn response(&mut self, request: &mut OAuthRequest, kind: Template) -> Result<OAuthResponse, WebError> {
+        Ok(self.response.create(request, kind))
+    }
+
+    fn error(&mut self, err: OAuthError) -> WebError {
+        WebError::Endpoint(err)
+    }
+
+    fn web_error(&mut self, err: WebError) -> WebError {
+        err
+    }
+}
 
 /// Perform authorization request with a signed in user
 pub struct RequestWithAuthorizedUser {
-    tera: Rc<Tera>,
+    state: Rc<State>,
     user: UserId,
 }
 
 impl RequestWithAuthorizedUser {
-    pub fn new(tera: Rc<Tera>, user: UserId) -> RequestWithAuthorizedUser {
-        RequestWithAuthorizedUser { tera, user }
+    pub fn solicite(state: &Rc<State>, user: UserId) -> OAuthFlow<Self> {
+        OAuthFlow::new(
+            state.clone(),
+            RequestWithAuthorizedUser {
+                state: state.clone(),
+                user,
+            },
+        )
     }
 }
 
-impl<'a> OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
+impl OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
     fn check_consent(&mut self, _request: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
         let mut context = tera::Context::new();
         context.insert("client_id", &grant.client_id);
@@ -25,7 +101,8 @@ impl<'a> OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
         context.insert("scope", &grant.scope.to_string());
         context.insert("user", &self.user.name());
 
-        let html = match self.tera.render("auth/request_login.html", &context) {
+        let tera = &self.state.tera;
+        let html = match tera.render("auth/request_login.html", &context) {
             Ok(html) => html,
             Err(e) => {
                 log::error!("Tera render error: {}", e);
@@ -39,12 +116,12 @@ impl<'a> OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
 
 /// Perform authorization request with user login
 pub struct RequestWithUserLogin {
-    tera: Rc<Tera>,
+    state: Rc<State>,
 }
 
 impl RequestWithUserLogin {
-    pub fn new(tera: Rc<Tera>) -> Self {
-        RequestWithUserLogin { tera }
+    pub fn solicite(state: &Rc<State>) -> OAuthFlow<Self> {
+        OAuthFlow::new(state.clone(), RequestWithUserLogin { state: state.clone() })
     }
 }
 
@@ -54,13 +131,21 @@ impl<'a> OwnerSolicitor<OAuthRequest> for RequestWithUserLogin {
     }
 }
 
+/// Perform authorization request with user login
 pub struct AuthorizeUser {
+    state: Rc<State>,
     user: UserId,
 }
 
 impl AuthorizeUser {
-    pub fn new(user: UserId) -> Self {
-        AuthorizeUser { user }
+    pub fn solicite(state: &Rc<State>, user: UserId) -> OAuthFlow<Self> {
+        OAuthFlow::new(
+            state.clone(),
+            AuthorizeUser {
+                state: state.clone(),
+                user,
+            },
+        )
     }
 }
 
@@ -70,3 +155,36 @@ impl<'a> OwnerSolicitor<OAuthRequest> for AuthorizeUser {
     }
 }
 
+/// Validate token
+pub struct ValidateToken {
+    state: Rc<State>,
+}
+
+impl ValidateToken {
+    pub fn solicite(state: &Rc<State>) -> OAuthFlow<Self> {
+        OAuthFlow::new(state.clone(), ValidateToken { state: state.clone() })
+    }
+}
+
+impl<'a> OwnerSolicitor<OAuthRequest> for ValidateToken {
+    fn check_consent(&mut self, _request: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+        unimplemented!()
+    }
+}
+
+/// Refresh token
+pub struct RefreshToken {
+    state: Rc<State>,
+}
+
+impl RefreshToken {
+    pub fn solicite(state: &Rc<State>) -> OAuthFlow<Self> {
+        OAuthFlow::new(state.clone(), RefreshToken { state: state.clone() })
+    }
+}
+
+impl<'a> OwnerSolicitor<OAuthRequest> for RefreshToken {
+    fn check_consent(&mut self, _request: &mut OAuthRequest, grant: &PreGrant) -> OwnerConsent<OAuthResponse> {
+        unimplemented!()
+    }
+}

@@ -3,6 +3,7 @@ use base64;
 use std::env;
 
 mod auth;
+mod authheader;
 mod config;
 mod session;
 

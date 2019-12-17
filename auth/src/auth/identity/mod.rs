@@ -2,11 +2,12 @@ mod error;
 mod identitydb;
 
 use super::State;
+use crate::authheader::BasicAuth;
 use crate::session::UserId;
 use actix_session::Session;
 use actix_web::{web, Error as ActixError, HttpResponse};
-//use actix_web_httpauth::extractors::basic::BasicAuth;
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 
 pub use self::error::*;
 pub use self::identitydb::*;
@@ -18,7 +19,7 @@ pub struct IdentityConfig {
     storage_account_key: String,
 }
 
-pub async fn login(session: Session, /*auth: BasicAuth,*/ state: web::Data<State>) -> Result<HttpResponse, ActixError> {
+pub async fn login(session: Session, auth: BasicAuth, state: web::Data<Rc<State>>) -> Result<HttpResponse, ActixError> {
     //log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
     //UserId::new(auth.user_id().to_owned().to_string(), "a".to_string(), vec![]).to_session(&session)?;
     Ok(HttpResponse::Ok().finish())
@@ -34,7 +35,7 @@ pub struct Registration {
 pub async fn register(
     session: Session,
     registration: web::Json<Registration>,
-    state: web::Data<State>,
+    state: web::Data<Rc<State>>,
 ) -> Result<HttpResponse, ActixError> {
     let Registration { name, password, email } = registration.into_inner();
     let user = state.identity_db.create(name, email, password).await?;

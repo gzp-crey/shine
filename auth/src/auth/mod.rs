@@ -6,6 +6,7 @@ use self::oauth::*;
 use actix_rt::SystemRunner;
 use actix_web::web;
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 use tera::{Error as TeraError, Tera};
 
 pub use self::identity::{IdentityConfig, IdentityError};
@@ -49,7 +50,7 @@ impl AuthService {
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
-        let state = web::Data::new(State::new(self.tera.clone(), self.identity_db.clone()));
+        let state = web::Data::new(Rc::new(State::new(self.tera.clone(), self.identity_db.clone())));
 
         services.service(
             web::scope("auth/api")
