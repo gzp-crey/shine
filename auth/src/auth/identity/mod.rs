@@ -1,4 +1,5 @@
 mod error;
+mod identity;
 mod identitydb;
 
 use super::State;
@@ -20,8 +21,8 @@ pub struct IdentityConfig {
 }
 
 pub async fn login(session: Session, auth: BasicAuth, state: web::Data<Rc<State>>) -> Result<HttpResponse, ActixError> {
-    //log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
-    //UserId::new(auth.user_id().to_owned().to_string(), "a".to_string(), vec![]).to_session(&session)?;
+    log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
+    UserId::new(auth.user_id().to_owned().to_string(), "a".to_string(), vec![]).to_session(&session)?;
     Ok(HttpResponse::Ok().finish())
 }
 
