@@ -1,6 +1,7 @@
 use super::error::IdentityError;
 use super::identity::{EmailIndexEntry, IdentityEntry, NameIndexEntry};
 use super::IdentityConfig;
+use crate::azure_utils::ignore_409;
 use crate::session::UserId;
 use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
@@ -11,19 +12,13 @@ use azure_sdk_storage_table::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-fn ignore_409(err: AzureError) -> Result<(), AzureError> {
-    match err {
-        AzureError::UnexpectedHTTPResult(e) if e.status_code() == 409 => Ok(()),
-        e => Err(e),
-    }
-}
-
 #[derive(Clone)]
 pub struct IdentityDB {
     password_pepper: String,
     users: TableStorage,
     email_index: TableStorage,
     name_index: TableStorage,
+    //id_generator: IdGenerator,
 }
 
 impl IdentityDB {
@@ -56,11 +51,12 @@ impl IdentityDB {
         let name_index = NameIndexEntry::from_identity(&user);
         let email_index = EmailIndexEntry::from_identity(&user);
 
-        // create user
-        log::info!("res1: {:?}", &serde_json::to_string(&user.entry()));
-        /*let user = IdentityEntry::from_entry(*/self.users.insert_entry(&user.into_entry()).await?;//);
         //let email_index = EmailIndexEntry::from_entry(self.email_index.insert_entry(&email_index.into_entry()).await?);
         //let name_index = NameIndexEntry::from_entry(self.name_index.insert_entry(&name_index.into_entry()).await?);
+        // create user
+        log::info!("res1: {:?}", &serde_json::to_string(&user.entry()));
+        /*let user = IdentityEntry::from_entry(*/
+        self.users.insert_entry(&user.into_entry()).await?; //);
 
         // create nameindex and ensure uniquiness
         unimplemented!()

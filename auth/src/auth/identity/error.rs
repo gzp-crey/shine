@@ -4,6 +4,7 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum IdentityError {
+    /// Database related error
     DB(String),
 }
 

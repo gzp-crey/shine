@@ -4,7 +4,9 @@ use std::env;
 
 mod auth;
 mod authheader;
+mod azure_utils;
 mod config;
+mod idsequence;
 mod session;
 
 use auth::AuthService;
