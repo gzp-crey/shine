@@ -1,7 +1,6 @@
 use super::error::IdentityError;
 use super::identity::{EmailIndexEntry, IdentityEntry, NameIndexEntry};
 use super::IdentityConfig;
-use crate::azure_utils::ignore_409;
 use crate::session::UserId;
 use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
@@ -29,9 +28,9 @@ impl IdentityDB {
         let email_index = TableStorage::new(table_service.clone(), "usersemailIndex");
         let name_index = TableStorage::new(table_service.clone(), "usersnameIndex");
 
-        users.create_table().await.or_else(ignore_409)?;
-        email_index.create_table().await.or_else(ignore_409)?;
-        name_index.create_table().await.or_else(ignore_409)?;
+        users.create_if_not_exists().await?;
+        email_index.create_if_not_exists().await?;
+        name_index.create_if_not_exists().await?;
 
         Ok(IdentityDB {
             password_pepper: config.password_pepper.clone(),
@@ -54,9 +53,8 @@ impl IdentityDB {
         //let email_index = EmailIndexEntry::from_entry(self.email_index.insert_entry(&email_index.into_entry()).await?);
         //let name_index = NameIndexEntry::from_entry(self.name_index.insert_entry(&name_index.into_entry()).await?);
         // create user
-        log::info!("res1: {:?}", &serde_json::to_string(&user.entry()));
-        /*let user = IdentityEntry::from_entry(*/
-        self.users.insert_entry(&user.into_entry()).await?; //);
+        //let user = IdentityEntry::from_entry(self.users.insert_entry(user.into_entry()).await?);
+        //log::info!("res1: {:?}", &serde_json::to_string(&user.entry()));
 
         // create nameindex and ensure uniquiness
         unimplemented!()

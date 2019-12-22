@@ -1,0 +1,26 @@
+[package]
+name = "azure-utils"
+version = "0.1.0"
+authors = ["gzp-crey <z.p.gaal.devel@gmail.com>"]
+edition = "2018"
+
+[features]
+actix_web = ["actix-web"]
+
+[dependencies]
+log = "0.4"
+futures = "0.3"
+serde = "1.0"
+
+tokio = { version = "0.2", features = ["time"] }
+
+azure_sdk_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
+azure_sdk_storage_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
+azure_sdk_storage_table = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
+
+actix-web = {version = "2.0.0-alpha.5", optional = true}
+
+[dev-dependencies]
+env_logger = "0.7.1"
+clap = "2.33"
+tokio = { version = "0.2", features = ["macros", "rt-threaded"] }

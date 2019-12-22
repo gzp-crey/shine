@@ -54,7 +54,7 @@ impl AuthService {
 
         services.service(
             web::scope("auth/api")
-                .register_data(state)
+                .data(state)
                 .service(
                     web::resource("authorize")
                         .route(web::get().to(get_authorization))

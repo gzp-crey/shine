@@ -1,7 +1,6 @@
 use crate::session::UserId;
 use azure_sdk_storage_table::TableEntry;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
