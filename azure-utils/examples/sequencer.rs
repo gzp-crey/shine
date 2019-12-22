@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::env;
 use std::str::FromStr;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Method {
     Store,
     Sequence(u64),
@@ -55,39 +55,62 @@ fn main() {
         table_name: "testcounter".to_string(),
     };
 
-    const THREAD_COUNT: usize = 4;
-    const PER_THREAD_COUNT: usize = 100;
-
     let matches = App::new("test sequences")
         .version("1.0")
+        .arg(
+            Arg::with_name("threads")
+                .short("t")
+                .long("threads")
+                .default_value("4")
+                .takes_value(true)
+                .help("Number of threads"),
+        )
+        .arg(
+            Arg::with_name("count")
+                .short("c")
+                .long("count")
+                .default_value("100")
+                .takes_value(true)
+                .help("Number of id per thread"),
+        )
         .subcommand(SubCommand::with_name("store").about("Use raw sync store"))
         .subcommand(
             SubCommand::with_name("sequence").about("Use idsequencer").arg(
                 Arg::with_name("granularity")
                     .short("g")
                     .long("granularity")
+                    .default_value("10")
+                    .takes_value(true)
                     .help("Sets the allocation granularity"),
             ),
         )
         .get_matches();
 
+    let thread_count = usize::from_str(matches.value_of("threads").unwrap()).unwrap();
+    let per_thread_count = usize::from_str(matches.value_of("count").unwrap()).unwrap();
+
     let method = if let Some(_) = matches.subcommand_matches("store") {
         Method::Store
     } else if let Some(matches) = matches.subcommand_matches("sequence") {
-        Method::Sequence(u64::from_str(matches.value_of("granularity").unwrap_or("10")).unwrap())
+        Method::Sequence(u64::from_str(matches.value_of("granularity").unwrap()).unwrap())
     } else {
         return eprintln!("invalid subcommand");
     };
 
+    println!(
+        "Runing {:?} on {} threads with {} count",
+        method, thread_count, per_thread_count
+    );
+
     let mut th = vec![];
-    for t in 0..THREAD_COUNT {
+    for t in 0..thread_count {
         let cfg = cfg.clone();
         let method = method.clone();
         th.push(std::thread::spawn(move || {
             let mut rt = tokio::runtime::Runtime::new().unwrap();
             match method {
-                Method::Store => rt.block_on(store_counter(t, cfg, PER_THREAD_COUNT)),
-                Method::Sequence(g) => rt.block_on(sequence_counter(t, cfg, PER_THREAD_COUNT, g)),
+                Method::Store => rt.block_on(store_counter(t, cfg, per_thread_count)),
+                Method::Sequence(g) => rt.block_on(sequence_counter(t, cfg, per_thread_count, g)),
             }
         }));
     }
@@ -106,10 +129,11 @@ fn main() {
     ids.sort();
 
     println!(
-        "range: {}..{}, count: {}",
+        "range: {}..{}, count: {}, errors: {}",
         ids.first().unwrap(),
         ids.last().unwrap(),
-        ids.len()
+        ids.len(),
+        thread_count * per_thread_count - ids.len()
     );
 
     let mut ui = HashSet::new();
