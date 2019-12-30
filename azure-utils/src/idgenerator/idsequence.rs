@@ -12,10 +12,10 @@ pub struct IdSequence {
 impl IdSequence {
     pub fn new<S: Into<String>>(counter_store: SyncCounterStore, name: S) -> IdSequence {
         IdSequence {
-            counter_store,
             name: name.into(),
-            range: Mutex::new(0u64..0u64),
             granularity: 100,
+            counter_store,
+            range: Mutex::new(0u64..0u64),
         }
     }
 

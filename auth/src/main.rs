@@ -34,7 +34,7 @@ pub fn main() {
     .workers(service_config.worker_count)
     .bind(service_config.get_bind_address())
     .expect("Server start failed")
-    .start();
+    .run();
 
     log::info!("starting service on {}", service_config.get_bind_address());
     let _ = sys.run();

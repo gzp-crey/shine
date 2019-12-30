@@ -11,7 +11,7 @@ actix_web = ["actix-web"]
 log = "0.4"
 futures = "0.3"
 serde = "1.0"
-
+rand = "0.7"
 tokio = { version = "0.2", features = ["time"] }
 
 azure_sdk_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
