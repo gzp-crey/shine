@@ -1,5 +1,6 @@
 use actix_web::ResponseError;
 use azure_sdk_core::errors::AzureError;
+use azure_utils::idgenerator::IdSequenceError;
 use std::fmt;
 
 #[derive(Debug)]
@@ -23,5 +24,14 @@ impl ResponseError for IdentityError {
 impl From<AzureError> for IdentityError {
     fn from(err: AzureError) -> IdentityError {
         IdentityError::DB(format!("{:?}", err))
+    }
+}
+
+impl From<IdSequenceError> for IdentityError {
+    fn from(err: IdSequenceError) -> IdentityError {
+        match err {
+            IdSequenceError::DB(e) => IdentityError::DB(e),
+            IdSequenceError::SequenceEnded => IdentityError::DB(format!("ID sequence out of values")),
+        }
     }
 }

@@ -1,7 +1,7 @@
 use super::State;
 use oxide_auth::{
     primitives::grant::Grant,
-    primitives::issuer::{IssuedToken, Issuer},
+    primitives::issuer::{IssuedToken, Issuer, RefreshedToken},
     primitives::prelude::{RandomGenerator, TokenMap},
 };
 use std::rc::Rc;
@@ -22,6 +22,11 @@ impl Issuer for OAuthIssuer {
     fn issue(&mut self, grant: Grant) -> Result<IssuedToken, ()> {
         log::info!("issue");
         self.issuer.issue(grant)
+    }
+
+    fn refresh(&mut self, refresh: &str, grant: Grant) -> Result<RefreshedToken, ()> {
+        log::info!("recover_token");
+        self.issuer.refresh(refresh, grant)
     }
 
     fn recover_token<'a>(&'a self, token: &'a str) -> Result<Option<Grant>, ()> {

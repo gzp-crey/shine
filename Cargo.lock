@@ -1630,7 +1630,7 @@ dependencies = [
 [[package]]
 name = "oxide-auth"
 version = "0.5.0-preview.0"
-source = "git+https://github.com/gzp-crey/oxide-auth?branch=ring_0.16_actix_web_2.0#507cf3a6dd1f5474c04b5eea85cec1ddaed5a733"
+source = "git+https://github.com/gzp-crey/oxide-auth?branch=ring_0.16_actix_web_2.0#7950a405e33583767ce2c6af885293a0cf992afb"
 dependencies = [
  "base64 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1645,7 +1645,7 @@ dependencies = [
 [[package]]
 name = "oxide-auth-actix"
 version = "0.0.1"
-source = "git+https://github.com/gzp-crey/oxide-auth?branch=ring_0.16_actix_web_2.0#507cf3a6dd1f5474c04b5eea85cec1ddaed5a733"
+source = "git+https://github.com/gzp-crey/oxide-auth?branch=ring_0.16_actix_web_2.0#7950a405e33583767ce2c6af885293a0cf992afb"
 dependencies = [
  "actix 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-session 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",

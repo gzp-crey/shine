@@ -14,7 +14,9 @@ pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
-        .filter_module("shine_auth", log::LevelFilter::Trace)
+        .filter_module("auth", log::LevelFilter::Trace)
+        .filter_module("actix_web", log::LevelFilter::Trace)
+        .filter_module("actix_server", log::LevelFilter::Trace)
         .init();
 
     let mut sys = actix_rt::System::new("Auth");

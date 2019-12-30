@@ -1,15 +1,9 @@
 use super::error::IdentityError;
 use super::identity::{EmailIndexEntry, IdentityEntry, NameIndexEntry};
 use super::IdentityConfig;
-use crate::session::UserId;
-use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
-use azure_sdk_storage_table::{
-    table::{TableService, TableStorage},
-    TableEntry,
-};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use azure_sdk_storage_table::table::{TableService, TableStorage};
+use azure_utils::idgenerator::{SaltedIdSequence, SyncCounterConfig, SyncCounterStore};
 
 #[derive(Clone)]
 pub struct IdentityDB {
@@ -17,7 +11,7 @@ pub struct IdentityDB {
     users: TableStorage,
     email_index: TableStorage,
     name_index: TableStorage,
-    //id_generator: IdGenerator,
+    id_generator: SaltedIdSequence,
 }
 
 impl IdentityDB {
@@ -28,6 +22,14 @@ impl IdentityDB {
         let email_index = TableStorage::new(table_service.clone(), "usersemailIndex");
         let name_index = TableStorage::new(table_service.clone(), "usersnameIndex");
 
+        let id_config = SyncCounterConfig {
+            storage_account: config.storage_account.clone(),
+            storage_account_key: config.storage_account_key.clone(),
+            table_name: "idcounter".to_string(),
+        };
+        let id_counter = SyncCounterStore::new(id_config).await?;
+        let id_generator = SaltedIdSequence::new(id_counter, "userid").with_granularity(10);
+
         users.create_if_not_exists().await?;
         email_index.create_if_not_exists().await?;
         name_index.create_if_not_exists().await?;
@@ -37,28 +39,66 @@ impl IdentityDB {
             users,
             email_index,
             name_index,
+            id_generator,
         })
     }
 
     pub async fn create(&self, name: String, email: Option<String>, password: String) -> Result<IdentityEntry, IdentityError> {
-        // create identity
-        let id = Uuid::new_v4().to_string();
+        let id = self.id_generator.get().await?;
         log::info!("Creating new user: {}", id);
         let password_hash = password;
 
         let user = IdentityEntry::new(id, name, email, password_hash);
+        let user = match self.users.insert_entry(user.into_entry()).await {
+            Ok(user) => IdentityEntry::from_entry(user),
+            Err(e) => return Err(IdentityError::from(e)),
+        };
+
         let name_index = NameIndexEntry::from_identity(&user);
-        let email_index = EmailIndexEntry::from_identity(&user);
+        let name_index = match self.name_index.insert_entry(name_index.into_entry()).await {
+            Ok(name_index) => NameIndexEntry::from_entry(name_index),
+            Err(e) => {
+                log::info!("Creating user failed (name_index): {:?}, {:?}", user, e);
+                let _ = self
+                    .users
+                    .delete_entry(
+                        &user.entry().partition_key,
+                        &user.entry().row_key,
+                        user.entry().etag.as_deref(),
+                    )
+                    .await;
+                return Err(IdentityError::from(e));
+            }
+        };
 
-        //let email_index = EmailIndexEntry::from_entry(self.email_index.insert_entry(&email_index.into_entry()).await?);
-        //let name_index = NameIndexEntry::from_entry(self.name_index.insert_entry(&name_index.into_entry()).await?);
-        // create user
-        //let user = IdentityEntry::from_entry(self.users.insert_entry(user.into_entry()).await?);
-        //log::info!("res1: {:?}", &serde_json::to_string(&user.entry()));
+        if let Some(email_index) = EmailIndexEntry::from_identity(&user) {
+            let email_index = match self.email_index.insert_entry(email_index.into_entry()).await {
+                Ok(email_index) => EmailIndexEntry::from_entry(email_index),
+                Err(e) => {
+                    log::info!("Creating user failed (email_index): {:?}, {:?}", user, e);
+                    let _ = self
+                        .users
+                        .delete_entry(
+                            &user.entry().partition_key,
+                            &user.entry().row_key,
+                            user.entry().etag.as_deref(),
+                        )
+                        .await;
+                    let _ = self
+                        .name_index
+                        .delete_entry(
+                            &name_index.entry().partition_key,
+                            &name_index.entry().row_key,
+                            name_index.entry().etag.as_deref(),
+                        )
+                        .await;
+                    return Err(IdentityError::from(e));
+                }
+            };
+        }
 
-        // create nameindex and ensure uniquiness
-        unimplemented!()
-        //Ok(user)
+        log::info!("New user registered: {:?}", user);
+        Ok(user)
     }
 }
 
