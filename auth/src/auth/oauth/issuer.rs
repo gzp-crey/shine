@@ -4,15 +4,14 @@ use oxide_auth::{
     primitives::issuer::{IssuedToken, Issuer, RefreshedToken},
     primitives::prelude::{RandomGenerator, TokenMap},
 };
-use std::rc::Rc;
 
 pub struct OAuthIssuer {
-    state: Rc<State>,
+    state: State,
     issuer: TokenMap<RandomGenerator>,
 }
 
 impl OAuthIssuer {
-    pub fn new(state: Rc<State>) -> Self {
+    pub fn new(state: State) -> Self {
         let issuer = TokenMap::new(RandomGenerator::new(16));
         OAuthIssuer { state, issuer }
     }

@@ -9,33 +9,17 @@ use self::issuer::*;
 use self::registrar::*;
 use self::scope::*;
 use self::solicitor::*;
-use super::identity::IdentityDB;
+use super::State;
 use crate::session::UserId;
 use actix_session::Session;
 use actix_web::{web, HttpRequest};
 use oxide_auth::endpoint::OAuthError;
 use oxide_auth_actix::{Authorize, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
-use std::rc::Rc;
-use tera::Tera;
-
-pub struct State {
-    pub tera: Tera,
-    pub identity_db: IdentityDB,
-}
-
-impl State {
-    pub fn new(tera: Tera, identity_db: IdentityDB) -> Self {
-        State {
-            tera: tera,
-            identity_db: identity_db,
-        }
-    }
-}
 
 pub async fn get_authorization(
     session: Session,
     oath_req: OAuthRequest,
-    state: web::Data<Rc<State>>,
+    state: web::Data<State>,
 ) -> Result<OAuthResponse, WebError> {
     log::info!("get_authorization");
     let user = UserId::from_session(&session).map_err(|err| WebError::InternalError(Some(format!("session: {:?}", err))))?;
@@ -50,7 +34,7 @@ pub async fn post_authorization(
     session: Session,
     _req: HttpRequest,
     oath_req: OAuthRequest,
-    state: web::Data<Rc<State>>,
+    state: web::Data<State>,
 ) -> Result<OAuthResponse, WebError> {
     log::info!("post_authorization");
     let user = UserId::from_session(&session).map_err(|err| WebError::InternalError(Some(format!("session: {:?}", err))))?;
@@ -61,12 +45,12 @@ pub async fn post_authorization(
     }
 }
 
-pub async fn post_token(oath_req: OAuthRequest, state: web::Data<Rc<State>>) -> Result<OAuthResponse, WebError> {
+pub async fn post_token(oath_req: OAuthRequest, state: web::Data<State>) -> Result<OAuthResponse, WebError> {
     log::info!("post_token");
     Token(oath_req).run(ValidateToken::solicite(state.get_ref()))
 }
 
-pub async fn post_refresh(oath_req: OAuthRequest, state: web::Data<Rc<State>>) -> Result<OAuthResponse, WebError> {
+pub async fn post_refresh(oath_req: OAuthRequest, state: web::Data<State>) -> Result<OAuthResponse, WebError> {
     log::info!("post_refresh");
     Refresh(oath_req).run(RefreshToken::solicite(state.get_ref()))
 }

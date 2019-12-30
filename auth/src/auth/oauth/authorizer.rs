@@ -4,15 +4,14 @@ use oxide_auth::{
     primitives::grant::Grant,
     primitives::prelude::{AuthMap, RandomGenerator},
 };
-use std::rc::Rc;
 
 pub struct OAuthAuthorizer {
-    state: Rc<State>,
+    state: State,
     authorizer: AuthMap<RandomGenerator>,
 }
 
 impl OAuthAuthorizer {
-    pub fn new(state: Rc<State>) -> Self {
+    pub fn new(state: State) -> Self {
         let authorizer = AuthMap::new(RandomGenerator::new(16));
         OAuthAuthorizer { state, authorizer }
     }

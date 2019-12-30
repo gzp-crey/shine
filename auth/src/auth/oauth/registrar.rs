@@ -6,15 +6,14 @@ use oxide_auth::{
     primitives::registrar::{BoundClient, Registrar, RegistrarError},
     primitives::scope::Scope,
 };
-use std::rc::Rc;
 
 pub struct OAuthRegistrar {
-    state: Rc<State>,
+    state: State,
     registrar: ClientMap,
 }
 
 impl OAuthRegistrar {
-    pub fn new(state: Rc<State>) -> Self {
+    pub fn new(state: State) -> Self {
         let registrar = vec![Client::public(
             "LocalClient",
             "http://localhost:8021/endpoint".parse().unwrap(),

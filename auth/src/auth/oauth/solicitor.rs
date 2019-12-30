@@ -8,8 +8,6 @@ use oxide_auth::{
     primitives::registrar::Registrar,
 };
 use oxide_auth_actix::{OAuthRequest, OAuthResponse, WebError};
-use std::rc::Rc;
-use tera;
 
 pub struct OAuthFlow<S> {
     registrar: OAuthRegistrar,
@@ -24,7 +22,7 @@ impl<S> OAuthFlow<S>
 where
     S: OwnerSolicitor<OAuthRequest>,
 {
-    pub fn new(state: Rc<State>, solicitor: S) -> Self {
+    pub fn new(state: State, solicitor: S) -> Self {
         OAuthFlow {
             registrar: OAuthRegistrar::new(state.clone()),
             authorizer: OAuthAuthorizer::new(state.clone()),
@@ -77,12 +75,12 @@ where
 
 /// Perform authorization request with a signed in user
 pub struct RequestWithAuthorizedUser {
-    state: Rc<State>,
+    state: State,
     user: UserId,
 }
 
 impl RequestWithAuthorizedUser {
-    pub fn solicite(state: &Rc<State>, user: UserId) -> OAuthFlow<Self> {
+    pub fn solicite(state: &State, user: UserId) -> OAuthFlow<Self> {
         OAuthFlow::new(
             state.clone(),
             RequestWithAuthorizedUser {
@@ -101,7 +99,7 @@ impl OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
         context.insert("scope", &grant.scope.to_string());
         context.insert("user", &self.user.name());
 
-        let tera = &self.state.tera;
+        let tera = self.state.tera();
         let html = match tera.render("auth/request_login.html", &context) {
             Ok(html) => html,
             Err(e) => {
@@ -116,11 +114,11 @@ impl OwnerSolicitor<OAuthRequest> for RequestWithAuthorizedUser {
 
 /// Perform authorization request with user login
 pub struct RequestWithUserLogin {
-    state: Rc<State>,
+    state: State,
 }
 
 impl RequestWithUserLogin {
-    pub fn solicite(state: &Rc<State>) -> OAuthFlow<Self> {
+    pub fn solicite(state: &State) -> OAuthFlow<Self> {
         OAuthFlow::new(state.clone(), RequestWithUserLogin { state: state.clone() })
     }
 }
@@ -133,12 +131,12 @@ impl<'a> OwnerSolicitor<OAuthRequest> for RequestWithUserLogin {
 
 /// Perform authorization request with user login
 pub struct AuthorizeUser {
-    state: Rc<State>,
+    state: State,
     user: UserId,
 }
 
 impl AuthorizeUser {
-    pub fn solicite(state: &Rc<State>, user: UserId) -> OAuthFlow<Self> {
+    pub fn solicite(state: &State, user: UserId) -> OAuthFlow<Self> {
         OAuthFlow::new(
             state.clone(),
             AuthorizeUser {
@@ -157,11 +155,11 @@ impl<'a> OwnerSolicitor<OAuthRequest> for AuthorizeUser {
 
 /// Validate token
 pub struct ValidateToken {
-    state: Rc<State>,
+    state: State,
 }
 
 impl ValidateToken {
-    pub fn solicite(state: &Rc<State>) -> OAuthFlow<Self> {
+    pub fn solicite(state: &State) -> OAuthFlow<Self> {
         OAuthFlow::new(state.clone(), ValidateToken { state: state.clone() })
     }
 }
@@ -174,11 +172,11 @@ impl<'a> OwnerSolicitor<OAuthRequest> for ValidateToken {
 
 /// Refresh token
 pub struct RefreshToken {
-    state: Rc<State>,
+    state: State,
 }
 
 impl RefreshToken {
-    pub fn solicite(state: &Rc<State>) -> OAuthFlow<Self> {
+    pub fn solicite(state: &State) -> OAuthFlow<Self> {
         OAuthFlow::new(state.clone(), RefreshToken { state: state.clone() })
     }
 }

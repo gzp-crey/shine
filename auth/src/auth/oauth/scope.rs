@@ -1,15 +1,14 @@
 use super::State;
 use oxide_auth::{endpoint::Scopes, primitives::scope::Scope};
 use oxide_auth_actix::OAuthRequest;
-use std::rc::Rc;
 
 pub struct OAuthScope {
-    state: Rc<State>,
+    state: State,
     scopes: Vec<Scope>,
 }
 
 impl OAuthScope {
-    pub fn new(state: Rc<State>) -> Self {
+    pub fn new(state: State) -> Self {
         let scopes = vec!["default-scope".parse().unwrap()];
         OAuthScope { state, scopes }
     }

@@ -34,6 +34,34 @@ impl From<IdentityError> for AuthError {
     }
 }
 
+
+struct Inner {
+    tera: Tera,
+    identity_db: IdentityDB,
+}
+
+#[derive(Clone)]
+pub struct State(Rc<Inner>);
+
+impl State {
+    pub fn new(tera: Tera, identity_db: IdentityDB) -> Self {
+        Self(Rc::new(Inner {
+            tera: tera,
+            identity_db: identity_db,
+        }))
+    }
+
+    pub fn tera(&self) -> &Tera {
+        &self.0.tera
+
+    }
+
+    pub fn identity_db(&self) -> &IdentityDB {
+        &self.0.identity_db
+
+    }
+}
+
 #[derive(Clone)]
 pub struct AuthService {
     tera: Tera,
@@ -50,19 +78,19 @@ impl AuthService {
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
-        let state = web::Data::new(Rc::new(State::new(self.tera.clone(), self.identity_db.clone())));
+        let state = web::Data::new(State::new(self.tera.clone(), self.identity_db.clone()));
 
         services.service(
             web::scope("auth/api")
                 .data(state)
-                .service(
+                /*.service(
                     web::resource("authorize")
                         .route(web::get().to(get_authorization))
                         .route(web::post().to(post_authorization)),
                 )
                 .service(web::resource("refresh").route(web::post().to(post_refresh)))
                 .service(web::resource("token").route(web::post().to(post_token)))
-                .service(web::resource("login").route(web::post().to(login)))
+                .service(web::resource("login").route(web::post().to(login)))*/
                 .service(web::resource("register").route(web::post().to(register))),
         );
     }

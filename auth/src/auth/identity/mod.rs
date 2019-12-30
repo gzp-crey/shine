@@ -34,14 +34,14 @@ pub struct Registration {
 }
 
 pub async fn register(
-    session: Session,
+    //session: Session,
     registration: web::Json<Registration>,
-    state: web::Data<Rc<State>>,
+    state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     log::info!("register {:?}", registration);
-    let Registration { name, password, email } = registration.into_inner();
-    let user = state.identity_db.create(name, None, password).await?;
-    let user: UserId = user.into();
-    user.to_session(&session)?;
+    //let Registration { name, password, email } = registration.into_inner();
+    //let _user = state.identity_db().create(name, None, password).await?;
+    //let user: UserId = user.into();
+    //user.to_session(&session)?;
     Ok(HttpResponse::Ok().finish())
 }
