@@ -9,8 +9,7 @@ use azure_utils::idgenerator::{SaltedIdSequence, SyncCounterConfig, SyncCounterS
 pub struct IdentityDB {
     password_pepper: String,
     users: TableStorage,
-    email_index: TableStorage,
-    name_index: TableStorage,
+    indices: TableStorage,
     id_generator: SaltedIdSequence,
 }
 
@@ -19,8 +18,7 @@ impl IdentityDB {
         let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
         let table_service = TableService::new(client.clone());
         let users = TableStorage::new(table_service.clone(), "users");
-        let email_index = TableStorage::new(table_service.clone(), "usersemailIndex");
-        let name_index = TableStorage::new(table_service.clone(), "usersnameIndex");
+        let indices = TableStorage::new(table_service.clone(), "userIndices");
 
         let id_config = SyncCounterConfig {
             storage_account: config.storage_account.clone(),
@@ -31,14 +29,12 @@ impl IdentityDB {
         let id_generator = SaltedIdSequence::new(id_counter, "userid").with_granularity(10);
 
         users.create_if_not_exists().await?;
-        email_index.create_if_not_exists().await?;
-        name_index.create_if_not_exists().await?;
+        indices.create_if_not_exists().await?;
 
         Ok(IdentityDB {
             password_pepper: config.password_pepper.clone(),
             users,
-            email_index,
-            name_index,
+            indices,
             id_generator,
         })
     }
@@ -46,7 +42,8 @@ impl IdentityDB {
     pub async fn create(&self, name: String, email: Option<String>, password: String) -> Result<IdentityEntry, IdentityError> {
         let id = self.id_generator.get().await?;
         log::info!("Creating new user: {}", id);
-        let password_hash = password;
+        let salt = id.split("-").skip(1).next().unwrap();
+        let password_hash = format!("{}{}{}", password, salt, self.password_pepper);
 
         let user = IdentityEntry::new(id, name, email, password_hash);
         let user = match self.users.insert_entry(user.into_entry()).await {
@@ -55,7 +52,7 @@ impl IdentityDB {
         };
 
         let name_index = NameIndexEntry::from_identity(&user);
-        let name_index = match self.name_index.insert_entry(name_index.into_entry()).await {
+        let name_index = match self.indices.insert_entry(name_index.into_entry()).await {
             Ok(name_index) => NameIndexEntry::from_entry(name_index),
             Err(e) => {
                 log::info!("Creating user failed (name_index): {:?}, {:?}", user, e);
@@ -72,7 +69,7 @@ impl IdentityDB {
         };
 
         if let Some(email_index) = EmailIndexEntry::from_identity(&user) {
-            let email_index = match self.email_index.insert_entry(email_index.into_entry()).await {
+            let email_index = match self.indices.insert_entry(email_index.into_entry()).await {
                 Ok(email_index) => EmailIndexEntry::from_entry(email_index),
                 Err(e) => {
                     log::info!("Creating user failed (email_index): {:?}, {:?}", user, e);
@@ -85,7 +82,7 @@ impl IdentityDB {
                         )
                         .await;
                     let _ = self
-                        .name_index
+                        .indices
                         .delete_entry(
                             &name_index.entry().partition_key,
                             &name_index.entry().row_key,

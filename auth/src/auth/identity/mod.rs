@@ -40,8 +40,8 @@ pub async fn register(
 ) -> Result<HttpResponse, ActixError> {
     log::info!("register {:?}", registration);
     let Registration { name, password, email } = registration.into_inner();
-    let _user = state.identity_db().create(name, None, password).await?;
-    let user: UserId = user.into();
+    let user = state.identity_db().create(name, email, password).await?;
+    let user = UserId::from(user);
     user.to_session(&session)?;
     Ok(HttpResponse::Ok().finish())
 }

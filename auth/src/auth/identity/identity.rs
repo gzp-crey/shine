@@ -71,7 +71,7 @@ pub struct NameIndexEntry(TableEntry<NameIndex>);
 impl NameIndexEntry {
     pub fn from_identity(entry: &IdentityEntry) -> Self {
         Self(TableEntry {
-            partition_key: entry.identity().name.clone(),
+            partition_key: "name".to_string(),
             row_key: entry.identity().name.clone(),
             etag: None,
             payload: NameIndex {
@@ -110,7 +110,7 @@ impl EmailIndexEntry {
     pub fn from_identity(entry: &IdentityEntry) -> Option<Self> {
         if let Some(ref email) = entry.identity().email {
             Some(Self(TableEntry {
-                partition_key: email.clone(),
+                partition_key: "email".to_string(),
                 row_key: email.clone(),
                 etag: None,
                 payload: EmailIndex {
