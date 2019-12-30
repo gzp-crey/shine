@@ -10,7 +10,7 @@ pub struct EmptyEntry {}
 pub struct Identity {
     pub name: String,
     pub email: Option<String>,
-    pub email_validate: bool,
+    pub email_validated: bool,
     pub password_hash: String,
     //pub roles: Vec<String>,
 }
@@ -27,7 +27,7 @@ impl IdentityEntry {
             payload: Identity {
                 name,
                 email,
-                email_validate: false,
+                email_validated: false,
                 password_hash,
                 //roles: vec![],
             },
