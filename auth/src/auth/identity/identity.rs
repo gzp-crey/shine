@@ -2,6 +2,9 @@ use crate::session::UserId;
 use azure_sdk_storage_table::TableEntry;
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
+pub struct EmptyEntry {}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Identity {
@@ -69,9 +72,13 @@ pub struct NameIndex {
 pub struct NameIndexEntry(TableEntry<NameIndex>);
 
 impl NameIndexEntry {
+    pub fn generate_partion_key(_name: &str) -> String {
+        "name".to_string()
+    }
+
     pub fn from_identity(entry: &IdentityEntry) -> Self {
         Self(TableEntry {
-            partition_key: "name".to_string(),
+            partition_key: Self::generate_partion_key(&entry.identity().name),
             row_key: entry.identity().name.clone(),
             etag: None,
             payload: NameIndex {
@@ -107,10 +114,14 @@ pub struct EmailIndex {
 pub struct EmailIndexEntry(TableEntry<EmailIndex>);
 
 impl EmailIndexEntry {
+    pub fn generate_partion_key(_email: &str) -> String {
+        "email".to_string()
+    }
+
     pub fn from_identity(entry: &IdentityEntry) -> Option<Self> {
         if let Some(ref email) = entry.identity().email {
             Some(Self(TableEntry {
-                partition_key: "email".to_string(),
+                partition_key: Self::generate_partion_key(email),
                 row_key: email.clone(),
                 etag: None,
                 payload: EmailIndex {

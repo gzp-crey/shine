@@ -8,11 +8,11 @@ edition = "2018"
 log = "0.4"
 env_logger = "0.7.1"
 
-futures = {version = "0.3", features =["compat"]}
+futures = "0.3"
 
 base64 = "0.11"
-bytes = "0.4"
-uuid = { version = "0.8", features = ["v4"] }
+bytes = "0.5"
+rust-argon2 = "0.6"
 
 serde = "1.0"
 serde_derive = "1.0"
@@ -24,10 +24,7 @@ tera = "1.0"
 actix-rt = "1.0"
 actix-web = "2.0"
 actix-session = "0.3"
-mount = "0.4.0"
-router = "0.6.0"
 
-url = "1.7"
 oxide-auth = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 oxide-auth-actix = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 

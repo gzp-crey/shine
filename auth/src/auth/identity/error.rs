@@ -1,4 +1,6 @@
+use actix_web::http::StatusCode;
 use actix_web::ResponseError;
+use argon2::Error as Argon2Error;
 use azure_sdk_core::errors::AzureError;
 use azure_utils::idgenerator::IdSequenceError;
 use std::fmt;
@@ -7,18 +9,30 @@ use std::fmt;
 pub enum IdentityError {
     /// Database related error
     DB(String),
+    Password(String),
+    NameTaken,
+    EmailTaken,
 }
 
 impl fmt::Display for IdentityError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             IdentityError::DB(ref e) => write!(f, "DB, {}", e),
+            IdentityError::Password(ref e) => write!(f, "Password, {}", e),
+            IdentityError::NameTaken => write!(f, "User name already taken"),
+            IdentityError::EmailTaken => write!(f, "Email already taken"),
         }
     }
 }
 
 impl ResponseError for IdentityError {
-    // Default to 500 for now
+    fn status_code(&self) -> StatusCode {
+        match *self {
+            IdentityError::NameTaken => StatusCode::CONFLICT,
+            IdentityError::EmailTaken => StatusCode::CONFLICT,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
 }
 
 impl From<AzureError> for IdentityError {
@@ -33,5 +47,11 @@ impl From<IdSequenceError> for IdentityError {
             IdSequenceError::DB(e) => IdentityError::DB(e),
             IdSequenceError::SequenceEnded => IdentityError::DB(format!("ID sequence out of values")),
         }
+    }
+}
+
+impl From<Argon2Error> for IdentityError {
+    fn from(err: Argon2Error) -> IdentityError {
+        IdentityError::Password(err.to_string())
     }
 }

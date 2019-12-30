@@ -1,6 +1,8 @@
 use super::error::IdentityError;
-use super::identity::{EmailIndexEntry, IdentityEntry, NameIndexEntry};
+use super::identity::{EmailIndexEntry, IdentityEntry, NameIndexEntry, EmptyEntry};
 use super::IdentityConfig;
+use argon2;
+use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::table::{TableService, TableStorage};
 use azure_utils::idgenerator::{SaltedIdSequence, SyncCounterConfig, SyncCounterStore};
@@ -39,11 +41,42 @@ impl IdentityDB {
         })
     }
 
+    pub async fn is_user_name_available(&self, name: &str) -> Result<bool, IdentityError> {
+        Ok(self
+            .indices
+            .get_entry::<EmptyEntry>(&NameIndexEntry::generate_partion_key(&name), name)
+            .await?
+            .is_none())
+    }
+
+    pub async fn is_email_available(&self, email: &str) -> Result<bool, IdentityError> {
+        Ok(self
+            .indices
+            .get_entry::<EmptyEntry>(&EmailIndexEntry::generate_partion_key(&email), &email)
+            .await?
+            .is_none())
+    }
+
     pub async fn create(&self, name: String, email: Option<String>, password: String) -> Result<IdentityEntry, IdentityError> {
+        if !self.is_user_name_available(&name).await? {
+            log::info!("User name {} already taken", name);
+            return Err(IdentityError::NameTaken);
+        }
+
+        if let Some(ref email) = email {
+            if !self.is_email_available(email).await? {
+                log::info!("Email {} already taken", email);
+                return Err(IdentityError::EmailTaken);
+            }
+        }
+
         let id = self.id_generator.get().await?;
         log::info!("Creating new user: {}", id);
+
         let salt = id.split("-").skip(1).next().unwrap();
-        let password_hash = format!("{}{}{}", password, salt, self.password_pepper);
+        let salt = format!("{}{}", salt, self.password_pepper);
+        let argon2_config = argon2::Config::default();
+        let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &argon2_config)?;
 
         let user = IdentityEntry::new(id, name, email, password_hash);
         let user = match self.users.insert_entry(user.into_entry()).await {
@@ -64,11 +97,15 @@ impl IdentityDB {
                         user.entry().etag.as_deref(),
                     )
                     .await;
-                return Err(IdentityError::from(e));
+                if is_conflict(&e) {
+                    return Err(IdentityError::NameTaken);
+                } else {
+                    return Err(IdentityError::from(e));
+                }
             }
         };
 
-        if let Some(email_index) = EmailIndexEntry::from_identity(&user) {
+        let email_index = if let Some(email_index) = EmailIndexEntry::from_identity(&user) {
             let email_index = match self.indices.insert_entry(email_index.into_entry()).await {
                 Ok(email_index) => EmailIndexEntry::from_entry(email_index),
                 Err(e) => {
@@ -89,73 +126,31 @@ impl IdentityDB {
                             name_index.entry().etag.as_deref(),
                         )
                         .await;
-                    return Err(IdentityError::from(e));
+
+                    if is_conflict(&e) {
+                        return Err(IdentityError::EmailTaken);
+                    } else {
+                        return Err(IdentityError::from(e));
+                    }
                 }
             };
-        }
+            Some(email_index)
+        } else {
+            None
+        };
 
         log::info!("New user registered: {:?}", user);
+        log::debug!("Name index: {:?}", name_index);
+        log::debug!("Email index: {:?}", email_index);
         Ok(user)
     }
 }
 
-/*
-struct NameIndex {
-    id: String,
-    name: String,
+fn is_conflict(err: &AzureError) -> bool {
+    if let AzureError::UnexpectedHTTPResult(ref res) = err {
+        if res.status_code() == 409 {
+            return true;
+        }
+    }
+    false
 }
-
-struct EmailIndex {
-    id: String,
-    name: String,
-}
-
-pub struct IdentityDB {
-    identities: TableStorage,
-    nameindex: TableStorage,
-    emailIndex: TableStorage,
-}
-
-impl IdentityDB {}
-    pub fn disable(name: String, email: Option<String>, password_hash: String) -> Result<Identity, Error> {
-
-    }
-
-    pub fn prune() -> Result<(), Error> {
-
-    }
-
-    pub fn validate_email(id: String) -> Result<Identity, Error> {
-
-    }
-
-    pub fn change_password(id:String, old_password_hash: String, new_password_hash:String) -> Result<Identity,()> {
-
-    }
-
-    pub fn find_by_name(name:String) -> Result<Identity, Error> {
-
-    }
-
-    pub fn find_by_email(name:String) -> Result<Identity, Error> {
-
-    }
-
-    pub fn find_by_id(name:String) -> Result<Identity, Error> {
-
-    }
-
-    pub fn set_role(id: String, roles:Vec<String>)-> Result<Identity, Error> {
-
-    }
-
-    pub fn add_role(id: String, roles:Vec<String>)-> Result<Identity, Error> {
-
-    }
-
-    pub fn remove_role(id: String, roles:Vec<String>)-> Result<Identity, Error> {
-
-    }
-}
-
-*/

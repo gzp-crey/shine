@@ -34,7 +34,6 @@ impl From<IdentityError> for AuthError {
     }
 }
 
-
 struct Inner {
     tera: Tera,
     identity_db: IdentityDB,
@@ -53,12 +52,10 @@ impl State {
 
     pub fn tera(&self) -> &Tera {
         &self.0.tera
-
     }
 
     pub fn identity_db(&self) -> &IdentityDB {
         &self.0.identity_db
-
     }
 }
 
