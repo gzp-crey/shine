@@ -78,19 +78,19 @@ impl AuthService {
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
-        let state = web::Data::new(State::new(self.tera.clone(), self.identity_db.clone()));
+        let state = State::new(self.tera.clone(), self.identity_db.clone());
 
         services.service(
             web::scope("auth/api")
                 .data(state)
-                /*.service(
+                .service(
                     web::resource("authorize")
                         .route(web::get().to(get_authorization))
                         .route(web::post().to(post_authorization)),
                 )
                 .service(web::resource("refresh").route(web::post().to(post_refresh)))
                 .service(web::resource("token").route(web::post().to(post_token)))
-                .service(web::resource("login").route(web::post().to(login)))*/
+                .service(web::resource("login").route(web::post().to(login)))
                 .service(web::resource("register").route(web::post().to(register))),
         );
     }
