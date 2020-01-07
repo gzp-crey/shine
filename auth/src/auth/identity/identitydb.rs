@@ -1,11 +1,13 @@
 use super::error::IdentityError;
-use super::identity::{EmailIndexEntry, IdentityEntry, NameIndexEntry, EmptyEntry};
+use super::identity::{EmailIndexEntry, EmptyEntry, IdentityEntry, IdentityIndex, NameIndexEntry};
 use super::IdentityConfig;
 use argon2;
 use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::table::{TableService, TableStorage};
 use azure_utils::idgenerator::{SaltedIdSequence, SyncCounterConfig, SyncCounterStore};
+use validator::validate_email;
+use percent_encoding::{self, utf8_percent_encode};
 
 #[derive(Clone)]
 pub struct IdentityDB {
@@ -58,11 +60,23 @@ impl IdentityDB {
     }
 
     pub async fn create(&self, name: String, email: Option<String>, password: String) -> Result<IdentityEntry, IdentityError> {
+        // validate input
+        if !validate_username(&name) {
+            log::info!("Invalid user name: {}", name);
+            return Err(IdentityError::InvalidName);
+        }
+        if let Some(ref email) = email {
+            if !validate_email(email) {
+                log::info!("Invalid email: {}", email);
+                return Err(IdentityError::InvalidEmail);
+            }
+        }
+
+        // fast check to skip rollback
         if !self.is_user_name_available(&name).await? {
             log::info!("User name {} already taken", name);
             return Err(IdentityError::NameTaken);
         }
-
         if let Some(ref email) = email {
             if !self.is_email_available(email).await? {
                 log::info!("Email {} already taken", email);
@@ -70,6 +84,7 @@ impl IdentityDB {
             }
         }
 
+        // create user entity
         let id = self.id_generator.get().await?;
         log::info!("Creating new user: {}", id);
 
@@ -144,6 +159,36 @@ impl IdentityDB {
         log::debug!("Email index: {:?}", email_index);
         Ok(user)
     }
+
+    pub async fn find_by_login(&self, login: &str) -> Result<Option<IdentityEntry>, IdentityError> {
+        let query_name = format!(
+            "PartitionKey eq '{}' and RowKey eq '{}'",
+            NameIndexEntry::generate_partion_key(login),
+            login
+        );
+        let query_email = format!(
+            "PartitionKey eq '{}' and RowKey eq '{}'",
+            EmailIndexEntry::generate_partion_key(login),
+            login
+        );
+        let query = format!("(({}) or ({}))", query_name, query_email);
+        let query = format!("$filter={}",utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
+
+        let index = self.indices.query_entries::<IdentityIndex>(Some(&query)).await?;
+        assert!(index.len() <= 1);
+        if let Some(index) = index.first() {
+            let user_id = &index.payload.user_id;
+            let partion_key = IdentityEntry::generate_partion_key(&user_id);
+            let user = self
+                .users
+                .get_entry(&partion_key, &user_id)
+                .await?
+                .map(IdentityEntry::from_entry);
+            Ok(user)
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 fn is_conflict(err: &AzureError) -> bool {
@@ -153,4 +198,8 @@ fn is_conflict(err: &AzureError) -> bool {
         }
     }
     false
+}
+
+fn validate_username(name: &str) -> bool {
+    name.chars().all(char::is_alphanumeric)
 }

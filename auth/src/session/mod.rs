@@ -1,3 +1,3 @@
 mod userid;
 
-pub use userid::UserId;
+pub use self::userid::*;

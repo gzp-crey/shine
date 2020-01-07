@@ -19,10 +19,14 @@ pub struct Identity {
 pub struct IdentityEntry(TableEntry<Identity>);
 
 impl IdentityEntry {
+    pub fn generate_partion_key(id: &str) -> String {
+        id.to_string()
+    }
+
     pub fn new(id: String, name: String, email: Option<String>, password_hash: String) -> IdentityEntry {
         IdentityEntry(TableEntry {
-            partition_key: id.clone(),
-            row_key: id.clone(),
+            partition_key: Self::generate_partion_key(&id),
+            row_key: id,
             etag: None,
             payload: Identity {
                 name,
@@ -64,8 +68,36 @@ impl From<IdentityEntry> for UserId {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct NameIndex {
+pub struct IdentityIndex {
     pub user_id: String,
+}
+
+#[derive(Debug)]
+pub struct IdentityIndexEntry(TableEntry<IdentityIndex>);
+
+impl IdentityIndexEntry {
+    pub fn from_entry(entry: TableEntry<IdentityIndex>) -> Self {
+        Self(entry)
+    }
+
+    pub fn into_entry(self) -> TableEntry<IdentityIndex> {
+        self.0
+    }
+
+    pub fn entry(&self) -> &TableEntry<IdentityIndex> {
+        &self.0
+    }
+
+    pub fn id(&self) -> &str {
+        &self.0.payload.user_id
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct NameIndex {
+    #[serde(flatten)]
+    pub identity_id: IdentityIndex,
 }
 
 #[derive(Debug)]
@@ -82,7 +114,9 @@ impl NameIndexEntry {
             row_key: entry.identity().name.clone(),
             etag: None,
             payload: NameIndex {
-                user_id: entry.id().to_owned(),
+                identity_id: IdentityIndex {
+                    user_id: entry.id().to_owned(),
+                },
             },
         })
     }
@@ -100,14 +134,15 @@ impl NameIndexEntry {
     }
 
     pub fn id(&self) -> &str {
-        &self.0.payload.user_id
+        &self.0.payload.identity_id.user_id
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct EmailIndex {
-    pub user_id: String,
+    #[serde(flatten)]
+    pub identity_id: IdentityIndex,
 }
 
 #[derive(Debug)]
@@ -125,7 +160,9 @@ impl EmailIndexEntry {
                 row_key: email.clone(),
                 etag: None,
                 payload: EmailIndex {
-                    user_id: entry.id().to_owned(),
+                    identity_id: IdentityIndex {
+                        user_id: entry.id().to_owned(),
+                    },
                 },
             }))
         } else {
@@ -146,6 +183,6 @@ impl EmailIndexEntry {
     }
 
     pub fn id(&self) -> &str {
-        &self.0.payload.user_id
+        &self.0.payload.identity_id.user_id
     }
 }

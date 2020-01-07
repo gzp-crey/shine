@@ -2,8 +2,6 @@ use actix_session::{CookieSession, Session};
 use actix_web::Error as ActixError;
 use serde::{Deserialize, Serialize};
 
-const USER_ID_COOKIE: &str = "shineuser";
-
 #[derive(Serialize, Deserialize)]
 pub struct UserId {
     id: String,
@@ -32,7 +30,7 @@ impl UserId {
 impl UserId {
     pub fn cookie_session(key: &[u8]) -> CookieSession {
         CookieSession::signed(key)
-            .name(USER_ID_COOKIE)
+            .name("shine_user")
             .domain("localhost")
             .http_only(true)
             //.same_site(SameSite::Lax)
@@ -42,10 +40,14 @@ impl UserId {
     }
 
     pub fn from_session(session: &Session) -> Result<Option<Self>, ActixError> {
-        session.get::<UserId>(USER_ID_COOKIE)
+        session.get::<UserId>("identity")
+    }
+
+    pub fn clear_session(session: &Session) {
+        session.clear()
     }
 
     pub fn to_session(self, session: &Session) -> Result<(), ActixError> {
-        session.set(USER_ID_COOKIE, self)
+        session.set("identity", self)
     }
 }

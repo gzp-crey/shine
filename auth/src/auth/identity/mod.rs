@@ -8,7 +8,6 @@ use crate::session::UserId;
 use actix_session::Session;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
-use std::rc::Rc;
 
 pub use self::error::*;
 pub use self::identitydb::*;
@@ -20,10 +19,17 @@ pub struct IdentityConfig {
     storage_account_key: String,
 }
 
-pub async fn login(session: Session, auth: BasicAuth, state: web::Data<Rc<State>>) -> Result<HttpResponse, ActixError> {
+pub async fn login(session: Session, auth: BasicAuth, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
     log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
-    UserId::new(auth.user_id().to_owned().to_string(), "a".to_string(), vec![]).to_session(&session)?;
-    Ok(HttpResponse::Ok().finish())
+    let user = state.identity_db().find_by_login(auth.user_id()).await?;
+    if let Some(user) = user {        
+        UserId::from(user).to_session(&session)?;
+        Ok(HttpResponse::Ok().finish())
+    }
+    else {
+        UserId::clear_session(&session);
+        Ok(HttpResponse::Forbidden().finish())        
+    }    
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -9,7 +9,9 @@ use std::fmt;
 pub enum IdentityError {
     /// Database related error
     DB(String),
-    Password(String),
+    InvalidPassword(String),
+    InvalidName,    
+    InvalidEmail,
     NameTaken,
     EmailTaken,
 }
@@ -18,7 +20,9 @@ impl fmt::Display for IdentityError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             IdentityError::DB(ref e) => write!(f, "DB, {}", e),
-            IdentityError::Password(ref e) => write!(f, "Password, {}", e),
+            IdentityError::InvalidPassword(ref e) => write!(f, "InvalidPassword, pasword encryption failed: {}", e),
+            IdentityError::InvalidName => write!(f, "Invalid user name"),
+            IdentityError::InvalidEmail => write!(f, "Invalid email"),
             IdentityError::NameTaken => write!(f, "User name already taken"),
             IdentityError::EmailTaken => write!(f, "Email already taken"),
         }
@@ -28,6 +32,9 @@ impl fmt::Display for IdentityError {
 impl ResponseError for IdentityError {
     fn status_code(&self) -> StatusCode {
         match *self {
+            IdentityError::InvalidEmail => StatusCode::BAD_REQUEST,
+            IdentityError::InvalidName => StatusCode::BAD_REQUEST,
+            IdentityError::InvalidPassword(_) => StatusCode::BAD_REQUEST,
             IdentityError::NameTaken => StatusCode::CONFLICT,
             IdentityError::EmailTaken => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
@@ -52,6 +59,6 @@ impl From<IdSequenceError> for IdentityError {
 
 impl From<Argon2Error> for IdentityError {
     fn from(err: Argon2Error) -> IdentityError {
-        IdentityError::Password(err.to_string())
+        IdentityError::InvalidPassword(err.to_string())
     }
 }
