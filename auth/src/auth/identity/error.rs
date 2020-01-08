@@ -10,10 +10,12 @@ pub enum IdentityError {
     /// Database related error
     DB(String),
     InvalidPassword(String),
-    InvalidName,    
+    InvalidName,
     InvalidEmail,
     NameTaken,
     EmailTaken,
+    UserNotFound,
+    PasswordNotMatching,
 }
 
 impl fmt::Display for IdentityError {
@@ -25,6 +27,7 @@ impl fmt::Display for IdentityError {
             IdentityError::InvalidEmail => write!(f, "Invalid email"),
             IdentityError::NameTaken => write!(f, "User name already taken"),
             IdentityError::EmailTaken => write!(f, "Email already taken"),
+            IdentityError::UserNotFound | IdentityError::PasswordNotMatching => write!(f, "Invalid user or password"),
         }
     }
 }
@@ -37,6 +40,7 @@ impl ResponseError for IdentityError {
             IdentityError::InvalidPassword(_) => StatusCode::BAD_REQUEST,
             IdentityError::NameTaken => StatusCode::CONFLICT,
             IdentityError::EmailTaken => StatusCode::CONFLICT,
+            IdentityError::UserNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

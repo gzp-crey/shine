@@ -6,8 +6,8 @@ use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::table::{TableService, TableStorage};
 use azure_utils::idgenerator::{SaltedIdSequence, SyncCounterConfig, SyncCounterStore};
-use validator::validate_email;
 use percent_encoding::{self, utf8_percent_encode};
+use validator::validate_email;
 
 #[derive(Clone)]
 pub struct IdentityDB {
@@ -59,6 +59,11 @@ impl IdentityDB {
             .is_none())
     }
 
+    fn get_salt(&self, id: &str) -> String {
+        let salt = id.split("-").skip(1).next().unwrap();
+        format!("{}{}", salt, self.password_pepper)
+    }
+
     pub async fn create(&self, name: String, email: Option<String>, password: String) -> Result<IdentityEntry, IdentityError> {
         // validate input
         if !validate_username(&name) {
@@ -88,10 +93,11 @@ impl IdentityDB {
         let id = self.id_generator.get().await?;
         log::info!("Creating new user: {}", id);
 
-        let salt = id.split("-").skip(1).next().unwrap();
-        let salt = format!("{}{}", salt, self.password_pepper);
-        let argon2_config = argon2::Config::default();
-        let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &argon2_config)?;
+        let password_hash = {
+            let salt = self.get_salt(&id);
+            let argon2_config = argon2::Config::default();
+            argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &argon2_config)?
+        };
 
         let user = IdentityEntry::new(id, name, email, password_hash);
         let user = match self.users.insert_entry(user.into_entry()).await {
@@ -160,7 +166,7 @@ impl IdentityDB {
         Ok(user)
     }
 
-    pub async fn find_by_login(&self, login: &str) -> Result<Option<IdentityEntry>, IdentityError> {
+    pub async fn find_by_login(&self, login: &str, password: Option<&str>) -> Result<IdentityEntry, IdentityError> {
         let query_name = format!(
             "PartitionKey eq '{}' and RowKey eq '{}'",
             NameIndexEntry::generate_partion_key(login),
@@ -172,22 +178,25 @@ impl IdentityDB {
             login
         );
         let query = format!("(({}) or ({}))", query_name, query_email);
-        let query = format!("$filter={}",utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
+        let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
 
         let index = self.indices.query_entries::<IdentityIndex>(Some(&query)).await?;
         assert!(index.len() <= 1);
-        if let Some(index) = index.first() {
-            let user_id = &index.payload.user_id;
-            let partion_key = IdentityEntry::generate_partion_key(&user_id);
-            let user = self
-                .users
-                .get_entry(&partion_key, &user_id)
-                .await?
-                .map(IdentityEntry::from_entry);
-            Ok(user)
-        } else {
-            Ok(None)
+        let index = index.first().ok_or(IdentityError::UserNotFound)?;
+
+        let user_id = &index.payload.user_id;
+        let partion_key = IdentityEntry::generate_partion_key(&user_id);
+        let user = self.users.get_entry(&partion_key, &user_id).await?;
+        let user = user.map(IdentityEntry::from_entry).ok_or(IdentityError::UserNotFound)?;
+
+        if let Some(password) = password {
+            // check password if provided, this is a low level function and it's ok if no password was
+            if !argon2::verify_encoded(&user.identity().password_hash, password.as_bytes())? {
+                return Err(IdentityError::PasswordNotMatching);
+            }
         }
+
+        Ok(user)
     }
 }
 

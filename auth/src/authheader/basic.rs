@@ -55,13 +55,13 @@ impl BasicAuth {
     }
 
     /// Returns client's user-ID.
-    pub fn user_id(&self) -> &Cow<'static, str> {
-        &self.user_id
+    pub fn user_id(&self) -> Cow<'static, str> {
+        self.user_id.clone()
     }
 
     /// Returns client's password if provided.
-    pub fn password(&self) -> Option<&Cow<'static, str>> {
-        self.password.as_ref()
+    pub fn password(&self) -> Option<Cow<'static, str>> {
+        self.password.clone()
     }
 }
 

@@ -21,15 +21,20 @@ pub struct IdentityConfig {
 
 pub async fn login(session: Session, auth: BasicAuth, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
     log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
-    let user = state.identity_db().find_by_login(auth.user_id()).await?;
-    if let Some(user) = user {        
-        UserId::from(user).to_session(&session)?;
-        Ok(HttpResponse::Ok().finish())
+    match state
+        .identity_db()
+        .find_by_login(&auth.user_id(), auth.password().as_deref())
+        .await
+    {
+        Ok(user) => {
+            UserId::from(user).to_session(&session)?;
+            Ok(HttpResponse::Ok().finish())
+        }
+        Err(err) => {
+            UserId::clear_session(&session);
+            Err(err.into())
+        }
     }
-    else {
-        UserId::clear_session(&session);
-        Ok(HttpResponse::Forbidden().finish())        
-    }    
 }
 
 #[derive(Debug, Serialize, Deserialize)]
