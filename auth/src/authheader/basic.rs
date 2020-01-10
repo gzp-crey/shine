@@ -1,5 +1,6 @@
 use super::error::Error;
 use actix_web::{dev::Payload, http::header, FromRequest, HttpRequest};
+use data_encoding::BASE64;
 use futures::future::{err, ok, Ready};
 use std::{borrow::Cow, str};
 
@@ -35,7 +36,7 @@ impl BasicAuth {
             _ => return Err(Error::MissingScheme),
         }
 
-        let decoded = base64::decode(parts.next().ok_or(Error::Invalid)?)?;
+        let decoded = BASE64.decode(parts.next().ok_or(Error::Invalid)?.as_bytes())?;
         let mut credentials = str::from_utf8(&decoded)?.splitn(2, ':');
 
         let user_id = credentials

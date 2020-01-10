@@ -1,5 +1,5 @@
 use actix_web::{middleware, App, HttpServer};
-use base64;
+use data_encoding::BASE64;
 use std::env;
 
 mod auth;
@@ -25,14 +25,16 @@ pub fn main() {
 
     let service_config = config::Config::new().expect("Service configuration failed");
     log::info!("{:#?}", service_config);
-    let user_id_secret = base64::decode(&service_config.user_id_secret).expect("Failed to parse secret for user_id");
+    let cookie_user_id_secret = BASE64
+        .decode(service_config.cookie_user_id_secret.as_bytes())
+        .expect("Failed to parse secret for user_id");
 
     let auth = AuthService::create(&mut sys, &service_config.auth).expect("Auth service creation failed");
 
     let _ = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .wrap(session::UserId::cookie_session(&user_id_secret))
+            .wrap(session::UserId::cookie_session(&cookie_user_id_secret))
             .configure(|cfg| auth.configure(cfg))
     })
     .workers(service_config.worker_count)

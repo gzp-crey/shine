@@ -8,6 +8,8 @@ pub struct EmptyEntry {}
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Identity {
+    pub sequence_id: String,
+    pub salt: String,
     pub name: String,
     pub email: Option<String>,
     pub email_validated: bool,
@@ -20,15 +22,24 @@ pub struct IdentityEntry(TableEntry<Identity>);
 
 impl IdentityEntry {
     pub fn generate_partion_key(id: &str) -> String {
-        id.to_string()
+        id[0..2].to_string()
     }
 
-    pub fn new(id: String, name: String, email: Option<String>, password_hash: String) -> IdentityEntry {
+    pub fn new(
+        id: String,
+        sequence_id: String,
+        salt: String,
+        name: String,
+        email: Option<String>,
+        password_hash: String,
+    ) -> IdentityEntry {
         IdentityEntry(TableEntry {
             partition_key: Self::generate_partion_key(&id),
             row_key: id,
             etag: None,
             payload: Identity {
+                sequence_id,
+                salt,
                 name,
                 email,
                 email_validated: false,

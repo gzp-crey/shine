@@ -8,7 +8,7 @@ pub struct Config {
     pub bind_host: String,
     pub bind_port: u16,
     pub worker_count: usize,
-    pub user_id_secret: String,
+    pub cookie_user_id_secret: String,
     pub auth: AuthConfig,
 }
 
@@ -23,10 +23,12 @@ impl Config {
                 "bind_host": "0.0.0.0",
                 "bind_port": "12345",
                 "worker_count": "4",
-                "user_id_secret" : "ERROR: provide secret from secret.config.json",
+                "cookie_user_id_secret" : "ERROR: provide secret from secret.config.json",
                 "auth" : {
-                    "identity": {
+                    "identity": {                        
                         "password_pepper": "ERROR: provide secret from secret.config.json",
+                        "user_id_secret": "ERROR: provide secret from secret.config.json",
+                        "login_key_secret": "ERROR: provide secret from secret.config.json",
                         "storage_account": "ERROR: provide secret from secret.config.json",
                         "storage_account_key": "ERROR: provide secret from secret.config.json"
                     }

@@ -3,13 +3,14 @@ use actix_web::ResponseError;
 use argon2::Error as Argon2Error;
 use azure_sdk_core::errors::AzureError;
 use azure_utils::idgenerator::IdSequenceError;
-use std::fmt;
+use data_encoding;
+use std::{fmt, str};
 
 #[derive(Debug)]
 pub enum IdentityError {
     /// Database related error
     DB(String),
-    InvalidPassword(String),
+    Encryption(String),
     InvalidName,
     InvalidEmail,
     NameTaken,
@@ -22,7 +23,7 @@ impl fmt::Display for IdentityError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             IdentityError::DB(ref e) => write!(f, "DB, {}", e),
-            IdentityError::InvalidPassword(ref e) => write!(f, "InvalidPassword, pasword encryption failed: {}", e),
+            IdentityError::Encryption(ref e) => write!(f, "Encryption, encryption failed: {}", e),
             IdentityError::InvalidName => write!(f, "Invalid user name"),
             IdentityError::InvalidEmail => write!(f, "Invalid email"),
             IdentityError::NameTaken => write!(f, "User name already taken"),
@@ -37,7 +38,7 @@ impl ResponseError for IdentityError {
         match *self {
             IdentityError::InvalidEmail => StatusCode::BAD_REQUEST,
             IdentityError::InvalidName => StatusCode::BAD_REQUEST,
-            IdentityError::InvalidPassword(_) => StatusCode::BAD_REQUEST,
+            IdentityError::Encryption(_) => StatusCode::BAD_REQUEST,
             IdentityError::NameTaken => StatusCode::CONFLICT,
             IdentityError::EmailTaken => StatusCode::CONFLICT,
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
@@ -63,6 +64,24 @@ impl From<IdSequenceError> for IdentityError {
 
 impl From<Argon2Error> for IdentityError {
     fn from(err: Argon2Error) -> IdentityError {
-        IdentityError::InvalidPassword(err.to_string())
+        IdentityError::Encryption(err.to_string())
+    }
+}
+
+impl From<data_encoding::DecodeError> for IdentityError {
+    fn from(err: data_encoding::DecodeError) -> IdentityError {
+        IdentityError::Encryption(err.to_string())
+    }
+}
+
+impl From<ring::error::Unspecified> for IdentityError {
+    fn from(err: ring::error::Unspecified) -> IdentityError {
+        IdentityError::Encryption(err.to_string())
+    }
+}
+
+impl From<str::Utf8Error> for IdentityError {
+    fn from(err: str::Utf8Error) -> IdentityError {
+        IdentityError::Encryption(err.to_string())
     }
 }

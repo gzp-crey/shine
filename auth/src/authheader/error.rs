@@ -15,7 +15,7 @@ pub enum Error {
     /// Unable to convert header into the str
     ToStrError(header::ToStrError),
     /// Malformed base64 string
-    Base64DecodeError(base64::DecodeError),
+    Base64DecodeError(data_encoding::DecodeError),
     /// Malformed UTF-8 string
     Utf8Error(str::Utf8Error),
 }
@@ -56,8 +56,8 @@ impl From<header::ToStrError> for Error {
         Error::ToStrError(e)
     }
 }
-impl From<base64::DecodeError> for Error {
-    fn from(e: base64::DecodeError) -> Self {
+impl From<data_encoding::DecodeError> for Error {
+    fn from(e: data_encoding::DecodeError) -> Self {
         Error::Base64DecodeError(e)
     }
 }

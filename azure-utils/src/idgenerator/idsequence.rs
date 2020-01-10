@@ -1,12 +1,14 @@
 use crate::idgenerator::{IdSequenceError, SyncCounterStore};
 use futures::lock::Mutex;
 use std::ops::Range;
+use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct IdSequence {
     name: String,
     granularity: u64,
     counter_store: SyncCounterStore,
-    range: Mutex<Range<u64>>,
+    range: Arc<Mutex<Range<u64>>>,
 }
 
 impl IdSequence {
@@ -15,7 +17,7 @@ impl IdSequence {
             name: name.into(),
             granularity: 100,
             counter_store,
-            range: Mutex::new(0u64..0u64),
+            range: Arc::new(Mutex::new(0u64..0u64)),
         }
     }
 
