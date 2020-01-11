@@ -19,6 +19,7 @@ use block_modes::{
 };
 use blowfish::Blowfish;
 use data_encoding::BASE64;
+use itertools::Itertools;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{distributions::Alphanumeric, Rng};
 use std::{iter, str};
@@ -26,6 +27,7 @@ use validator::validate_email;
 
 const SALT_LEN: usize = 32;
 const CIPHER_IV_LEN: usize = 8;
+const LOGIN_KEY_LEN: usize = 32;
 type Cipher = Cbc<Blowfish, Pkcs7>;
 
 const ID_BASE_ENCODE: data_encoding::Encoding = data_encoding::BASE32_NOPAD;
@@ -74,7 +76,6 @@ impl IdentityDB {
         let user_id_secret = BASE64.decode(config.user_id_secret.as_bytes())?;
         let login_key_secret = BASE64.decode(config.login_key_secret.as_bytes())?;
 
-
         Ok(IdentityDB {
             password_pepper: config.password_pepper.clone(),
             user_id_secret,
@@ -92,7 +93,7 @@ impl IdentityDB {
         Ok(cipher)
     }
 
-    async fn genrate_user_id(&self) -> Result<(String, String, String), IdentityError> {
+    async fn generate_user_id(&self) -> Result<(String, String, String), IdentityError> {
         let sequence_id = format!("{:0>10}", self.user_id_generator.get().await?);
         let salt = {
             let mut rng = rand::thread_rng();
@@ -233,7 +234,7 @@ impl IdentityDB {
         }
 
         let identity = {
-            let (id, sequence_id, salt) = self.genrate_user_id().await?;
+            let (id, sequence_id, salt) = self.generate_user_id().await?;
             let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &argon2::Config::default())?;
             log::info!("Created new user id:{}, pwh:{}", id, password_hash);
             let identity = IdentityEntry::new(id, sequence_id, salt, name, email, password_hash);
@@ -291,7 +292,13 @@ impl IdentityDB {
     }
 
     async fn genrate_login_key(&self, salt: &str) -> Result<String, IdentityError> {
-        let key_sequence = format!("{:0>10}", self.login_key_generator.get().await?);
+        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        let mut rng = rand::thread_rng();
+        let salt_sequence = iter::repeat(()).map(|()| CHARSET[rng.gen_range(0, CHARSET.len())] as char);
+        let key_sequence = self.login_key_generator.get() .await?.to_string();
+        let key_sequence = key_sequence.chars();
+        let key_sequence = key_sequence.interleave(salt_sequence).take(LOGIN_KEY_LEN).collect::<String>();
+        log::info!("key_sequence: {}", key_sequence);
         let cipher = self.login_key_cipher(&salt)?;
         let key = cipher.encrypt_vec(key_sequence.as_bytes());
         let key = KEY_BASE_ENCODE.encode(&key);
