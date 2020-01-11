@@ -1,11 +1,12 @@
 mod error;
-mod identity;
 mod identitydb;
+mod identityentry;
+mod loginentry;
 mod siteinfo;
 
 use super::State;
 use crate::authheader::BasicAuth;
-use crate::session::UserId;
+use crate::session::{IdentityCookie, SessionKey, UserId};
 use actix_session::Session;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
@@ -24,17 +25,20 @@ pub struct IdentityConfig {
 }
 
 pub async fn login(session: Session, auth: BasicAuth, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
-    log::info!("login {:?}, {:?}", auth.user_id(), auth.password());
-    let user = state
-        .identity_db()
-        .find_by_login(&auth.user_id(), auth.password().as_deref())
-        .await
-        .or_else(|err| {
-            UserId::clear_session(&session);
-            Err(HttpResponse::Forbidden().finish())
-        })?;
+    let site = SiteInfo {
+        ip: " ".to_string(),
+        agent: " ".to_string(),
+    };
+    let (user_id, password) = (auth.user_id(), auth.password());
+    log::info!("login {:?}, {:?}, {:?}", user_id, password, site);
+    IdentityCookie::clear(&session);
 
-    UserId::from(user).to_session(&session)?;
+    let identity = state.identity_db().find_by_login(&user_id, password.as_deref()).await?;
+    let login = state.identity_db().create_login(&identity, site).await?;
+
+    UserId::from(identity).to_session(&session)?;
+    SessionKey::from(login).to_session(&session)?;
+
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -50,10 +54,19 @@ pub async fn register(
     registration: web::Json<Registration>,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    log::info!("register {:?}", registration);
+    let site = SiteInfo {
+        ip: " ".to_string(),
+        agent: " ".to_string(),
+    };
+    log::info!("register {:?} {:?}", registration, site);
+    IdentityCookie::clear(&session);
+
     let Registration { name, password, email } = registration.into_inner();
     let identity = state.identity_db().create(name, email, password).await?;
-    let user = UserId::from(identity);
-    user.to_session(&session)?;
+    let login = state.identity_db().create_login(&identity, site).await?;
+
+    UserId::from(identity).to_session(&session)?;
+    SessionKey::from(login).to_session(&session)?;
+
     Ok(HttpResponse::Ok().finish())
 }

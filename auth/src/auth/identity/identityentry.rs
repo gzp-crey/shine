@@ -61,11 +61,11 @@ impl IdentityEntry {
         &self.0
     }
 
-    pub fn id(&self) -> &str {
+    pub fn user_id(&self) -> &str {
         &self.0.row_key
     }
 
-    pub fn identity(&self) -> &Identity {
+    pub fn data(&self) -> &Identity {
         &self.0.payload
     }
 }
@@ -99,7 +99,7 @@ impl IdentityIndexEntry {
         &self.0
     }
 
-    pub fn id(&self) -> &str {
+    pub fn user_id(&self) -> &str {
         &self.0.payload.user_id
     }
 }
@@ -115,18 +115,19 @@ pub struct NameIndex {
 pub struct NameIndexEntry(TableEntry<NameIndex>);
 
 impl NameIndexEntry {
-    pub fn generate_partion_key(_name: &str) -> String {
-        "name".to_string()
+    pub fn generate_partion_key(name: &str) -> String {
+        format!("name_{}", &name[0..2])
     }
 
     pub fn from_identity(entry: &IdentityEntry) -> Self {
+        let name = &entry.data().name;
         Self(TableEntry {
-            partition_key: Self::generate_partion_key(&entry.identity().name),
-            row_key: entry.identity().name.clone(),
+            partition_key: Self::generate_partion_key(name),
+            row_key: name.to_string(),
             etag: None,
             payload: NameIndex {
                 identity_id: IdentityIndex {
-                    user_id: entry.id().to_owned(),
+                    user_id: entry.user_id().to_owned(),
                 },
             },
         })
@@ -144,8 +145,12 @@ impl NameIndexEntry {
         &self.0
     }
 
-    pub fn id(&self) -> &str {
+    pub fn user_id(&self) -> &str {
         &self.0.payload.identity_id.user_id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.0.row_key
     }
 }
 
@@ -160,19 +165,19 @@ pub struct EmailIndex {
 pub struct EmailIndexEntry(TableEntry<EmailIndex>);
 
 impl EmailIndexEntry {
-    pub fn generate_partion_key(_email: &str) -> String {
-        "email".to_string()
+    pub fn generate_partion_key(email: &str) -> String {
+        format!("email_{}", &email[0..2])
     }
 
     pub fn from_identity(entry: &IdentityEntry) -> Option<Self> {
-        if let Some(ref email) = entry.identity().email {
+        if let Some(ref email) = entry.data().email {
             Some(Self(TableEntry {
                 partition_key: Self::generate_partion_key(email),
                 row_key: email.clone(),
                 etag: None,
                 payload: EmailIndex {
                     identity_id: IdentityIndex {
-                        user_id: entry.id().to_owned(),
+                        user_id: entry.user_id().to_owned(),
                     },
                 },
             }))
@@ -193,7 +198,18 @@ impl EmailIndexEntry {
         &self.0
     }
 
-    pub fn id(&self) -> &str {
+    pub fn user_id(&self) -> &str {
         &self.0.payload.identity_id.user_id
     }
+
+    pub fn email(&self) -> &str {
+        &self.0.row_key
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LoginKeyIndex {
+    #[serde(flatten)]
+    pub identity_id: IdentityIndex,
 }

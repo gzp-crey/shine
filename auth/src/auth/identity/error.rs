@@ -3,6 +3,8 @@ use actix_web::ResponseError;
 use argon2::Error as Argon2Error;
 use azure_sdk_core::errors::AzureError;
 use azure_utils::idgenerator::IdSequenceError;
+use block_cipher_trait;
+use block_modes;
 use data_encoding;
 use std::{fmt, str};
 
@@ -17,6 +19,7 @@ pub enum IdentityError {
     EmailTaken,
     UserNotFound,
     PasswordNotMatching,
+    LoginKeyConflict,
 }
 
 impl fmt::Display for IdentityError {
@@ -28,6 +31,7 @@ impl fmt::Display for IdentityError {
             IdentityError::InvalidEmail => write!(f, "Invalid email"),
             IdentityError::NameTaken => write!(f, "User name already taken"),
             IdentityError::EmailTaken => write!(f, "Email already taken"),
+            IdentityError::LoginKeyConflict => write!(f, "Login key already in use"),
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => write!(f, "Invalid user or password"),
         }
     }
@@ -41,6 +45,7 @@ impl ResponseError for IdentityError {
             IdentityError::Encryption(_) => StatusCode::BAD_REQUEST,
             IdentityError::NameTaken => StatusCode::CONFLICT,
             IdentityError::EmailTaken => StatusCode::CONFLICT,
+            IdentityError::LoginKeyConflict => StatusCode::TOO_MANY_REQUESTS,
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -74,8 +79,20 @@ impl From<data_encoding::DecodeError> for IdentityError {
     }
 }
 
-impl From<ring::error::Unspecified> for IdentityError {
-    fn from(err: ring::error::Unspecified) -> IdentityError {
+impl From<block_modes::InvalidKeyIvLength> for IdentityError {
+    fn from(err: block_modes::InvalidKeyIvLength) -> IdentityError {
+        IdentityError::Encryption(err.to_string())
+    }
+}
+
+impl From<block_modes::BlockModeError> for IdentityError {
+    fn from(err: block_modes::BlockModeError) -> IdentityError {
+        IdentityError::Encryption(err.to_string())
+    }
+}
+
+impl From<block_cipher_trait::InvalidKeyLength> for IdentityError {
+    fn from(err: block_cipher_trait::InvalidKeyLength) -> IdentityError {
         IdentityError::Encryption(err.to_string())
     }
 }
