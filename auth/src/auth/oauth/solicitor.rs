@@ -1,5 +1,5 @@
 use super::{OAuthAuthorizer, OAuthIssuer, OAuthRegistrar, OAuthScope, State};
-use crate::session::UserId;
+use shine_core::session::UserId;
 use oxide_auth::{
     endpoint::{Endpoint, OAuthError, OwnerConsent, OwnerSolicitor, PreGrant, Scopes, Template},
     frontends::simple::endpoint::{ResponseCreator, Vacant},

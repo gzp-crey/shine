@@ -1,6 +1,6 @@
 use super::identityentry::IdentityIndex;
-use super::siteinfo::SiteInfo;
-use crate::session::SessionKey;
+use shine_core::siteinfo::SiteInfo;
+use shine_core::session::SessionKey;
 use azure_sdk_storage_table::TableEntry;
 use serde::{Deserialize, Serialize};
 

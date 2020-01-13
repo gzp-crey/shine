@@ -19,7 +19,8 @@ pub enum IdentityError {
     EmailTaken,
     UserNotFound,
     PasswordNotMatching,
-    LoginKeyConflict,
+    UserIdConflict,
+    SessionKeyConflict,
 }
 
 impl fmt::Display for IdentityError {
@@ -31,7 +32,8 @@ impl fmt::Display for IdentityError {
             IdentityError::InvalidEmail => write!(f, "Invalid email"),
             IdentityError::NameTaken => write!(f, "User name already taken"),
             IdentityError::EmailTaken => write!(f, "Email already taken"),
-            IdentityError::LoginKeyConflict => write!(f, "Login key already in use"),
+            IdentityError::UserIdConflict => write!(f, "User id already in use"),
+            IdentityError::SessionKeyConflict => write!(f, "Login key already in use"),
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => write!(f, "Invalid user or password"),
         }
     }
@@ -45,7 +47,8 @@ impl ResponseError for IdentityError {
             IdentityError::Encryption(_) => StatusCode::BAD_REQUEST,
             IdentityError::NameTaken => StatusCode::CONFLICT,
             IdentityError::EmailTaken => StatusCode::CONFLICT,
-            IdentityError::LoginKeyConflict => StatusCode::TOO_MANY_REQUESTS,
+            IdentityError::UserIdConflict => StatusCode::TOO_MANY_REQUESTS,
+            IdentityError::SessionKeyConflict => StatusCode::TOO_MANY_REQUESTS,
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }

@@ -81,14 +81,23 @@ impl AuthService {
             web::scope("auth/api")
                 .data(state)
                 .service(
-                    web::resource("authorize")
-                        .route(web::get().to(get_authorization))
-                        .route(web::post().to(post_authorization)),
+                    // oath2 client (app) authentication
+                    web::scope("client")
+                        .service(
+                            web::resource("authorize")
+                                .route(web::get().to(get_authorization))
+                                .route(web::post().to(post_authorization)),
+                        )
+                        .service(web::resource("refresh").route(web::post().to(post_refresh)))
+                        .service(web::resource("token").route(web::post().to(post_token))),
                 )
-                .service(web::resource("refresh").route(web::post().to(post_refresh)))
-                .service(web::resource("token").route(web::post().to(post_token)))
-                .service(web::resource("login").route(web::post().to(login)))
-                .service(web::resource("register").route(web::post().to(register))),
+                .service(
+                    // user authentication
+                    web::scope("user")
+                        .service(web::resource("login").route(web::post().to(login_basicauth)))
+                        .service(web::resource("register").route(web::post().to(register)))
+                        .service(web::resource("refresh").route(web::post().to(register))),
+                ),
         );
     }
 }

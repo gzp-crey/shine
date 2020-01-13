@@ -1,7 +1,7 @@
 mod sessionkey;
 mod userid;
 
-use actix_session::{CookieSession, Session};
+pub use actix_session::{CookieSession, Session};
 
 pub use self::sessionkey::*;
 pub use self::userid::*;

@@ -38,8 +38,8 @@ impl BearerAuth {
     }
 
     /// Gets reference to the credentials token.
-    pub fn token(&self) -> &Cow<'static, str> {
-        &self.token
+    pub fn token(&self) -> Cow<'static, str> {
+        self.token.clone()
     }
 }
 

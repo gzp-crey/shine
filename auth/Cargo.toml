@@ -1,5 +1,5 @@
 [package]
-name = "auth"
+name = "shine-auth"
 version = "0.1.0"
 authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
@@ -31,7 +31,6 @@ config ="0.10"
 tera = "1.0"
 actix-rt = "1.0"
 actix-web = "2.0"
-actix-session = "0.3"
 
 oxide-auth = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 oxide-auth-actix = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
@@ -41,3 +40,4 @@ azure_sdk_storage_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.gi
 azure_sdk_storage_table = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
 
 azure-utils = {path = "../azure-utils", version = "0.1.0", features = ["actix-web"]}
+shine-core = {path = "../core", version = "0.1.0"}

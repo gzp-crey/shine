@@ -1,4 +1,4 @@
-use crate::session::UserId;
+use shine_core::session::UserId;
 use azure_sdk_storage_table::TableEntry;
 use serde::{Deserialize, Serialize};
 
