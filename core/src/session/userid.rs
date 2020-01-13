@@ -1,17 +1,20 @@
-use actix_session::Session;
+use super::Session;
 use actix_web::Error as ActixError;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserId {
     user_id: String,
     name: String,
-    roles: Vec<String>,
+    //roles: Vec<String>,
 }
 
 impl UserId {
     pub fn new(user_id: String, name: String, roles: Vec<String>) -> Self {
-        UserId { user_id, name, roles }
+        UserId {
+            user_id,
+            name, /*, roles*/
+        }
     }
 
     pub fn user_id(&self) -> &String {
@@ -22,9 +25,9 @@ impl UserId {
         &self.name
     }
 
-    pub fn roles(&self) -> &Vec<String> {
+    /*pub fn roles(&self) -> &Vec<String> {
         &self.roles
-    }
+    }*/
 }
 
 impl UserId {

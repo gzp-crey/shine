@@ -25,7 +25,7 @@ pub fn main() {
     let service_config = config::Config::new().expect("Service configuration failed");
     log::info!("{:#?}", service_config);
     let cookie_user_id_secret = BASE64
-        .decode(service_config.cookie_user_id_secret.as_bytes())
+        .decode(service_config.cookie_session_secret.as_bytes())
         .expect("Failed to parse secret for user_id");
 
     let auth = AuthService::create(&mut sys, &service_config.auth).expect("Auth service creation failed");

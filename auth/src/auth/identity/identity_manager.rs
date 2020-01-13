@@ -1,10 +1,9 @@
 use super::{
     error::IdentityError,
     identityentry::{EmailIndexEntry, EmptyEntry, Identity, IdentityEntry, IdentityIndex, NameIndexEntry},
-    loginentry::{Login, LoginEntry, LoginIndexEntry},    
+    loginentry::{Login, LoginEntry, LoginIndexEntry},
     IdentityConfig,
 };
-use shine_core::siteinfo::SiteInfo;
 use argon2;
 use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
@@ -19,9 +18,9 @@ use block_modes::{
 };
 use blowfish::Blowfish;
 use data_encoding::BASE64;
-use itertools::Itertools;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{distributions::Alphanumeric, Rng};
+use shine_core::siteinfo::SiteInfo;
 use std::{iter, str};
 use validator::validate_email;
 
@@ -34,21 +33,18 @@ const ID_BASE_ENCODE: data_encoding::Encoding = data_encoding::BASE32_NOPAD;
 const KEY_BASE_ENCODE: data_encoding::Encoding = data_encoding::BASE64URL_NOPAD;
 
 #[derive(Clone)]
-pub struct IdentityDB {
+pub struct IdentityManager {
     password_pepper: String,
 
     user_id_secret: Vec<u8>,
     user_id_generator: IdSequence,
-
-    session_key_secret: Vec<u8>,
-    session_key_generator: IdSequence,
 
     users: TableStorage,
     indices: TableStorage,
     logins: TableStorage,
 }
 
-impl IdentityDB {
+impl IdentityManager {
     async fn delete_index<K>(&self, index: TableEntry<K>) {
         self.indices
             .delete_entry(&index.partition_key, &index.row_key, index.etag.as_deref())
@@ -78,7 +74,7 @@ impl IdentityDB {
 }
 
 // Handling identites
-impl IdentityDB {
+impl IdentityManager {
     pub async fn new(config: IdentityConfig) -> Result<Self, IdentityError> {
         let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
         let table_service = TableService::new(client.clone());
@@ -90,30 +86,24 @@ impl IdentityDB {
         users.create_if_not_exists().await?;
         logins.create_if_not_exists().await?;
 
-        let (user_id_generator, session_key_generator) = {
+        let user_id_generator = {
             let id_config = SyncCounterConfig {
                 storage_account: config.storage_account.clone(),
                 storage_account_key: config.storage_account_key.clone(),
                 table_name: "idcounter".to_string(),
             };
             let id_counter = SyncCounterStore::new(id_config).await?;
-            (
-                IdSequence::new(id_counter.clone(), "userid").with_granularity(10),
-                IdSequence::new(id_counter.clone(), "sessionkey").with_granularity(100),
-            )
+            IdSequence::new(id_counter.clone(), "userid").with_granularity(10)
         };
         let user_id_secret = BASE64.decode(config.user_id_secret.as_bytes())?;
-        let session_key_secret = BASE64.decode(config.session_key_secret.as_bytes())?;
 
-        Ok(IdentityDB {
+        Ok(IdentityManager {
             password_pepper: config.password_pepper.clone(),
             user_id_secret,
-            session_key_secret,
             users,
             indices,
             logins,
             user_id_generator,
-            session_key_generator,
         })
     }
 
@@ -322,48 +312,19 @@ impl IdentityDB {
 }
 
 // Login handling
-impl IdentityDB {
-    fn session_key_cipher(&self, salt: &str) -> Result<Cipher, IdentityError> {
-        let cipher = Cipher::new_var(&self.session_key_secret, &salt.as_bytes()[0..CIPHER_IV_LEN])?;
-        Ok(cipher)
-    }
-
-    async fn genrate_session_key(&self, salt: &str) -> Result<String, IdentityError> {
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-        let mut rng = rand::thread_rng();
-        let salt_sequence = iter::repeat(()).map(|()| CHARSET[rng.gen_range(0, CHARSET.len())] as char);
-        let key_sequence = self.session_key_generator.get().await?.to_string();
-        let key_sequence = key_sequence.chars();
-        let key_sequence = key_sequence
-            .interleave(salt_sequence)
-            .take(SESSION_KEY_LEN)
-            .collect::<String>();
-        log::info!("key_sequence: {}", key_sequence);
-        let cipher = self.session_key_cipher(&salt)?;
-        let key = cipher.encrypt_vec(key_sequence.as_bytes());
-        let key = KEY_BASE_ENCODE.encode(&key);
-
-        debug_assert_eq!(self.decode_session_key(&key, &salt).ok(), Some(key_sequence));
-        Ok(key)
-    }
-
-    fn decode_session_key(&self, key: &str, salt: &str) -> Result<String, IdentityError> {
-        let key = KEY_BASE_ENCODE.decode(key.as_bytes())?;
-        let cipher = self.session_key_cipher(salt)?;
-        let key = cipher.decrypt_vec(&key)?;
-        let key_sequence = str::from_utf8(&key)?.to_string();
-        log::info!("Decoded session key:[{}]", key_sequence);
-        Ok(key_sequence)
+impl IdentityManager {
+    fn genrate_session_key(&self) -> String {
+        let mut key_sequence = [0u8; SESSION_KEY_LEN];
+        rand::thread_rng().fill(&mut key_sequence[..]);
+        KEY_BASE_ENCODE.encode(&key_sequence)
     }
 
     async fn try_insert_login(&self, identity: &IdentityEntry, site: &SiteInfo) -> Result<LoginEntry, IdentityError> {
         let user_id = identity.user_id();
-        let salt = &identity.data().salt;
-
-        let key = self.genrate_session_key(salt).await?;
+        let key = self.genrate_session_key();
         log::info!("Created new session key [{}] for {}", key, user_id);
 
-        let session = LoginEntry::new(user_id.to_owned(), key, site.to_owned());
+        let session = LoginEntry::new(user_id.to_owned(), key, &site);
         match self.logins.insert_entry(session.into_entry()).await {
             Ok(session) => Ok(LoginEntry::from_entry(session)),
             Err(err) if is_conflict(&err) => Err(IdentityError::SessionKeyConflict),

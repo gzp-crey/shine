@@ -1,5 +1,4 @@
 use super::{OAuthAuthorizer, OAuthIssuer, OAuthRegistrar, OAuthScope, State};
-use shine_core::session::UserId;
 use oxide_auth::{
     endpoint::{Endpoint, OAuthError, OwnerConsent, OwnerSolicitor, PreGrant, Scopes, Template},
     frontends::simple::endpoint::{ResponseCreator, Vacant},
@@ -8,6 +7,7 @@ use oxide_auth::{
     primitives::registrar::Registrar,
 };
 use oxide_auth_actix::{OAuthRequest, OAuthResponse, WebError};
+use shine_core::session::UserId;
 
 pub struct OAuthFlow<S> {
     registrar: OAuthRegistrar,

@@ -36,14 +36,14 @@ impl From<IdentityError> for AuthError {
 
 struct Inner {
     tera: Tera,
-    identity_db: IdentityDB,
+    identity_db: IdentityManager,
 }
 
 #[derive(Clone)]
 pub struct State(Rc<Inner>);
 
 impl State {
-    pub fn new(tera: Tera, identity_db: IdentityDB) -> Self {
+    pub fn new(tera: Tera, identity_db: IdentityManager) -> Self {
         Self(Rc::new(Inner {
             tera: tera,
             identity_db: identity_db,
@@ -54,7 +54,7 @@ impl State {
         &self.0.tera
     }
 
-    pub fn identity_db(&self) -> &IdentityDB {
+    pub fn identity_db(&self) -> &IdentityManager {
         &self.0.identity_db
     }
 }
@@ -62,7 +62,7 @@ impl State {
 #[derive(Clone)]
 pub struct AuthService {
     tera: Tera,
-    identity_db: IdentityDB,
+    identity_db: IdentityManager,
 }
 
 impl AuthService {
@@ -70,7 +70,7 @@ impl AuthService {
         let tera = Tera::new("tera_web/**/*")?;
 
         let identity_cfg = config.identity.clone();
-        let identity_db = sys.block_on(IdentityDB::new(identity_cfg))?;
+        let identity_db = sys.block_on(IdentityManager::new(identity_cfg))?;
         Ok(AuthService { identity_db, tera })
     }
 
@@ -95,8 +95,8 @@ impl AuthService {
                     // user authentication
                     web::scope("user")
                         .service(web::resource("login").route(web::post().to(login_basicauth)))
-                        .service(web::resource("register").route(web::post().to(register)))
-                        .service(web::resource("refresh").route(web::post().to(register))),
+                        .service(web::resource("register").route(web::post().to(register_user)))
+                        .service(web::resource("refresh").route(web::post().to(refresh_session))),
                 ),
         );
     }

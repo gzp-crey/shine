@@ -1,6 +1,6 @@
-use shine_core::session::UserId;
 use azure_sdk_storage_table::TableEntry;
 use serde::{Deserialize, Serialize};
+use shine_core::session::UserId;
 
 #[derive(Serialize, Deserialize)]
 pub struct EmptyEntry {}

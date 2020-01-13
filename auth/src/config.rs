@@ -8,7 +8,7 @@ pub struct Config {
     pub bind_host: String,
     pub bind_port: u16,
     pub worker_count: usize,
-    pub cookie_user_id_secret: String,
+    pub cookie_session_secret: String,
     pub auth: AuthConfig,
 }
 

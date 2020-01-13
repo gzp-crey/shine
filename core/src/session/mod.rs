@@ -1,7 +1,7 @@
 mod sessionkey;
 mod userid;
 
-pub use actix_session::{CookieSession, Session};
+pub use crate::signed_cookie::{CookieSession, Session};
 
 pub use self::sessionkey::*;
 pub use self::userid::*;

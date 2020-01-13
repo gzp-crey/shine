@@ -1,19 +1,18 @@
 use super::error::Error;
 use actix_web::{dev::Payload, http::header, FromRequest, HttpRequest};
 use futures::future::{err, ok, Ready};
-use std::{borrow::Cow, str};
 
 /// Credentials for `Bearer` authentication scheme, defined in [RFC6750](https://tools.ietf.org/html/rfc6750)
 #[derive(Clone)]
 pub struct BearerAuth {
-    token: Cow<'static, str>,
+    token: String,
 }
 
 impl BearerAuth {
     /// Creates new `Bearer` credentials with the token provided.
     pub fn new<T>(token: T) -> BearerAuth
     where
-        T: Into<Cow<'static, str>>,
+        T: Into<String>,
     {
         BearerAuth { token: token.into() }
     }
@@ -38,8 +37,8 @@ impl BearerAuth {
     }
 
     /// Gets reference to the credentials token.
-    pub fn token(&self) -> Cow<'static, str> {
-        self.token.clone()
+    pub fn token(&self) -> &str {
+        &self.token
     }
 }
 

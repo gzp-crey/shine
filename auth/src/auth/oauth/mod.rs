@@ -10,10 +10,10 @@ use self::registrar::*;
 use self::scope::*;
 use self::solicitor::*;
 use super::State;
-use shine_core::session::{UserId, Session};
 use actix_web::{web, HttpRequest};
 use oxide_auth::endpoint::OAuthError;
 use oxide_auth_actix::{Authorize, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
+use shine_core::session::{Session, UserId};
 
 pub async fn get_authorization(
     session: Session,

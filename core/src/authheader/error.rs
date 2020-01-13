@@ -1,5 +1,5 @@
 use actix_web::{http::header, ResponseError};
-use std::{error::Error as StdError, fmt, str};
+use std::{fmt, str};
 
 /// Possible errors while parsing `Authorization` header.
 #[derive(Debug)]
@@ -22,29 +22,14 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.description())
-    }
-}
-
-impl StdError for Error {
-    fn description(&self) -> &str {
         match self {
-            Error::Header => "Invalid authentication header",
-            Error::Invalid => "Invalid header value",
-            Error::MissingScheme => "Missing authorization scheme",
-            Error::MissingField(_) => "Missing header field",
-            Error::ToStrError(e) => e.description(),
-            Error::Base64DecodeError(e) => e.description(),
-            Error::Utf8Error(e) => e.description(),
-        }
-    }
-
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match self {
-            Error::ToStrError(e) => Some(e),
-            Error::Base64DecodeError(e) => Some(e),
-            Error::Utf8Error(e) => Some(e),
-            Error::Header | Error::Invalid | Error::MissingScheme | Error::MissingField(_) => None,
+            Error::Header => write!(f, "Invalid authentication header"),
+            Error::Invalid => write!(f, "Invalid header value"),
+            Error::MissingScheme => write!(f, "Missing authorization scheme"),
+            Error::MissingField(_) => write!(f, "Missing header field"),
+            Error::ToStrError(e) => write!(f, "{}", e),
+            Error::Base64DecodeError(e) => write!(f, "{}", e),
+            Error::Utf8Error(e) => write!(f, "{}", e),
         }
     }
 }

@@ -21,4 +21,9 @@ data-encoding = "2.1"
 config ="0.10"
 
 actix-web = "2.0"
-actix-session = "0.3"
+actix-service = "1.0"
+
+# todo: remove
+derive_more = "0.99"
+time = "0.1"
+

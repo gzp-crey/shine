@@ -1,26 +1,29 @@
 use super::identityentry::IdentityIndex;
-use shine_core::siteinfo::SiteInfo;
-use shine_core::session::SessionKey;
 use azure_sdk_storage_table::TableEntry;
 use serde::{Deserialize, Serialize};
+use shine_core::session::SessionKey;
+use shine_core::siteinfo::SiteInfo;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Login {
-    #[serde(flatten)]
-    pub site: SiteInfo,
+    pub remote: String,
+    pub agent: String,
 }
 
 #[derive(Debug)]
 pub struct LoginEntry(TableEntry<Login>);
 
 impl LoginEntry {
-    pub fn new(user_id: String, key: String, site: SiteInfo) -> LoginEntry {
+    pub fn new(user_id: String, key: String, site: &SiteInfo) -> LoginEntry {
         LoginEntry(TableEntry {
             partition_key: user_id,
             row_key: key,
             etag: None,
-            payload: Login { site },
+            payload: Login {
+                remote: site.remote().to_string(),
+                agent: site.agent().to_string(),
+            },
         })
     }
 

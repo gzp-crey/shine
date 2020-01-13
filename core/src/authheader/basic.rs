@@ -2,21 +2,21 @@ use super::error::Error;
 use actix_web::{dev::Payload, http::header, FromRequest, HttpRequest};
 use data_encoding::BASE64;
 use futures::future::{err, ok, Ready};
-use std::{borrow::Cow, str};
+use std::str;
 
 /// Credentials for `Basic` authentication scheme, defined in [RFC 7617](https://tools.ietf.org/html/rfc7617)
 #[derive(Clone)]
 pub struct BasicAuth {
-    user_id: Cow<'static, str>,
-    password: Option<Cow<'static, str>>,
+    user_id: String,
+    password: Option<String>,
 }
 
 impl BasicAuth {
     /// Creates `Basic` credentials with provided `user_id` and optional `password`.
     pub fn new<U, P>(user_id: U, password: Option<P>) -> BasicAuth
     where
-        U: Into<Cow<'static, str>>,
-        P: Into<Cow<'static, str>>,
+        U: Into<String>,
+        P: Into<String>,
     {
         BasicAuth {
             user_id: user_id.into(),
@@ -42,13 +42,13 @@ impl BasicAuth {
         let user_id = credentials
             .next()
             .ok_or(Error::MissingField("user_id"))
-            .map(|user_id| user_id.to_string().into())?;
+            .map(|user_id| user_id.to_string())?;
 
         let password = credentials.next().ok_or(Error::MissingField("password")).map(|password| {
             if password.is_empty() {
                 None
             } else {
-                Some(password.to_string().into())
+                Some(password.to_string())
             }
         })?;
 
@@ -56,13 +56,13 @@ impl BasicAuth {
     }
 
     /// Returns client's user-ID.
-    pub fn user_id(&self) -> Cow<'static, str> {
-        self.user_id.clone()
+    pub fn user_id(&self) -> &str {
+        &self.user_id
     }
 
     /// Returns client's password if provided.
-    pub fn password(&self) -> Option<Cow<'static, str>> {
-        self.password.clone()
+    pub fn password(&self) -> Option<&str> {
+        self.password.as_deref()
     }
 }
 
