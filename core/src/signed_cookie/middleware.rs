@@ -1,6 +1,9 @@
 use super::SignedCookie;
 use actix_service::Service;
-use actix_web::dev::{ServiceRequest, ServiceResponse};
+use actix_web::{
+    dev::{ServiceRequest, ServiceResponse},
+    HttpMessage,
+};
 use futures::future::{FutureExt, LocalBoxFuture};
 use std::task::{Context, Poll};
 
@@ -27,13 +30,16 @@ where
 
     fn call(&mut self, mut req: ServiceRequest) -> Self::Future {
         let inner = self.inner.clone();
-        inner.load(&req);
+        let store = inner.load(&mut req);
+        req.extensions_mut().insert(store);
 
         let fut = self.service.call(req);
 
         async move {
-            let res = fut.await;
-            res
+            fut.await.map(|mut res| {
+                inner.store(&mut res);
+                res
+            })
         }
         .boxed_local()
     }

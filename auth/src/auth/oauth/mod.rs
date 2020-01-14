@@ -16,7 +16,7 @@ use oxide_auth_actix::{Authorize, OAuthOperation, OAuthRequest, OAuthResponse, R
 use shine_core::session::{IdentitySession, UserId};
 
 pub async fn get_authorization(
-    session: Session,
+    session: IdentitySession,
     oath_req: OAuthRequest,
     state: web::Data<State>,
 ) -> Result<OAuthResponse, WebError> {
@@ -30,7 +30,7 @@ pub async fn get_authorization(
 }
 
 pub async fn post_authorization(
-    session: Session,
+    session: IdentitySession,
     _req: HttpRequest,
     oath_req: OAuthRequest,
     state: web::Data<State>,

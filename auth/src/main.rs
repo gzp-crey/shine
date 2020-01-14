@@ -7,6 +7,7 @@ mod config;
 
 use auth::AuthService;
 use shine_core::session::IdentityCookie;
+use shine_core::signed_cookie::SignedCookie;
 
 /// Example of a main function of a actix server supporting oauth.
 pub fn main() {
@@ -33,7 +34,7 @@ pub fn main() {
     let _ = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .wrap(SignedCookie::new().add(IdentityCookie(&cookie_user_id_secret, true)))
+            .wrap(SignedCookie::new().add(IdentityCookie::new(&cookie_user_id_secret, true)))
             .configure(|cfg| auth.configure(cfg))
     })
     .workers(service_config.worker_count)

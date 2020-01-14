@@ -48,7 +48,7 @@ pub async fn register_user(
 }
 
 pub async fn login_basicauth(
-    session: Session,
+    session: IdentitySession,
     site: SiteInfo,
     auth: BasicAuth,
     state: web::Data<State>,
@@ -66,7 +66,11 @@ pub async fn login_basicauth(
     Ok(HttpResponse::Ok().finish())
 }
 
-pub async fn refresh_session(session: IdentitySession, site: SiteInfo, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
+pub async fn refresh_session(
+    session: IdentitySession,
+    site: SiteInfo,
+    state: web::Data<State>,
+) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&session);
     let user_id = UserId::from_session(&session);
     log::info!("refresh session {:?}, {:?}, {:?}", user_id, session_key, site);
