@@ -13,7 +13,7 @@ use super::State;
 use actix_web::{web, HttpRequest};
 use oxide_auth::endpoint::OAuthError;
 use oxide_auth_actix::{Authorize, OAuthOperation, OAuthRequest, OAuthResponse, Refresh, Token, WebError};
-use shine_core::session::{Session, UserId};
+use shine_core::session::{IdentitySession, UserId};
 
 pub async fn get_authorization(
     session: Session,

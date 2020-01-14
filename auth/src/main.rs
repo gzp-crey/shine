@@ -33,7 +33,7 @@ pub fn main() {
     let _ = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .wrap(IdentityCookie::middleware(&cookie_user_id_secret))
+            .wrap(SignedCookie::new().add(IdentityCookie(&cookie_user_id_secret, true)))
             .configure(|cfg| auth.configure(cfg))
     })
     .workers(service_config.worker_count)

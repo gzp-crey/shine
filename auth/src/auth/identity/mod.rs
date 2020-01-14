@@ -7,7 +7,7 @@ use super::State;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
 use shine_core::authheader::BasicAuth;
-use shine_core::session::{IdentityCookie, Session, SessionKey, UserId};
+use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
 use shine_core::siteinfo::SiteInfo;
 
 pub use self::error::*;
@@ -29,7 +29,7 @@ pub struct Registration {
 }
 
 pub async fn register_user(
-    session: Session,
+    session: IdentitySession,
     site: SiteInfo,
     registration: web::Json<Registration>,
     state: web::Data<State>,
@@ -66,7 +66,7 @@ pub async fn login_basicauth(
     Ok(HttpResponse::Ok().finish())
 }
 
-pub async fn refresh_session(session: Session, site: SiteInfo, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
+pub async fn refresh_session(session: IdentitySession, site: SiteInfo, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&session);
     let user_id = UserId::from_session(&session);
     log::info!("refresh session {:?}, {:?}, {:?}", user_id, session_key, site);

@@ -1,4 +1,4 @@
-use super::Session;
+use super::IdentitySession;
 use actix_web::Error as ActixError;
 use serde::{Deserialize, Serialize};
 
@@ -19,11 +19,11 @@ impl SessionKey {
 }
 
 impl SessionKey {
-    pub fn from_session(session: &Session) -> Result<Option<Self>, ActixError> {
+    pub fn from_session(session: &IdentitySession) -> Result<Option<Self>, ActixError> {
         session.get::<SessionKey>("key")
     }
 
-    pub fn to_session(self, session: &Session) -> Result<(), ActixError> {
+    pub fn to_session(self, session: &IdentitySession) -> Result<(), ActixError> {
         session.set("key", self)
     }
 }
