@@ -1,7 +1,7 @@
 use super::{
     error::IdentityError,
     identityentry::{EmailIndexEntry, EmptyEntry, Identity, IdentityEntry, IdentityIndex, NameIndexEntry},
-    loginentry::{Login, LoginEntry, LoginIndexEntry},
+    sessionentry::{Session, SessionEntry, SessionIndexEntry},
     IdentityConfig,
 };
 use argon2;
@@ -41,7 +41,7 @@ pub struct IdentityManager {
 
     users: TableStorage,
     indices: TableStorage,
-    logins: TableStorage,
+    sessions: TableStorage,
 }
 
 impl IdentityManager {
@@ -52,7 +52,7 @@ impl IdentityManager {
             .unwrap_or_else(|e| log::error!("Failed to delete index: {}", e));
     }
 
-    async fn find_by_index(&self, query: &str, password: Option<&str>) -> Result<IdentityEntry, IdentityError> {
+    async fn find_identity_by_index(&self, query: &str, password: Option<&str>) -> Result<IdentityEntry, IdentityError> {
         let index = self.indices.query_entries::<IdentityIndex>(Some(&query)).await?;
         assert!(index.len() <= 1);
         let index = index.first().ok_or(IdentityError::UserNotFound)?;
@@ -80,11 +80,11 @@ impl IdentityManager {
         let table_service = TableService::new(client.clone());
         let users = TableStorage::new(table_service.clone(), "users");
         let indices = TableStorage::new(table_service.clone(), "userIndices");
-        let logins = TableStorage::new(table_service.clone(), "userLogins");
+        let sessions = TableStorage::new(table_service.clone(), "userSessions");
 
         indices.create_if_not_exists().await?;
         users.create_if_not_exists().await?;
-        logins.create_if_not_exists().await?;
+        sessions.create_if_not_exists().await?;
 
         let user_id_generator = {
             let id_config = SyncCounterConfig {
@@ -102,7 +102,7 @@ impl IdentityManager {
             user_id_secret,
             users,
             indices,
-            logins,
+            sessions,
             user_id_generator,
         })
     }
@@ -166,6 +166,7 @@ impl IdentityManager {
     async fn insert_user(&self, name: &str, password: &str, email: Option<&str>) -> Result<IdentityEntry, IdentityError> {
         let sequence_id = self.user_id_generator.get().await?;
         let mut retry = 3usize;
+        //todo: use backoff::retry
         loop {
             let identity = match self.try_insert_user(sequence_id, name, password, email).await {
                 Ok(identity) => identity,
@@ -293,25 +294,29 @@ impl IdentityManager {
         Ok(identity)
     }
 
-    pub async fn find_by_login(&self, login: &str, password: Option<&str>) -> Result<IdentityEntry, IdentityError> {
+    pub async fn find_identity_by_name_email(
+        &self,
+        name_email: &str,
+        password: Option<&str>,
+    ) -> Result<IdentityEntry, IdentityError> {
         let query_name = format!(
             "PartitionKey eq '{}' and RowKey eq '{}'",
-            NameIndexEntry::generate_partion_key(login),
-            login
+            NameIndexEntry::generate_partion_key(name_email),
+            name_email
         );
         let query_email = format!(
             "PartitionKey eq '{}' and RowKey eq '{}'",
-            EmailIndexEntry::generate_partion_key(login),
-            login
+            EmailIndexEntry::generate_partion_key(name_email),
+            name_email
         );
         let query = format!("(({}) or ({}))", query_name, query_email);
         let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
 
-        self.find_by_index(&query, password).await
+        self.find_identity_by_index(&query, password).await
     }
 }
 
-// Login handling
+// Session handling
 impl IdentityManager {
     fn genrate_session_key(&self) -> String {
         let mut key_sequence = [0u8; SESSION_KEY_LEN];
@@ -319,46 +324,46 @@ impl IdentityManager {
         KEY_BASE_ENCODE.encode(&key_sequence)
     }
 
-    async fn try_insert_login(&self, identity: &IdentityEntry, site: &SiteInfo) -> Result<LoginEntry, IdentityError> {
+    async fn try_insert_session(&self, identity: &IdentityEntry, site: &SiteInfo) -> Result<SessionEntry, IdentityError> {
         let user_id = identity.user_id();
         let key = self.genrate_session_key();
         log::info!("Created new session key [{}] for {}", key, user_id);
 
-        let session = LoginEntry::new(user_id.to_owned(), key, &site);
-        match self.logins.insert_entry(session.into_entry()).await {
-            Ok(session) => Ok(LoginEntry::from_entry(session)),
+        let session = SessionEntry::new(user_id.to_owned(), key, &site);
+        match self.sessions.insert_entry(session.into_entry()).await {
+            Ok(session) => Ok(SessionEntry::from_entry(session)),
             Err(err) if is_conflict(&err) => Err(IdentityError::SessionKeyConflict),
             Err(err) => Err(err.into()),
         }
     }
 
-    async fn delete_login(&self, login: TableEntry<Login>) {
+    async fn delete_session(&self, session: TableEntry<Session>) {
         self.users
-            .delete_entry(&login.partition_key, &login.row_key, login.etag.as_deref())
+            .delete_entry(&session.partition_key, &session.row_key, session.etag.as_deref())
             .await
-            .unwrap_or_else(|e| log::error!("Failed to delete login {:?}: {}", login, e));
+            .unwrap_or_else(|e| log::error!("Failed to delete session {:?}: {}", session, e));
     }
 
-    async fn try_insert_login_index(&self, login: &LoginEntry) -> Result<LoginIndexEntry, IdentityError> {
-        let login_index = LoginIndexEntry::from_identity(login);
-        match self.indices.insert_entry(login_index.into_entry()).await {
-            Ok(login_index) => Ok(LoginIndexEntry::from_entry(login_index)),
+    async fn try_insert_session_index(&self, session: &SessionEntry) -> Result<SessionIndexEntry, IdentityError> {
+        let session_index = SessionIndexEntry::from_identity(session);
+        match self.indices.insert_entry(session_index.into_entry()).await {
+            Ok(session_index) => Ok(SessionIndexEntry::from_entry(session_index)),
             Err(err) if is_conflict(&err) => Err(IdentityError::SessionKeyConflict),
             Err(err) => Err(err.into()),
         }
     }
 
-    pub async fn create_login(&self, identity: &IdentityEntry, site: SiteInfo) -> Result<LoginEntry, IdentityError> {
+    pub async fn create_session(&self, identity: &IdentityEntry, site: SiteInfo) -> Result<SessionEntry, IdentityError> {
         let mut try_count = 3usize;
-
+        //todo: use backoff::retry
         loop {
             try_count -= 1;
 
-            let login = match self.try_insert_login(identity, &site).await {
-                Ok(login) => login,
+            let session = match self.try_insert_session(identity, &site).await {
+                Ok(session) => session,
                 Err(IdentityError::SessionKeyConflict) if try_count > 0 => {
                     log::info!(
-                        "Retrying ({}) login key already used by user: {}",
+                        "Retrying ({}) session key already used by user: {}",
                         try_count,
                         identity.user_id()
                     );
@@ -367,24 +372,48 @@ impl IdentityManager {
                 Err(err) => return Err(err),
             };
 
-            let login_index = match self.try_insert_login_index(&login).await {
+            let session_index = match self.try_insert_session_index(&session).await {
                 Ok(index) => index,
                 Err(IdentityError::SessionKeyConflict) if try_count > 0 => {
-                    log::info!("Retrying ({}) login key already used", try_count);
-                    self.delete_login(login.into_entry()).await;
+                    log::info!("Retrying ({}) session key already used", try_count);
+                    self.delete_sesssion(session.into_entry()).await;
                     continue;
                 }
                 Err(err) => {
-                    log::info!("Creating login failed: {:?}, {:?}", identity, err);
-                    self.delete_login(login.into_entry()).await;
+                    log::info!("Creating session failed: {:?}, {:?}", identity, err);
+                    self.delete_session(session.into_entry()).await;
                     return Err(err);
                 }
             };
 
-            log::info!("New login: {:?}", login);
-            log::debug!("Login index: {:?}", login_index);
-            return Ok(login);
+            log::info!("New session: {:?}", session);
+            log::debug!("Session index: {:?}", session_index);
+            return Ok(session);
         }
+    }
+
+    pub async fn find_identity_by_session(&self, session_key: &str) -> Result<(IdentityEntry, SessionEntry), IdentityError> {
+        let identity = {
+            let query = format!(
+                "PartitionKey eq '{}' and RowKey eq '{}'",
+                NameIndexEntry::generate_partion_key(session_key),
+                session_key
+            );
+            let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
+            self.find_identity_by_index(&query, None).await?
+        };
+
+        let session = {
+            let partion_key = format!("{}", identity.id());
+            let row_key = format!("session-{}", session_key);
+            self.sessions
+                .get_entry(&partion_key, &row_key)
+                .await?
+                .map(SessionEntry::from_entry)
+                .ok_or(IdentityError::UserNotFound)?
+        };
+
+        Ok(identity, session)
     }
 }
 
