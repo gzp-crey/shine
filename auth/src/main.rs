@@ -6,15 +6,14 @@ mod auth;
 mod config;
 
 use auth::AuthService;
-use shine_core::session::IdentityCookie;
-use shine_core::signed_cookie::SignedCookie;
 
 /// Example of a main function of a actix server supporting oauth.
 pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
-        .filter_module("auth", log::LevelFilter::Trace)
+        .filter_module("shine_auth", log::LevelFilter::Trace)
+        .filter_module("shine_core", log::LevelFilter::Trace)
         .filter_module("mio", log::LevelFilter::Info)
         .filter_module("hyper", log::LevelFilter::Info)
         .filter_module("rustls", log::LevelFilter::Info)
@@ -25,16 +24,12 @@ pub fn main() {
 
     let service_config = config::Config::new().expect("Service configuration failed");
     log::info!("{:#?}", service_config);
-    let cookie_user_id_secret = BASE64
-        .decode(service_config.cookie_session_secret.as_bytes())
-        .expect("Failed to parse secret for user_id");
 
     let auth = AuthService::create(&mut sys, &service_config.auth).expect("Auth service creation failed");
 
     let _ = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .wrap(SignedCookie::new().add(IdentityCookie::new(&cookie_user_id_secret, true)))
             .configure(|cfg| auth.configure(cfg))
     })
     .workers(service_config.worker_count)

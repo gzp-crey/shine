@@ -1,4 +1,4 @@
-use super::error::Error;
+use super::AuthHeaderError;
 use actix_web::{dev::Payload, http::header, FromRequest, HttpRequest};
 use futures::future::{err, ok, Ready};
 
@@ -17,19 +17,19 @@ impl BearerAuth {
         BearerAuth { token: token.into() }
     }
 
-    pub fn from_header(header: &header::HeaderValue) -> Result<Self, Error> {
+    pub fn from_header(header: &header::HeaderValue) -> Result<Self, AuthHeaderError> {
         // "Bearer *" length
         if header.len() < 8 {
-            return Err(Error::Invalid);
+            return Err(AuthHeaderError::Invalid);
         }
 
         let mut parts = header.to_str()?.splitn(2, ' ');
         match parts.next() {
             Some(scheme) if scheme == "Bearer" => (),
-            _ => return Err(Error::MissingScheme),
+            _ => return Err(AuthHeaderError::MissingScheme),
         }
 
-        let token = parts.next().ok_or(Error::Invalid)?;
+        let token = parts.next().ok_or(AuthHeaderError::Invalid)?;
 
         Ok(BearerAuth {
             token: token.to_string().into(),
@@ -44,12 +44,12 @@ impl BearerAuth {
 
 impl FromRequest for BearerAuth {
     type Config = ();
-    type Error = Error;
-    type Future = Ready<Result<Self, Error>>;
+    type Error = AuthHeaderError;
+    type Future = Ready<Result<Self, AuthHeaderError>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let header = match req.headers().get(header::AUTHORIZATION) {
-            None => return err(Error::Header),
+            None => return err(AuthHeaderError::Header),
             Some(header) => header,
         };
 

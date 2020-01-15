@@ -8,7 +8,7 @@
             "name": "auth",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "target/debug/auth.exe",
+            "program": "target/debug/shine-auth.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

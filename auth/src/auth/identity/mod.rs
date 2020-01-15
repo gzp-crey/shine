@@ -74,7 +74,7 @@ pub async fn refresh_session(
     let session_key = SessionKey::from_session(&session);
     let user_id = UserId::from_session(&session);
     log::info!("refresh session {:?}, {:?}, {:?}", user_id, session_key, site);
-    //IdentityCookie::clear(&session);
+    IdentityCookie::clear(&session);
 
     Ok(HttpResponse::Ok().finish())
 }

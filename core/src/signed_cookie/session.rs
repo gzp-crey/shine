@@ -6,10 +6,8 @@ use serde_json;
 use std::{any::TypeId, cell::RefCell, collections::HashMap, marker::PhantomData, ops::Deref, rc::Rc};
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum SessionStatus {
+enum SessionStatus {
     Changed,
-    Purged,
-    Renewed,
     Unchanged,
 }
 
@@ -19,6 +17,16 @@ struct SessionDataInner {
     status: SessionStatus,
 }
 
+impl Default for SessionDataInner {
+    fn default() -> SessionDataInner {
+        SessionDataInner {
+            values: HashMap::default(),
+            status: SessionStatus::Unchanged,
+        }
+    }
+}
+
+/// Data associated to a session and persisted using signed cookies.
 #[derive(Clone, Debug)]
 pub struct SessionData {
     name: String,
@@ -29,32 +37,23 @@ impl SessionData {
     pub(crate) fn empty(name: String) -> Self {
         SessionData {
             name,
+            inner: Rc::new(RefCell::new(Default::default())),
+        }
+    }
+
+    pub(crate) fn new(name: String, values: HashMap<String, String>) -> SessionData {
+        SessionData {
+            name,
             inner: Rc::new(RefCell::new(SessionDataInner {
-                values: HashMap::default(),
+                values,
                 status: SessionStatus::Unchanged,
             })),
         }
     }
 
-    pub(crate) fn from_cookie(name: String, value: &str) -> Result<SessionData, ()> {
-        match serde_json::from_str::<HashMap<String, String>>(value) {
-            Ok(value) => Ok(SessionData {
-                name,
-                inner: Rc::new(RefCell::new(SessionDataInner {
-                    values: value,
-                    status: SessionStatus::Unchanged,
-                })),
-            }),
-            Err(err) => {
-                log::warn!("Failed to parse cooke: {}", err);
-                Err(())
-            }
-        }
-    }
-
     /// Get the name of the cookie
     pub fn name(&self) -> &str {
-        &self.name()
+        &self.name
     }
 
     /// Get a `value` from the session.
@@ -69,47 +68,57 @@ impl SessionData {
     /// Set a `value` from the session.
     pub fn set<T: Serialize>(&self, key: &str, value: T) -> Result<(), Error> {
         let mut inner = self.inner.borrow_mut();
-        if inner.status != SessionStatus::Purged {
-            inner.status = SessionStatus::Changed;
-            inner.values.insert(key.to_owned(), serde_json::to_string(&value)?);
-        }
+        inner.status = SessionStatus::Changed;
+        inner.values.insert(key.to_owned(), serde_json::to_string(&value)?);
         Ok(())
     }
 
     /// Remove value from the session.
     pub fn remove(&self, key: &str) {
         let mut inner = self.inner.borrow_mut();
-        if inner.status != SessionStatus::Purged {
-            inner.status = SessionStatus::Changed;
-            inner.values.remove(key);
-        }
+        inner.status = SessionStatus::Changed;
+        inner.values.remove(key);
     }
 
     /// Clear the session.
     pub fn clear(&self) {
         let mut inner = self.inner.borrow_mut();
-        if inner.status != SessionStatus::Purged {
-            inner.status = SessionStatus::Changed;
-            inner.values.clear()
-        }
-    }
-
-    /// Removes session, both client and server side.
-    pub fn purge(&self) {
-        let mut inner = self.inner.borrow_mut();
-        inner.status = SessionStatus::Purged;
+        inner.status = SessionStatus::Changed;
         inner.values.clear();
     }
 
     /// Renews the session key, assigning existing session values to new key.
     pub fn renew(&self) {
         let mut inner = self.inner.borrow_mut();
-        if inner.status != SessionStatus::Purged {
-            inner.status = SessionStatus::Renewed;
+        inner.status = SessionStatus::Changed;
+    }
+
+    pub fn is_changed(&self) -> bool {
+        match &self.inner.borrow().status {
+            SessionStatus::Unchanged => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.borrow().values.is_empty()
+    }
+
+    /// Return the changes in cookie state, or None if session requires no update
+    pub(crate) fn into_change(self) -> Option<HashMap<String, String>> {
+        let SessionDataInner { values, status } = Rc::try_unwrap(self.inner)
+            .map_err(|_| ())
+            .unwrap()
+            .replace(Default::default());
+        match status {
+            SessionStatus::Unchanged => None,
+            SessionStatus::Changed => Some(values),
         }
     }
 }
 
+/// Extractor to access signed cookies (session) from the request handlers. The type_id of the generic C type
+/// is used to look up the sessions from the request.
 pub struct Session<C: 'static + SignedCookieConfiguration>(SessionData, PhantomData<C>);
 
 impl<C> Deref for Session<C>

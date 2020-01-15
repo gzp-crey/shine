@@ -1,9 +1,10 @@
-use super::{SessionData, SignedCookieMiddleware};
+use super::{SessionData, SignedCookieError, SignedCookieMiddleware};
 use actix_service::{Service, Transform};
 use actix_web::{
-    cookie::CookieJar,
+    cookie::{Cookie, CookieJar},
     dev::{ServiceRequest, ServiceResponse},
     error::ErrorInternalServerError,
+    http::{header::SET_COOKIE, HeaderValue},
     Error, HttpMessage,
 };
 use futures::future::{ok, Ready};
@@ -21,6 +22,8 @@ pub enum CookieSecurity {
     Private(Key),
 }
 
+/// Configure a signed cookie (session). To allow easy access from request handler
+/// the type of implementing structure is used. See Session.
 pub trait SignedCookieConfiguration: Any {
     /// The `name` of the cookie being.
     fn name() -> &'static str
@@ -34,27 +37,40 @@ pub trait SignedCookieConfiguration: Any {
     fn security(&self) -> &CookieSecurity;
 
     /// The `path` field in the session cookie being built.
-    fn path(&self) -> &str;
+    fn path(&self) -> &str {
+        "/"
+    }
 
     /// The `domain` field in the session cookie being built.
-    fn domain(&self) -> &str;
+    fn domain(&self) -> Option<&str> {
+        None
+    }
 
     /// The `secure` field in the session cookie being built.
     ///
     /// If the `secure` is set, a cookie will only be transmitted when the
     /// connection is secure - i.e. `https`
-    fn secure(&self) -> bool;
+    fn secure(&self) -> bool {
+        true
+    }
 
     /// The `http_only` field in the session cookie being built.
-    fn http_only(&self) -> bool;
+    fn http_only(&self) -> bool {
+        true
+    }
 
     /// The `same_site` field in the session cookie being built.
-    fn same_site(&self) -> Option<SameSite>;
+    fn same_site(&self) -> Option<SameSite> {
+        None
+    }
 
     /// The `max-age` field in the session cookie being built.
-    fn max_age(&self) -> Option<i64>;
+    fn max_age(&self) -> Option<time::Duration> {
+        None
+    }
 }
 
+/// Store the signed cookies for the request-respond handling
 #[derive(Clone)]
 pub(crate) struct SignedCookieStore(Rc<RefCell<HashMap<TypeId, SessionData>>>);
 
@@ -70,12 +86,82 @@ impl SignedCookieStore {
     }
 
     pub(crate) fn get_changes(&self, type_id: TypeId) -> Option<HashMap<String, String>> {
-        Some(HashMap::new())
+        let mut inner = self.0.borrow_mut();
+        inner.remove(&type_id).and_then(|session| session.into_change())
     }
 }
 
+/// Manage the signed cookies
 #[derive(Clone)]
 pub struct SignedCookie(Rc<HashMap<String, (TypeId, Box<dyn SignedCookieConfiguration>)>>);
+
+impl SignedCookie {
+    fn load_cookie(cookie: &Cookie<'static>, config: &dyn SignedCookieConfiguration) -> Result<SessionData, SignedCookieError> {
+        let name = cookie.name();
+        let mut jar = CookieJar::new();
+        jar.add_original(cookie.clone());
+
+        let cookie = match config.security() {
+            &CookieSecurity::Signed(ref key) => jar.signed(&key).get(name),
+            &CookieSecurity::Private(ref key) => jar.private(&key).get(name),
+        }
+        .ok_or(SignedCookieError::Verification)?;
+
+        let values = serde_json::from_str::<HashMap<String, String>>(cookie.value())?;
+        Ok(SessionData::new(name.to_owned(), values))
+    }
+
+    fn set_cookie<B>(
+        res: &mut ServiceResponse<B>,
+        name: &str,
+        config: &dyn SignedCookieConfiguration,
+        values: HashMap<String, String>,
+    ) -> Result<(), Error> {
+        let value = serde_json::to_string(&values).map_err(SignedCookieError::Serialize)?;
+
+        let mut cookie = Cookie::new(name.to_owned(), value);
+        cookie.set_path(config.path().to_owned());
+        cookie.set_secure(config.secure());
+        cookie.set_http_only(config.http_only());
+
+        if let Some(domain) = config.domain() {
+            cookie.set_domain(domain.to_owned());
+        }
+
+        if let Some(max_age) = config.max_age() {
+            cookie.set_max_age(max_age);
+        }
+
+        if let Some(same_site) = config.same_site() {
+            cookie.set_same_site(same_site);
+        }
+
+        let mut jar = CookieJar::new();
+        match config.security() {
+            CookieSecurity::Signed(key) => jar.signed(key).add(cookie),
+            CookieSecurity::Private(key) => jar.private(key).add(cookie),
+        }
+
+        for cookie in jar.delta() {
+            let val = HeaderValue::from_str(&cookie.encoded().to_string())?;
+            res.headers_mut().append(SET_COOKIE, val);
+        }
+
+        Ok(())
+    }
+
+    fn purge_cookie<B>(res: &mut ServiceResponse<B>, name: &str) -> Result<(), Error> {
+        let mut cookie = Cookie::named(name.to_owned());
+        cookie.set_value("");
+        //removed as postman dos not supports it cookie.set_max_age(time::Duration::seconds(0));
+        cookie.set_expires(time::now_utc() - time::Duration::days(365));
+
+        let val = HeaderValue::from_str(&cookie.to_string())?;
+        res.headers_mut().append(SET_COOKIE, val);
+
+        Ok(())
+    }
+}
 
 impl SignedCookie {
     pub fn new() -> SignedCookie {
@@ -92,35 +178,41 @@ impl SignedCookie {
     /// Load cookies from request and creates the SignedCookieStore
     pub(crate) fn load(&self, req: &mut ServiceRequest) -> SignedCookieStore {
         let mut store = HashMap::new();
-        if let Ok(cookies) = req.cookies() {
-            for cookie in cookies.iter() {
-                let cookie_name = cookie.name();
-                if let Some((type_id, config)) = self.0.get(cookie_name) {
-                    let mut jar = CookieJar::new();
-                    jar.add_original(cookie.clone());
-
-                    let cookie_opt = match config.security() {
-                        &CookieSecurity::Signed(ref key) => jar.signed(&key).get(cookie_name),
-                        &CookieSecurity::Private(ref key) => jar.private(&key).get(cookie_name),
+        for (name, (type_id, config)) in self.0.iter() {
+            let mut data = SessionData::empty(name.to_owned());
+            if let Ok(cookies) = req.cookies() {
+                if let Some(cookie) = cookies.iter().find(|x| x.name() == name) {
+                    match Self::load_cookie(cookie, &**config) {
+                        Ok(d) => data = d,
+                        Err(err) => log::warn!("Failed to parse cookie: {:?}", err),
                     };
-
-                    let data = cookie_opt
-                        .and_then(|cookie| SessionData::from_cookie(cookie_name.to_string(), cookie.value()).ok())
-                        .unwrap_or_else(|| SessionData::empty(cookie_name.to_string()));
-                    store.insert(type_id.to_owned(), data);
                 }
             }
+            if !data.is_empty() {
+                log::info!("Loaded cookie {}: {:?}", name, data);
+            } else {
+                log::debug!("Missing cookie {}", name);
+            }
+            store.insert(type_id.to_owned(), data);
         }
 
         SignedCookieStore(Rc::new(RefCell::new(store)))
     }
 
     /// Collect changes from the SignedCookieStore and updates the SetCookie header in the response
-    pub(crate) fn store<B>(&self, res: &mut ServiceResponse<B>) {
-        if let Some(store) = res.request().extensions().get::<SignedCookieStore>() {
-            for (type_id, _config) in self.0.values() {
-                if let Some(_data) = store.get_changes(type_id.clone()) {
-                    //todo
+    pub(crate) fn store<B>(&self, store: SignedCookieStore, res: &mut ServiceResponse<B>) {
+        for (name, (type_id, config)) in self.0.iter() {
+            if let Some(data) = store.get_changes(type_id.clone()) {
+                if !config.read_only() {
+                    log::debug!("Signed cookie {} changed: {:?}", name, data);
+                    if data.is_empty() {
+                        Self::purge_cookie(res, name).unwrap_or_else(|err| log::warn!("Failed to purge cookie: {:?}", err));
+                    } else {
+                        Self::set_cookie(res, name, &**config, data)
+                            .unwrap_or_else(|err| log::warn!("Failed to set cookie: {:?}", err));
+                    }
+                } else {
+                    log::warn!("Read only cookie {} changed", name);
                 }
             }
         }

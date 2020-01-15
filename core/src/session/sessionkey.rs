@@ -20,10 +20,10 @@ impl SessionKey {
 
 impl SessionKey {
     pub fn from_session(session: &IdentitySession) -> Result<Option<Self>, ActixError> {
-        session.get::<SessionKey>("key")
+        session.get::<SessionKey>("se")
     }
 
     pub fn to_session(self, session: &IdentitySession) -> Result<(), ActixError> {
-        session.set("key", self)
+        session.set("se", self)
     }
 }

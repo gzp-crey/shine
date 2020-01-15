@@ -3,7 +3,7 @@ use std::{fmt, str};
 
 /// Possible errors while parsing `Authorization` header.
 #[derive(Debug)]
-pub enum Error {
+pub enum AuthHeaderError {
     /// Missing authentication header
     Header,
     /// Header value is malformed
@@ -20,34 +20,34 @@ pub enum Error {
     Utf8Error(str::Utf8Error),
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for AuthHeaderError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::Header => write!(f, "Invalid authentication header"),
-            Error::Invalid => write!(f, "Invalid header value"),
-            Error::MissingScheme => write!(f, "Missing authorization scheme"),
-            Error::MissingField(_) => write!(f, "Missing header field"),
-            Error::ToStrError(e) => write!(f, "{}", e),
-            Error::Base64DecodeError(e) => write!(f, "{}", e),
-            Error::Utf8Error(e) => write!(f, "{}", e),
+            AuthHeaderError::Header => write!(f, "Invalid authentication header"),
+            AuthHeaderError::Invalid => write!(f, "Invalid header value"),
+            AuthHeaderError::MissingScheme => write!(f, "Missing authorization scheme"),
+            AuthHeaderError::MissingField(_) => write!(f, "Missing header field"),
+            AuthHeaderError::ToStrError(e) => write!(f, "{}", e),
+            AuthHeaderError::Base64DecodeError(e) => write!(f, "{}", e),
+            AuthHeaderError::Utf8Error(e) => write!(f, "{}", e),
         }
     }
 }
 
-impl ResponseError for Error {}
+impl ResponseError for AuthHeaderError {}
 
-impl From<header::ToStrError> for Error {
+impl From<header::ToStrError> for AuthHeaderError {
     fn from(e: header::ToStrError) -> Self {
-        Error::ToStrError(e)
+        AuthHeaderError::ToStrError(e)
     }
 }
-impl From<data_encoding::DecodeError> for Error {
+impl From<data_encoding::DecodeError> for AuthHeaderError {
     fn from(e: data_encoding::DecodeError) -> Self {
-        Error::Base64DecodeError(e)
+        AuthHeaderError::Base64DecodeError(e)
     }
 }
-impl From<str::Utf8Error> for Error {
+impl From<str::Utf8Error> for AuthHeaderError {
     fn from(e: str::Utf8Error) -> Self {
-        Error::Utf8Error(e)
+        AuthHeaderError::Utf8Error(e)
     }
 }

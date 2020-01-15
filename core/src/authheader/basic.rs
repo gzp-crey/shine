@@ -1,4 +1,4 @@
-use super::error::Error;
+use super::AuthHeaderError;
 use actix_web::{dev::Payload, http::header, FromRequest, HttpRequest};
 use data_encoding::BASE64;
 use futures::future::{err, ok, Ready};
@@ -24,33 +24,36 @@ impl BasicAuth {
         }
     }
 
-    pub fn from_header(header: &header::HeaderValue) -> Result<Self, Error> {
+    pub fn from_header(header: &header::HeaderValue) -> Result<Self, AuthHeaderError> {
         // "Basic *" length
         if header.len() < 7 {
-            return Err(Error::Invalid);
+            return Err(AuthHeaderError::Invalid);
         }
 
         let mut parts = header.to_str()?.splitn(2, ' ');
         match parts.next() {
             Some(scheme) if scheme == "Basic" => (),
-            _ => return Err(Error::MissingScheme),
+            _ => return Err(AuthHeaderError::MissingScheme),
         }
 
-        let decoded = BASE64.decode(parts.next().ok_or(Error::Invalid)?.as_bytes())?;
+        let decoded = BASE64.decode(parts.next().ok_or(AuthHeaderError::Invalid)?.as_bytes())?;
         let mut credentials = str::from_utf8(&decoded)?.splitn(2, ':');
 
         let user_id = credentials
             .next()
-            .ok_or(Error::MissingField("user_id"))
+            .ok_or(AuthHeaderError::MissingField("user_id"))
             .map(|user_id| user_id.to_string())?;
 
-        let password = credentials.next().ok_or(Error::MissingField("password")).map(|password| {
-            if password.is_empty() {
-                None
-            } else {
-                Some(password.to_string())
-            }
-        })?;
+        let password = credentials
+            .next()
+            .ok_or(AuthHeaderError::MissingField("password"))
+            .map(|password| {
+                if password.is_empty() {
+                    None
+                } else {
+                    Some(password.to_string())
+                }
+            })?;
 
         Ok(BasicAuth { user_id, password })
     }
@@ -68,12 +71,12 @@ impl BasicAuth {
 
 impl FromRequest for BasicAuth {
     type Config = ();
-    type Error = Error;
-    type Future = Ready<Result<Self, Error>>;
+    type Error = AuthHeaderError;
+    type Future = Ready<Result<Self, AuthHeaderError>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let header = match req.headers().get(header::AUTHORIZATION) {
-            None => return err(Error::Header),
+            None => return err(AuthHeaderError::Header),
             Some(header) => header,
         };
 

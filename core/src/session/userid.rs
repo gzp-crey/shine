@@ -32,10 +32,10 @@ impl UserId {
 
 impl UserId {
     pub fn from_session(session: &IdentitySession) -> Result<Option<Self>, ActixError> {
-        session.get::<UserId>("identity")
+        session.get::<UserId>("id")
     }
 
     pub fn to_session(self, session: &IdentitySession) -> Result<(), ActixError> {
-        session.set("identity", self)
+        session.set("id", self)
     }
 }

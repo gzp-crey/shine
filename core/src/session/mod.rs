@@ -1,7 +1,7 @@
 mod sessionkey;
 mod userid;
 
-use crate::signed_cookie::{CookieSecurity, Key, SameSite, Session, SignedCookieConfiguration};
+use crate::signed_cookie::{CookieSecurity, Key, Session, SignedCookieConfiguration};
 
 pub use self::sessionkey::*;
 pub use self::userid::*;
@@ -14,11 +14,19 @@ pub struct IdentityCookie {
 }
 
 impl IdentityCookie {
-    pub fn new(key: &[u8], read_only: bool) -> IdentityCookie {
+    pub fn write(key: &[u8]) -> IdentityCookie {
         let key = Key::from_master(key);
         IdentityCookie {
             security: CookieSecurity::Signed(key),
-            read_only,
+            read_only: false,
+        }
+    }
+
+    pub fn read(key: &[u8]) -> IdentityCookie {
+        let key = Key::from_master(key);
+        IdentityCookie {
+            security: CookieSecurity::Signed(key),
+            read_only: true,
         }
     }
 
@@ -31,28 +39,20 @@ impl SignedCookieConfiguration for IdentityCookie {
     fn name() -> &'static str {
         "shine_user"
     }
+
     fn read_only(&self) -> bool {
         self.read_only
     }
+
     fn security(&self) -> &CookieSecurity {
         &self.security
     }
+
     fn path(&self) -> &str {
         "/"
     }
-    fn domain(&self) -> &str {
+
+    /*fn domain(&self) -> &str {
         "localhost"
-    }
-    fn secure(&self) -> bool {
-        false
-    }
-    fn http_only(&self) -> bool {
-        true
-    }
-    fn same_site(&self) -> Option<SameSite> {
-        None
-    }
-    fn max_age(&self) -> Option<i64> {
-        None
-    }
+    }*/
 }

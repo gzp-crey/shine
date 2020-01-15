@@ -31,13 +31,13 @@ where
     fn call(&mut self, mut req: ServiceRequest) -> Self::Future {
         let inner = self.inner.clone();
         let store = inner.load(&mut req);
-        req.extensions_mut().insert(store);
+        req.extensions_mut().insert(store.clone());
 
         let fut = self.service.call(req);
 
         async move {
             fut.await.map(|mut res| {
-                inner.store(&mut res);
+                inner.store(store, &mut res);
                 res
             })
         }

@@ -8,7 +8,6 @@ pub struct Config {
     pub bind_host: String,
     pub bind_port: u16,
     pub worker_count: usize,
-    pub cookie_session_secret: String,
     pub auth: AuthConfig,
 }
 
@@ -24,7 +23,7 @@ impl Config {
                 "bind_port": "12345",
                 "worker_count": "4",
                 "auth" : {
-                    "identity": {                        
+                    "identity": {
                     }
                 }
             }
