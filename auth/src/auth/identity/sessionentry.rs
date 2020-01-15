@@ -1,8 +1,9 @@
 use super::identityentry::IdentityIndex;
 use azure_sdk_storage_table::TableEntry;
-use chrono::Utc;
+//use shine_core::serde::date_serializer;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use shine_core::{serde::date_serializer, session::SessionKey, siteinfo::SiteInfo};
+use shine_core::{session::SessionKey, siteinfo::SiteInfo};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -10,15 +11,15 @@ pub struct Session {
     pub remote: String,
     pub agent: String,
 
-    #[serde(with = "date_serializer")]
-    pub issued: Utc,
+    //#[serde(with = "date_serializer")]
+    pub issued: DateTime<Utc>,
 }
 
 #[derive(Debug)]
 pub struct SessionEntry(TableEntry<Session>);
 
 impl SessionEntry {
-    pub fn entity_keys(user_id: &str, key: &str) -> String {
+    pub fn entity_keys(user_id: &str, key: &str) -> (String, String) {
         (user_id.to_owned(), format!("session-{}", key))
     }
 
@@ -54,11 +55,15 @@ impl SessionEntry {
     }
 
     pub fn key(&self) -> &str {
-        &self.0.row_key.split("-").first().unwrap()
+        &self.0.row_key.splitn(2, '-').skip(1).next().unwrap()
     }
 
     pub fn data(&self) -> &Session {
         &self.0.payload
+    }
+
+    pub fn data_mut(&mut self) -> &mut Session {
+        &mut self.0.payload
     }
 }
 
@@ -88,7 +93,7 @@ impl SessionIndexEntry {
         let key = entry.key();
         let user_id = entry.user_id();
 
-        let (partition_key, row_key) = Self::entity_keys(&user_id, &key);
+        let (partition_key, row_key) = Self::entity_keys(&key);
 
         Self(TableEntry {
             partition_key,

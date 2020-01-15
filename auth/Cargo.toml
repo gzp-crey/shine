@@ -40,5 +40,4 @@ azure_sdk_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", bran
 azure_sdk_storage_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
 azure_sdk_storage_table = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
 
-azure-utils = {path = "../azure-utils", version = "0.1.0", features = ["actix-web"]}
 shine-core = {path = "../core", version = "0.1.0"}

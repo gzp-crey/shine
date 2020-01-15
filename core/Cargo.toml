@@ -6,24 +6,30 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
+config ="0.10"
 
 futures = "0.3"
 bytes = "0.5"
-itertools = "0.8"
-
+time = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.6"
+
 percent-encoding = "2.1"
 data-encoding = "2.1"
+rand = "0.7"
 
-config ="0.10"
-
+tokio = { version = "0.2", features = ["time"] }
 actix-web = "2.0"
 actix-service = "1.0"
 
-# todo: remove
-derive_more = "0.99"
-time = "0.1"
+azure_sdk_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
+azure_sdk_storage_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
+azure_sdk_storage_table = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "bump_depenedency_versions" }
 
+[dev-dependencies]
+env_logger = "0.7.1"
+clap = "2.33"
+tokio = { version = "0.2", features = ["macros", "rt-threaded"] }

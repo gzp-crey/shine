@@ -11,7 +11,6 @@ use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
     TableEntry,
 };
-use azure_utils::idgenerator::{IdSequence, SyncCounterConfig, SyncCounterStore};
 use block_modes::{
     block_padding::Pkcs7,
     {BlockMode, Cbc},
@@ -20,6 +19,7 @@ use blowfish::Blowfish;
 use data_encoding::BASE64;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{distributions::Alphanumeric, Rng};
+use shine_core::idgenerator::{IdSequence, SyncCounterConfig, SyncCounterStore};
 use shine_core::siteinfo::SiteInfo;
 use std::{iter, str};
 use validator::validate_email;
@@ -376,7 +376,7 @@ impl IdentityManager {
                 Ok(index) => index,
                 Err(IdentityError::SessionKeyConflict) if try_count > 0 => {
                     log::info!("Retrying ({}) session key already used", try_count);
-                    self.delete_sesssion(session.into_entry()).await;
+                    self.delete_session(session.into_entry()).await;
                     continue;
                 }
                 Err(err) => {
@@ -404,7 +404,7 @@ impl IdentityManager {
         };
 
         let session = {
-            let partion_key = format!("{}", identity.id());
+            let partion_key = format!("{}", identity.user_id());
             let row_key = format!("session-{}", session_key);
             self.sessions
                 .get_entry(&partion_key, &row_key)
@@ -413,7 +413,12 @@ impl IdentityManager {
                 .ok_or(IdentityError::UserNotFound)?
         };
 
-        Ok(identity, session)
+        log::debug!("Session found {:?} for identity {:?}", session, identity);
+        Ok((identity, session))
+    }
+
+    pub async fn update_session(&self, _session: SessionEntry) -> Result<(), IdentityError> {
+        unimplemented!()
     }
 }
 

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use shine_core::authheader::BasicAuth;
 use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
 use shine_core::siteinfo::SiteInfo;
+use chrono::Utc;
 
 pub use self::error::*;
 pub use self::identity_manager::*;
@@ -35,7 +36,7 @@ pub async fn register_user(
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     log::info!("register {:?} {:?}", registration, site);
-    IdentityCookie::clear(&session);
+    IdentityCookie::clear(&identity_session);
 
     let Registration { name, password, email } = registration.into_inner();
     let identity = state.identity_db().create_user(name, email, password).await?;
@@ -55,7 +56,7 @@ pub async fn login_basic_auth(
 ) -> Result<HttpResponse, ActixError> {
     let (user_id, password) = (auth.user_id(), auth.password());
     log::info!("login {:?}, {:?}, {:?}", user_id, password, site);
-    IdentityCookie::clear(&session);
+    IdentityCookie::clear(&identity_session);
 
     let identity = state
         .identity_db()
@@ -74,10 +75,14 @@ pub async fn refresh_session(
     site: SiteInfo,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    let session_key = SessionKey::from_session(&identity_session);
-    let user_id = UserId::from_session(&identity_session);
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IdentityError::SessionRequired)?;
+    let user_id = UserId::from_session(&identity_session)?.ok_or(IdentityError::SessionRequired)?;
     log::info!("refresh session {:?}, {:?}, {:?}", user_id, session_key, site);
+
     IdentityCookie::clear(&identity_session);
+    let (identity, mut session) = state.identity_db().find_identity_by_session(session_key.key()).await?;
+    session.data_mut().issued = Utc::now();
+    state.identity_db().update_session(session).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
