@@ -108,9 +108,9 @@ impl AuthService {
                 .service(
                     // user authentication
                     web::scope("user")
-                        .service(web::resource("login").route(web::post().to(login_basicauth)))
+                        .service(web::resource("login").route(web::post().to(login_basic_auth)))
                         .service(web::resource("register").route(web::post().to(register_user)))
-                        .service(web::resource("refresh").route(web::get().to(refresh_session))),
+                        .service(web::resource("refresh").route(web::post().to(refresh_session))),
                 ),
         );
     }

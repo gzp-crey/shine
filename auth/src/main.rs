@@ -1,5 +1,4 @@
 use actix_web::{middleware, App, HttpServer};
-use data_encoding::BASE64;
 use std::env;
 
 mod auth;

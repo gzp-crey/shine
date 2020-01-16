@@ -1,4 +1,5 @@
 use crate::backoff::BackoffError;
+use actix_web::ResponseError;
 use azure_sdk_core::errors::AzureError;
 use std::error::Error;
 use std::fmt;
@@ -38,10 +39,6 @@ impl From<BackoffError<AzureError>> for IdSequenceError {
     }
 }
 
-#[cfg(feature = "actix_web")]
-mod feature_actix_web {
-    use actix_web::ResponseError;
-    impl ResponseError for IdSequenceError {
-        // Default to 500 for now
-    }
+impl ResponseError for IdSequenceError {
+    // Default to 500 for now
 }

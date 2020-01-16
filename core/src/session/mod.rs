@@ -37,7 +37,7 @@ impl IdentityCookie {
 
 impl SignedCookieConfiguration for IdentityCookie {
     fn name() -> &'static str {
-        "shine_user"
+        "su"
     }
 
     fn read_only(&self) -> bool {

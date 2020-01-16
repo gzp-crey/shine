@@ -2,10 +2,10 @@ use actix_web::http::StatusCode;
 use actix_web::ResponseError;
 use argon2::Error as Argon2Error;
 use azure_sdk_core::errors::AzureError;
-use azure_utils::idgenerator::IdSequenceError;
 use block_cipher_trait;
 use block_modes;
 use data_encoding;
+use shine_core::idgenerator::IdSequenceError;
 use std::{fmt, str};
 
 #[derive(Debug)]
@@ -21,6 +21,7 @@ pub enum IdentityError {
     PasswordNotMatching,
     UserIdConflict,
     SessionKeyConflict,
+    SessionRequired,
 }
 
 impl fmt::Display for IdentityError {
@@ -35,6 +36,7 @@ impl fmt::Display for IdentityError {
             IdentityError::UserIdConflict => write!(f, "User id already in use"),
             IdentityError::SessionKeyConflict => write!(f, "Login key already in use"),
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => write!(f, "Invalid user or password"),
+            IdentityError::SessionRequired => write!(f, "Login required"),
         }
     }
 }
@@ -50,6 +52,7 @@ impl ResponseError for IdentityError {
             IdentityError::UserIdConflict => StatusCode::TOO_MANY_REQUESTS,
             IdentityError::SessionKeyConflict => StatusCode::TOO_MANY_REQUESTS,
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
+            IdentityError::SessionRequired => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

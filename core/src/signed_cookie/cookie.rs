@@ -153,7 +153,7 @@ impl SignedCookie {
     fn purge_cookie<B>(res: &mut ServiceResponse<B>, name: &str) -> Result<(), Error> {
         let mut cookie = Cookie::named(name.to_owned());
         cookie.set_value("");
-        //removed as postman dos not supports it cookie.set_max_age(time::Duration::seconds(0));
+        //removed as postman does not supports cookie.set_max_age(time::Duration::seconds(0));
         cookie.set_expires(time::now_utc() - time::Duration::days(365));
 
         let val = HeaderValue::from_str(&cookie.to_string())?;

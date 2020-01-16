@@ -1,5 +1,5 @@
-use azure_utils::idgenerator::{IdSequence, IdSequenceError, SaltedIdSequence, SyncCounterConfig, SyncCounterStore};
 use clap::{App, Arg, SubCommand};
+use shine_core::idgenerator::{IdSequence, IdSequenceError, SaltedIdSequence, SyncCounterConfig, SyncCounterStore};
 use std::collections::HashSet;
 use std::env;
 use std::str::FromStr;
