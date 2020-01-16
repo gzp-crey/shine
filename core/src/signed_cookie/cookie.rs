@@ -181,7 +181,9 @@ impl SignedCookie {
         for (name, (type_id, config)) in self.0.iter() {
             let mut data = SessionData::empty(name.to_owned());
             if let Ok(cookies) = req.cookies() {
+                log::trace!("cookies: {:?}", cookies);
                 if let Some(cookie) = cookies.iter().find(|x| x.name() == name) {
+                    log::trace!("cookie {}: {:?}", name, cookie);
                     match Self::load_cookie(cookie, &**config) {
                         Ok(d) => data = d,
                         Err(err) => log::warn!("Failed to parse cookie: {:?}", err),
