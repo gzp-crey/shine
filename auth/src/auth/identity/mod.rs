@@ -5,11 +5,11 @@ mod sessionentry;
 
 use super::State;
 use actix_web::{web, Error as ActixError, HttpResponse};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use shine_core::authheader::BasicAuth;
 use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
 use shine_core::siteinfo::SiteInfo;
-use chrono::Utc;
 
 pub use self::error::*;
 pub use self::identity_manager::*;

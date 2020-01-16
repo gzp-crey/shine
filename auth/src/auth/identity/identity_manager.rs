@@ -19,8 +19,11 @@ use blowfish::Blowfish;
 use data_encoding::BASE64;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{distributions::Alphanumeric, Rng};
-use shine_core::idgenerator::{IdSequence, SyncCounterConfig, SyncCounterStore};
-use shine_core::siteinfo::SiteInfo;
+use shine_core::{
+    backoff::{self, BackoffContext, BackoffError},
+    idgenerator::{IdSequence, SyncCounterConfig, SyncCounterStore},
+    siteinfo::SiteInfo,
+};
 use std::{iter, str};
 use validator::validate_email;
 
@@ -112,7 +115,7 @@ impl IdentityManager {
         Ok(cipher)
     }
 
-    async fn generate_user_id(&self, sequence_id: u64) -> Result<(String, String, String), IdentityError> {
+    fn generate_user_id(&self, sequence_id: u64) -> Result<(String, String, String), IdentityError> {
         let sequence_id = format!("{:0>10}", sequence_id);
         let mut rng = rand::thread_rng();
         let salt = iter::repeat(())
@@ -139,13 +142,16 @@ impl IdentityManager {
 
     async fn try_insert_user(
         &self,
+        ctx: BackoffContext,
         sequence_id: u64,
         name: &str,
         password: &str,
         email: Option<&str>,
-    ) -> Result<IdentityEntry, IdentityError> {
-        let (id, sequence_id, salt) = self.generate_user_id(sequence_id).await?;
-        let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &argon2::Config::default())?;
+    ) -> Result<IdentityEntry, BackoffError<IdentityError>> {
+        let (id, sequence_id, salt) = self.generate_user_id(sequence_id).map_err(IdentityError::from)?;
+        let password_config = argon2::Config::default();
+        let password_hash =
+            argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &password_config).map_err(IdentityError::from)?;
         log::info!("Created new user id:{}, pwh:{}", id, password_hash);
         let identity = IdentityEntry::new(
             id,
@@ -156,31 +162,23 @@ impl IdentityManager {
             password_hash,
         );
 
-        match self.users.insert_entry(identity.into_entry()).await {
-            Ok(identity) => Ok(IdentityEntry::from_entry(identity)),
-            Err(err) if is_conflict(&err) => Err(IdentityError::UserIdConflict),
-            Err(err) => Err(IdentityError::from(err)),
-        }
+        let identity = self
+            .users
+            .insert_entry(identity.into_entry())
+            .await
+            .map_err(|err| ctx.retry_on_azure_conflict(err))
+            .map_err(IdentityError::from)?;
+
+        Ok(IdentityEntry::from_entry(identity))
     }
 
     async fn insert_user(&self, name: &str, password: &str, email: Option<&str>) -> Result<IdentityEntry, IdentityError> {
         let sequence_id = self.user_id_generator.get().await?;
-        let mut retry = 3usize;
-        //todo: use backoff::retry
-        loop {
-            let identity = match self.try_insert_user(sequence_id, name, password, email).await {
-                Ok(identity) => identity,
-                Err(IdentityError::UserIdConflict) if retry > 0 => {
-                    retry -= 1;
-                    log::info!("Retrying ({}) user creation with sequence_id: {}", retry, sequence_id);
-                    continue;
-                }
-                Err(err) => return Err(err),
-            };
-
-            log::info!("New user: {:?}", identity);
-            return Ok(identity);
-        }
+        backoff::retry(BackoffContext::new(3, 10.), |ctx| {
+            self.try_insert_user(ctx, sequence_id, name, password, email)
+        })
+        .await
+        .map_err(IdentityError::from)
     }
 
     async fn delete_user(&self, identity: TableEntry<Identity>) {

@@ -1,5 +1,5 @@
 use super::IdSequenceError;
-use crate::backoff::{self, map_azure_error, BackoffError};
+use crate::backoff::{self, BackoffContext, BackoffError};
 use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
@@ -44,14 +44,12 @@ impl SyncCounterStore {
 
     async fn get_range_step(
         &self,
+        ctx: BackoffContext,
         sequence_id: &str,
         count: u64,
-        retry: usize,
-        timeout: f32,
-    ) -> Result<Range<u64>, BackoffError<AzureError>> {
-        match self.0.counters.get_entry::<Counter>(PARTITION_KEY, sequence_id).await {
-            Err(err) => Err(BackoffError::Action(err)),
-            Ok(None) => {
+    ) -> Result<Result<Range<u64>, BackoffContext>, AzureError> {
+        match self.0.counters.get_entry::<Counter>(PARTITION_KEY, sequence_id).await? {
+            None => {
                 let entry = TableEntry {
                     partition_key: PARTITION_KEY.to_string(),
                     row_key: sequence_id.to_string(),
@@ -62,26 +60,28 @@ impl SyncCounterStore {
                     .counters
                     .insert_entry(entry)
                     .await
-                    .map_err(|err| map_azure_error(retry, timeout, err))
-                    .map(|e| 0..(e.payload.value))
+                    .map_err(|err| ctx.retry_on_azure_conflict(err))
+                    .map(|e| Ok(0..(e.payload.value)))
             }
-            Ok(Some(mut entry)) => {
+            Some(mut entry) => {
                 let start = entry.payload.value;
                 entry.payload.value += count;
                 self.0
                     .counters
                     .update_entry(entry)
                     .await
-                    .map_err(|err| map_azure_error(retry, timeout, err))
-                    .map(|e| start..(e.payload.value))
+                    .map_err(|err| ctx.retry_on_azure_conflict(err))
+                    .map(|e| Ok(start..(e.payload.value)))
             }
         }
     }
 
     pub async fn get_range(&self, sequence_id: &str, count: u64) -> Result<Range<u64>, IdSequenceError> {
-        backoff::retry(|r, t| self.get_range_step(sequence_id, count, r, t))
-            .await
-            .map_err(IdSequenceError::from)
+        backoff::retry(BackoffContext::new(10, 10.), |ctx| {
+            self.get_range_step(ctx, sequence_id, count)
+        })
+        .await
+        .map_err(IdSequenceError::from)
     }
 
     pub async fn get(&self, sequince_id: &str) -> Result<u64, IdSequenceError> {

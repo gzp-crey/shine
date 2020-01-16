@@ -32,9 +32,8 @@ impl From<AzureError> for IdSequenceError {
 impl From<BackoffError<AzureError>> for IdSequenceError {
     fn from(err: BackoffError<AzureError>) -> IdSequenceError {
         match err {
-            BackoffError::RetryLimit(r, t) => IdSequenceError::DB(format!("Retry limit reached, retry:{}, timeout:{}", r, t)),
             BackoffError::Action(e) => IdSequenceError::DB(format!("{:?}", e)),
-            BackoffError::Retry { .. } => IdSequenceError::DB(format!("Internal error")),
+            BackoffError::Retry(_ctx) => IdSequenceError::DB(format!("Internal error")),
         }
     }
 }
