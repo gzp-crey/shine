@@ -1,4 +1,5 @@
 pub mod authheader;
+pub mod azure_utils;
 pub mod backoff;
 pub mod idgenerator;
 pub mod serde;

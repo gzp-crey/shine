@@ -5,7 +5,7 @@ use azure_sdk_core::errors::AzureError;
 use block_cipher_trait;
 use block_modes;
 use data_encoding;
-use shine_core::{backoff::BackoffError, idgenerator::IdSequenceError};
+use shine_core::idgenerator::IdSequenceError;
 use std::{fmt, str};
 
 #[derive(Debug)]
@@ -54,15 +54,6 @@ impl ResponseError for IdentityError {
             IdentityError::UserNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
             IdentityError::SessionRequired => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
-impl From<BackoffError<IdentityError>> for IdentityError {
-    fn from(err: BackoffError<IdentityError>) -> IdentityError {
-        match err {
-            BackoffError::Action(e) => e,
-            BackoffError::Retry(_ctx) => IdentityError::DB(format!("Retry limit reached")),
         }
     }
 }

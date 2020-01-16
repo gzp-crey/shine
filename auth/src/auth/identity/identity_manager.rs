@@ -20,7 +20,8 @@ use data_encoding::BASE64;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{distributions::Alphanumeric, Rng};
 use shine_core::{
-    backoff::{self, BackoffContext, BackoffError},
+    azure_utils::is_conflict_error,
+    backoff::{self, BackoffContext},
     idgenerator::{IdSequence, SyncCounterConfig, SyncCounterStore},
     siteinfo::SiteInfo,
 };
@@ -147,12 +148,14 @@ impl IdentityManager {
         name: &str,
         password: &str,
         email: Option<&str>,
-    ) -> Result<IdentityEntry, BackoffError<IdentityError>> {
-        let (id, sequence_id, salt) = self.generate_user_id(sequence_id).map_err(IdentityError::from)?;
-        let password_config = argon2::Config::default();
-        let password_hash =
-            argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &password_config).map_err(IdentityError::from)?;
-        log::info!("Created new user id:{}, pwh:{}", id, password_hash);
+    ) -> Result<IdentityEntry, Result<BackoffContext, IdentityError>> {
+        let (id, sequence_id, salt) = self
+            .generate_user_id(sequence_id)
+            .map_err(|err| ctx.fail_on_error(IdentityError::from(err)))?;
+        let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &argon2::Config::default())
+            .map_err(|err| ctx.fail_on_error(IdentityError::from(err)))?;
+
+        log::info!("Creating new user id:{}, pwh:{}", id, password_hash);
         let identity = IdentityEntry::new(
             id,
             sequence_id,
@@ -162,23 +165,25 @@ impl IdentityManager {
             password_hash,
         );
 
-        let identity = self
-            .users
-            .insert_entry(identity.into_entry())
-            .await
-            .map_err(|err| ctx.retry_on_azure_conflict(err))
-            .map_err(IdentityError::from)?;
+        let identity = self.users.insert_entry(identity.into_entry()).await.map_err(|err| {
+            if is_conflict_error(&err) {
+                ctx.retry_on_error()
+            } else {
+                ctx.fail_on_error(IdentityError::from(err))
+            }
+        })?;
 
-        Ok(IdentityEntry::from_entry(identity))
+        ctx.complete(IdentityEntry::from_entry(identity))
     }
 
     async fn insert_user(&self, name: &str, password: &str, email: Option<&str>) -> Result<IdentityEntry, IdentityError> {
         let sequence_id = self.user_id_generator.get().await?;
-        backoff::retry(BackoffContext::new(3, 10.), |ctx| {
-            self.try_insert_user(ctx, sequence_id, name, password, email)
-        })
+        backoff::retry_err(
+            BackoffContext::new(3, 10.),
+            |ctx| self.try_insert_user(ctx, sequence_id, name, password, email),
+            |_ctx| IdentityError::UserIdConflict,
+        )
         .await
-        .map_err(IdentityError::from)
     }
 
     async fn delete_user(&self, identity: TableEntry<Identity>) {
@@ -351,43 +356,51 @@ impl IdentityManager {
         }
     }
 
+    pub async fn try_create_session(
+        &self,
+        ctx: BackoffContext,
+        identity: &IdentityEntry,
+        site: &SiteInfo,
+    ) -> Result<SessionEntry, Result<BackoffContext, IdentityError>> {
+        let session = match self.try_insert_session(identity, site).await {
+            Ok(session) => session,
+            Err(IdentityError::SessionKeyConflict) => {
+                log::info!(
+                    "Retrying ({}), session key already used by user: {}",
+                    ctx.retry_count(),
+                    identity.user_id()
+                );
+                return ctx.retry();
+            }
+            Err(err) => return ctx.fail(err),
+        };
+
+        let session_index = match self.try_insert_session_index(&session).await {
+            Ok(index) => index,
+            Err(IdentityError::SessionKeyConflict) => {
+                log::info!("Retrying ({}), session key already used", ctx.retry_count());
+                self.delete_session(session.into_entry()).await;
+                return ctx.retry();
+            }
+            Err(err) => {
+                log::info!("Creating session failed: {:?}, {:?}", identity, err);
+                self.delete_session(session.into_entry()).await;
+                return ctx.fail(err);
+            }
+        };
+
+        log::info!("New session: {:?}", session);
+        log::debug!("Session index: {:?}", session_index);
+        return ctx.complete(session);
+    }
+
     pub async fn create_session(&self, identity: &IdentityEntry, site: SiteInfo) -> Result<SessionEntry, IdentityError> {
-        let mut try_count = 3usize;
-        //todo: use backoff::retry
-        loop {
-            try_count -= 1;
-
-            let session = match self.try_insert_session(identity, &site).await {
-                Ok(session) => session,
-                Err(IdentityError::SessionKeyConflict) if try_count > 0 => {
-                    log::info!(
-                        "Retrying ({}) session key already used by user: {}",
-                        try_count,
-                        identity.user_id()
-                    );
-                    continue;
-                }
-                Err(err) => return Err(err),
-            };
-
-            let session_index = match self.try_insert_session_index(&session).await {
-                Ok(index) => index,
-                Err(IdentityError::SessionKeyConflict) if try_count > 0 => {
-                    log::info!("Retrying ({}) session key already used", try_count);
-                    self.delete_session(session.into_entry()).await;
-                    continue;
-                }
-                Err(err) => {
-                    log::info!("Creating session failed: {:?}, {:?}", identity, err);
-                    self.delete_session(session.into_entry()).await;
-                    return Err(err);
-                }
-            };
-
-            log::info!("New session: {:?}", session);
-            log::debug!("Session index: {:?}", session_index);
-            return Ok(session);
-        }
+        backoff::retry_err(
+            BackoffContext::new(3, 10.),
+            |ctx| self.try_create_session(ctx, identity, &site),
+            |_ctx| IdentityError::SessionKeyConflict,
+        )
+        .await
     }
 
     pub async fn find_identity_by_session(&self, session_key: &str) -> Result<(IdentityEntry, SessionEntry), IdentityError> {

@@ -1,4 +1,3 @@
-use crate::backoff::BackoffError;
 use actix_web::ResponseError;
 use azure_sdk_core::errors::AzureError;
 use std::error::Error;
@@ -26,15 +25,6 @@ impl Error for IdSequenceError {}
 impl From<AzureError> for IdSequenceError {
     fn from(err: AzureError) -> IdSequenceError {
         IdSequenceError::DB(format!("{:?}", err))
-    }
-}
-
-impl From<BackoffError<AzureError>> for IdSequenceError {
-    fn from(err: BackoffError<AzureError>) -> IdSequenceError {
-        match err {
-            BackoffError::Action(e) => IdSequenceError::DB(format!("{:?}", e)),
-            BackoffError::Retry(_ctx) => IdSequenceError::DB(format!("Internal error")),
-        }
     }
 }
 

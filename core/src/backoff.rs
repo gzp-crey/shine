@@ -1,21 +1,6 @@
-use azure_sdk_core::errors::AzureError;
 use std::future::Future;
 use std::time::Duration;
 use tokio::time::delay_for;
-
-pub enum BackoffError<E> {
-    /// Action failed a new attempt is required
-    Retry(BackoffContext),
-
-    /// Action failed with an error
-    Action(E),
-}
-
-impl<E> From<E> for BackoffError<E> {
-    fn from(err: E) -> BackoffError<E> {
-        BackoffError::Action(err)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct BackoffContext {
@@ -45,44 +30,62 @@ impl BackoffContext {
     }
 
     /// Return the number of attempts
-    pub fn retry(&self) -> usize {
+    pub fn retry_count(&self) -> usize {
         self.retry
     }
 
-    /// Perform an exponential update for the timeout
-    pub fn exponential_timeout(&mut self) {
-        self.time *= 2.
+    pub fn complete<O, E>(&self, ok: O) -> Result<O, Result<BackoffContext, E>> {
+        Ok(ok)
     }
 
-    /// Perform a retry on azure conflict error
-    pub fn retry_on_azure_conflict(mut self, err: AzureError) -> Result<BackoffContext, AzureError> {
-        match err {
-            AzureError::UnexpectedHTTPResult(e) if e.status_code() == 412 => {
-                self.exponential_timeout();
-                Ok(self)
-            }
-            e => Err(e),
-        }
+    /// Perform an exponential update for the timeout
+    pub fn retry<O, E>(&self) -> Result<O, Result<BackoffContext, E>> {
+        Err(Ok(self.clone()))
+    }
+
+    pub fn fail<O, E>(&self, err: E) -> Result<O, Result<BackoffContext, E>> {
+        Err(Err(err))
+    }
+
+    pub fn retry_on_error<E>(&self) -> Result<BackoffContext, E> {
+        Ok(self.clone())
+    }
+
+    pub fn fail_on_error<E>(&self, err: E) -> Result<BackoffContext, E> {
+        Err(err)
     }
 }
 
-pub async fn retry<T, E, A, F>(mut context: BackoffContext, action: F) -> Result<Result<T, BackoffContext>, E>
+pub async fn retry<T, E, A, F>(mut context: BackoffContext, action: F) -> Result<T, Result<BackoffContext, E>>
 where
     F: Fn(BackoffContext) -> A,
-    A: Future<Output = Result<Result<T, BackoffContext>, E>>,
+    A: Future<Output = Result<T, Result<BackoffContext, E>>>,
 {
     loop {
-        context = match action(context).await? {
-            Ok(v) => return Ok(Ok(v)),
-            Err(context) => context,
+        context = match action(context).await {
+            Err(Ok(context)) => context,
+            o => return o,
         };
 
         if context.is_last_try() {
             log::warn!("Backoff retry reached maximum iteration ({})", context.retry);
-            return Ok(Err(context));
+            return Err(Ok(context));
         }
 
         delay_for(Duration::from_micros(context.time as u64)).await;
         context.retry += 1;
+        context.time *= 2.;
     }
+}
+
+pub async fn retry_err<T, E, A, F, G>(context: BackoffContext, action: F, map_err: G) -> Result<T, E>
+where
+    F: Fn(BackoffContext) -> A,
+    A: Future<Output = Result<T, Result<BackoffContext, E>>>,
+    G: Fn(BackoffContext) -> E,
+{
+    retry::<T, E, A, F>(context, action).await.map_err(|err| match err {
+        Err(err) => err,
+        Ok(ctx) => map_err(ctx),
+    })
 }

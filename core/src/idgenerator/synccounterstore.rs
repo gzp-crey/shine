@@ -1,6 +1,6 @@
 use super::IdSequenceError;
-use crate::backoff::{self, BackoffContext, BackoffError};
-use azure_sdk_core::errors::AzureError;
+use crate::azure_utils::is_conflict_error;
+use crate::backoff::{self, BackoffContext};
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
@@ -47,8 +47,14 @@ impl SyncCounterStore {
         ctx: BackoffContext,
         sequence_id: &str,
         count: u64,
-    ) -> Result<Result<Range<u64>, BackoffContext>, AzureError> {
-        match self.0.counters.get_entry::<Counter>(PARTITION_KEY, sequence_id).await? {
+    ) -> Result<Range<u64>, Result<BackoffContext, IdSequenceError>> {
+        match self
+            .0
+            .counters
+            .get_entry::<Counter>(PARTITION_KEY, sequence_id)
+            .await
+            .map_err(|err| Err(IdSequenceError::from(err)))?
+        {
             None => {
                 let entry = TableEntry {
                     partition_key: PARTITION_KEY.to_string(),
@@ -60,8 +66,14 @@ impl SyncCounterStore {
                     .counters
                     .insert_entry(entry)
                     .await
-                    .map_err(|err| ctx.retry_on_azure_conflict(err))
-                    .map(|e| Ok(0..(e.payload.value)))
+                    .map_err(|err| {
+                        if is_conflict_error(&err) {
+                            ctx.retry_on_error()
+                        } else {
+                            ctx.fail_on_error(IdSequenceError::from(err))
+                        }
+                    })
+                    .map(|e| 0..(e.payload.value))
             }
             Some(mut entry) => {
                 let start = entry.payload.value;
@@ -70,18 +82,25 @@ impl SyncCounterStore {
                     .counters
                     .update_entry(entry)
                     .await
-                    .map_err(|err| ctx.retry_on_azure_conflict(err))
-                    .map(|e| Ok(start..(e.payload.value)))
+                    .map_err(|err| {
+                        if is_conflict_error(&err) {
+                            ctx.retry_on_error()
+                        } else {
+                            ctx.fail_on_error(IdSequenceError::from(err))
+                        }
+                    })
+                    .map(|e| start..(e.payload.value))
             }
         }
     }
 
     pub async fn get_range(&self, sequence_id: &str, count: u64) -> Result<Range<u64>, IdSequenceError> {
-        backoff::retry(BackoffContext::new(10, 10.), |ctx| {
-            self.get_range_step(ctx, sequence_id, count)
-        })
+        backoff::retry_err(
+            BackoffContext::new(10, 10.),
+            |ctx| self.get_range_step(ctx, sequence_id, count),
+            |_ctx| IdSequenceError::DB(format!("Failed to get range - too many requests")),
+        )
         .await
-        .map_err(IdSequenceError::from)
     }
 
     pub async fn get(&self, sequince_id: &str) -> Result<u64, IdSequenceError> {
