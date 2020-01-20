@@ -1,6 +1,6 @@
 mod error;
-mod identity_manager;
 mod identityentry;
+mod manager;
 mod sessionentry;
 
 use super::State;
@@ -12,7 +12,7 @@ use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
 use shine_core::siteinfo::SiteInfo;
 
 pub use self::error::*;
-pub use self::identity_manager::*;
+pub use self::manager::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityConfig {
