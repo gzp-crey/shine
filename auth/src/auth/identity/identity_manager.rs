@@ -164,7 +164,7 @@ impl IdentityManager {
         );
 
         let identity = self.users.insert_entry(identity.into_entry()).await.map_err(|err| {
-            if azure_utils::is_conflict_error(&err) {
+            if azure_utils::is_precodition_error(&err) {
                 BackoffError::Transient(IdentityError::UserIdConflict)
             } else {
                 BackoffError::Permanent(IdentityError::UserIdConflict)
@@ -201,7 +201,7 @@ impl IdentityManager {
         match self.indices.insert_entry(name_index.into_entry()).await {
             Ok(name_index) => Ok(NameIndexEntry::from_entry(name_index)),
             Err(e) => {
-                if azure_utils::is_conflict_error(&e) {
+                if azure_utils::is_precodition_error(&e) {
                     Err(IdentityError::NameTaken)
                 } else {
                     Err(IdentityError::from(e))
@@ -223,7 +223,7 @@ impl IdentityManager {
             match self.indices.insert_entry(email_index.into_entry()).await {
                 Ok(email_index) => Ok(Some(EmailIndexEntry::from_entry(email_index))),
                 Err(err) => {
-                    if azure_utils::is_conflict_error(&err) {
+                    if azure_utils::is_precodition_error(&err) {
                         Err(IdentityError::EmailTaken)
                     } else {
                         Err(IdentityError::from(err))
@@ -330,7 +330,7 @@ impl IdentityManager {
         let session = SessionEntry::new(user_id.to_owned(), key, &site);
         match self.sessions.insert_entry(session.into_entry()).await {
             Ok(session) => Ok(SessionEntry::from_entry(session)),
-            Err(err) if azure_utils::is_conflict_error(&err) => Err(IdentityError::SessionKeyConflict),
+            Err(err) if azure_utils::is_precodition_error(&err) => Err(IdentityError::SessionKeyConflict),
             Err(err) => Err(err.into()),
         }
     }
@@ -346,7 +346,7 @@ impl IdentityManager {
         let session_index = SessionIndexEntry::from_identity(session);
         match self.indices.insert_entry(session_index.into_entry()).await {
             Ok(session_index) => Ok(SessionIndexEntry::from_entry(session_index)),
-            Err(err) if azure_utils::is_conflict_error(&err) => Err(IdentityError::SessionKeyConflict),
+            Err(err) if azure_utils::is_precodition_error(&err) => Err(IdentityError::SessionKeyConflict),
             Err(err) => Err(err.into()),
         }
     }
