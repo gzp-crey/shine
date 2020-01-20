@@ -5,7 +5,7 @@ use azure_sdk_core::errors::AzureError;
 use block_cipher_trait;
 use block_modes;
 use data_encoding;
-use shine_core::{backoff::BackoffError, idgenerator::IdSequenceError};
+use shine_core::idgenerator::IdSequenceError;
 use std::{fmt, str};
 
 #[derive(Debug)]
@@ -58,15 +58,6 @@ impl ResponseError for IdentityError {
     }
 }
 
-impl From<BackoffError<IdentityError>> for IdentityError {
-    fn from(err: BackoffError<IdentityError>) -> IdentityError {
-        match err {
-            BackoffError::Action(e) => e,
-            BackoffError::Retry(_ctx) => IdentityError::DB(format!("Retry limit reached")),
-        }
-    }
-}
-
 impl From<AzureError> for IdentityError {
     fn from(err: AzureError) -> IdentityError {
         IdentityError::DB(format!("{:?}", err))
@@ -76,8 +67,8 @@ impl From<AzureError> for IdentityError {
 impl From<IdSequenceError> for IdentityError {
     fn from(err: IdSequenceError) -> IdentityError {
         match err {
-            IdSequenceError::DB(e) => IdentityError::DB(e),
             IdSequenceError::SequenceEnded => IdentityError::DB(format!("ID sequence out of values")),
+            e => IdentityError::DB(format!("Sequence error: {}", e)),
         }
     }
 }

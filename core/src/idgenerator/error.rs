@@ -1,4 +1,4 @@
-use crate::backoff::BackoffError;
+use actix_web::http::StatusCode;
 use actix_web::ResponseError;
 use azure_sdk_core::errors::AzureError;
 use std::error::Error;
@@ -10,6 +10,8 @@ pub enum IdSequenceError {
     DB(String),
     /// Sequence is out of id
     SequenceEnded,
+    /// Failed to generate id as some conflicts could not be resolved
+    Conflit,
 }
 
 impl fmt::Display for IdSequenceError {
@@ -17,6 +19,7 @@ impl fmt::Display for IdSequenceError {
         match *self {
             IdSequenceError::DB(ref e) => write!(f, "DB, {}", e),
             IdSequenceError::SequenceEnded => write!(f, "Sequence is out of id"),
+            IdSequenceError::Conflit => write!(f, "Could not generate id due to DB conflicts"),
         }
     }
 }
@@ -29,15 +32,11 @@ impl From<AzureError> for IdSequenceError {
     }
 }
 
-impl From<BackoffError<AzureError>> for IdSequenceError {
-    fn from(err: BackoffError<AzureError>) -> IdSequenceError {
-        match err {
-            BackoffError::Action(e) => IdSequenceError::DB(format!("{:?}", e)),
-            BackoffError::Retry(_ctx) => IdSequenceError::DB(format!("Internal error")),
+impl ResponseError for IdSequenceError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            IdSequenceError::DB(_) | IdSequenceError::SequenceEnded => StatusCode::INTERNAL_SERVER_ERROR,
+            IdSequenceError::Conflit => StatusCode::TOO_MANY_REQUESTS,
         }
     }
-}
-
-impl ResponseError for IdSequenceError {
-    // Default to 500 for now
 }

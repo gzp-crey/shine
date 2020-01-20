@@ -5,7 +5,6 @@ use super::{
     IdentityConfig,
 };
 use argon2;
-use azure_sdk_core::errors::AzureError;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
@@ -20,11 +19,12 @@ use data_encoding::BASE64;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{distributions::Alphanumeric, Rng};
 use shine_core::{
-    backoff::{self, BackoffContext, BackoffError},
+    azure_utils,
+    backoff::{self, Backoff, BackoffError},
     idgenerator::{IdSequence, SyncCounterConfig, SyncCounterStore},
     siteinfo::SiteInfo,
 };
-use std::{iter, str};
+use std::{iter, str, time::Duration};
 use validator::validate_email;
 
 const SALT_LEN: usize = 32;
@@ -142,16 +142,17 @@ impl IdentityManager {
 
     async fn try_insert_user(
         &self,
-        ctx: BackoffContext,
         sequence_id: u64,
         name: &str,
         password: &str,
         email: Option<&str>,
     ) -> Result<IdentityEntry, BackoffError<IdentityError>> {
-        let (id, sequence_id, salt) = self.generate_user_id(sequence_id).map_err(IdentityError::from)?;
+        let (id, sequence_id, salt) = self
+            .generate_user_id(sequence_id)
+            .map_err(|err| BackoffError::Permanent(IdentityError::from(err)))?;
         let password_config = argon2::Config::default();
-        let password_hash =
-            argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &password_config).map_err(IdentityError::from)?;
+        let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &password_config)
+            .map_err(|err| BackoffError::Permanent(IdentityError::from(err)))?;
         log::info!("Created new user id:{}, pwh:{}", id, password_hash);
         let identity = IdentityEntry::new(
             id,
@@ -162,23 +163,22 @@ impl IdentityManager {
             password_hash,
         );
 
-        let identity = self
-            .users
-            .insert_entry(identity.into_entry())
-            .await
-            .map_err(|err| ctx.retry_on_azure_conflict(err))
-            .map_err(IdentityError::from)?;
+        let identity = self.users.insert_entry(identity.into_entry()).await.map_err(|err| {
+            if azure_utils::is_conflict_error(&err) {
+                BackoffError::Transient(IdentityError::UserIdConflict)
+            } else {
+                BackoffError::Permanent(IdentityError::UserIdConflict)
+            }
+        })?;
 
         Ok(IdentityEntry::from_entry(identity))
     }
 
     async fn insert_user(&self, name: &str, password: &str, email: Option<&str>) -> Result<IdentityEntry, IdentityError> {
         let sequence_id = self.user_id_generator.get().await?;
-        backoff::retry(BackoffContext::new(3, 10.), |ctx| {
-            self.try_insert_user(ctx, sequence_id, name, password, email)
-        })
-        .await
-        .map_err(IdentityError::from)
+        backoff::Exponential::new(3, Duration::from_micros(10))
+            .async_execute(|_| self.try_insert_user(sequence_id, name, password, email))
+            .await
     }
 
     async fn delete_user(&self, identity: TableEntry<Identity>) {
@@ -201,7 +201,7 @@ impl IdentityManager {
         match self.indices.insert_entry(name_index.into_entry()).await {
             Ok(name_index) => Ok(NameIndexEntry::from_entry(name_index)),
             Err(e) => {
-                if is_conflict(&e) {
+                if azure_utils::is_conflict_error(&e) {
                     Err(IdentityError::NameTaken)
                 } else {
                     Err(IdentityError::from(e))
@@ -222,11 +222,11 @@ impl IdentityManager {
         if let Some(email_index) = EmailIndexEntry::from_identity(&identity) {
             match self.indices.insert_entry(email_index.into_entry()).await {
                 Ok(email_index) => Ok(Some(EmailIndexEntry::from_entry(email_index))),
-                Err(e) => {
-                    if is_conflict(&e) {
+                Err(err) => {
+                    if azure_utils::is_conflict_error(&err) {
                         Err(IdentityError::EmailTaken)
                     } else {
-                        Err(IdentityError::from(e))
+                        Err(IdentityError::from(err))
                     }
                 }
             }
@@ -330,7 +330,7 @@ impl IdentityManager {
         let session = SessionEntry::new(user_id.to_owned(), key, &site);
         match self.sessions.insert_entry(session.into_entry()).await {
             Ok(session) => Ok(SessionEntry::from_entry(session)),
-            Err(err) if is_conflict(&err) => Err(IdentityError::SessionKeyConflict),
+            Err(err) if azure_utils::is_conflict_error(&err) => Err(IdentityError::SessionKeyConflict),
             Err(err) => Err(err.into()),
         }
     }
@@ -346,7 +346,7 @@ impl IdentityManager {
         let session_index = SessionIndexEntry::from_identity(session);
         match self.indices.insert_entry(session_index.into_entry()).await {
             Ok(session_index) => Ok(SessionIndexEntry::from_entry(session_index)),
-            Err(err) if is_conflict(&err) => Err(IdentityError::SessionKeyConflict),
+            Err(err) if azure_utils::is_conflict_error(&err) => Err(IdentityError::SessionKeyConflict),
             Err(err) => Err(err.into()),
         }
     }
@@ -418,15 +418,6 @@ impl IdentityManager {
     pub async fn update_session(&self, _session: SessionEntry) -> Result<(), IdentityError> {
         unimplemented!()
     }
-}
-
-fn is_conflict(err: &AzureError) -> bool {
-    if let AzureError::UnexpectedHTTPResult(ref res) = err {
-        if res.status_code() == 409 {
-            return true;
-        }
-    }
-    false
 }
 
 fn validate_username(name: &str) -> bool {

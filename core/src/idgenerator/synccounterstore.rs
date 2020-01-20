@@ -1,6 +1,5 @@
 use super::IdSequenceError;
-use crate::backoff::{self, BackoffContext, BackoffError};
-use azure_sdk_core::errors::AzureError;
+use crate::backoff::{self, Backoff, BackoffError};
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
@@ -9,6 +8,7 @@ use azure_sdk_storage_table::{
 use core::ops::Range;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Duration;
 
 const PARTITION_KEY: &str = "counter";
 
@@ -42,13 +42,14 @@ impl SyncCounterStore {
         Ok(SyncCounterStore(Arc::new(Inner { counters })))
     }
 
-    async fn get_range_step(
-        &self,
-        ctx: BackoffContext,
-        sequence_id: &str,
-        count: u64,
-    ) -> Result<Result<Range<u64>, BackoffContext>, AzureError> {
-        match self.0.counters.get_entry::<Counter>(PARTITION_KEY, sequence_id).await? {
+    async fn get_range_step(&self, sequence_id: &str, count: u64) -> Result<Range<u64>, BackoffError<IdSequenceError>> {
+        match self
+            .0
+            .counters
+            .get_entry::<Counter>(PARTITION_KEY, sequence_id)
+            .await
+            .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))?
+        {
             None => {
                 let entry = TableEntry {
                     partition_key: PARTITION_KEY.to_string(),
@@ -60,8 +61,8 @@ impl SyncCounterStore {
                     .counters
                     .insert_entry(entry)
                     .await
-                    .map_err(|err| ctx.retry_on_azure_conflict(err))
-                    .map(|e| Ok(0..(e.payload.value)))
+                    .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))
+                    .map(|ok| 0..(ok.payload.value))
             }
             Some(mut entry) => {
                 let start = entry.payload.value;
@@ -70,18 +71,16 @@ impl SyncCounterStore {
                     .counters
                     .update_entry(entry)
                     .await
-                    .map_err(|err| ctx.retry_on_azure_conflict(err))
-                    .map(|e| Ok(start..(e.payload.value)))
+                    .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))
+                    .map(|ok| start..(ok.payload.value))
             }
         }
     }
 
     pub async fn get_range(&self, sequence_id: &str, count: u64) -> Result<Range<u64>, IdSequenceError> {
-        backoff::retry(BackoffContext::new(10, 10.), |ctx| {
-            self.get_range_step(ctx, sequence_id, count)
-        })
-        .await
-        .map_err(IdSequenceError::from)
+        backoff::Exponential::new(10, Duration::from_micros(10))
+            .async_execute(|_| self.get_range_step(sequence_id, count))
+            .await
     }
 
     pub async fn get(&self, sequince_id: &str) -> Result<u64, IdSequenceError> {
