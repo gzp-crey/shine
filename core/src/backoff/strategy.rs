@@ -36,7 +36,6 @@ impl Backoff for ConstantTimeout {
     }
 }
 
-
 /// Backoff policy to try executing operation with an exponential timeout and with a limited try count.
 pub struct Exponential {
     retry: usize,

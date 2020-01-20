@@ -1,10 +1,15 @@
 use azure_sdk_core::errors::AzureError;
 
 pub fn is_conflict_error(err: &AzureError) -> bool {
-    if let AzureError::UnexpectedHTTPResult(ref res) = err {
-        if res.status_code() == 409 {
-            return true;
-        }
+    match err {
+        AzureError::UnexpectedHTTPResult(e) if e.status_code() == 412 => true,
+        _ => false,
     }
-    false
+}
+
+pub fn is_conflict_error2(err: &AzureError) -> bool {
+    match err {
+        AzureError::UnexpectedHTTPResult(e) if e.status_code() == 409 => true,
+        _ => false,
+    }
 }

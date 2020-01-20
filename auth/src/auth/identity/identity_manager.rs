@@ -351,43 +351,38 @@ impl IdentityManager {
         }
     }
 
+    pub async fn try_create_session(
+        &self,
+        identity: &IdentityEntry,
+        site: &SiteInfo,
+    ) -> Result<SessionEntry, BackoffError<IdentityError>> {
+        let session = match self.try_insert_session(identity, site).await {
+            Ok(session) => session,
+            Err(IdentityError::SessionKeyConflict) => return Err(BackoffError::Transient(IdentityError::SessionKeyConflict)),
+            Err(err) => return Err(BackoffError::Permanent(err)),
+        };
+
+        let session_index = match self.try_insert_session_index(&session).await {
+            Ok(index) => index,
+            Err(IdentityError::SessionKeyConflict) => {
+                self.delete_session(session.into_entry()).await;
+                return Err(BackoffError::Transient(IdentityError::SessionKeyConflict));
+            }
+            Err(err) => {
+                self.delete_session(session.into_entry()).await;
+                return Err(BackoffError::Permanent(err));
+            }
+        };
+
+        log::info!("New session: {:?}", session);
+        log::debug!("Session index: {:?}", session_index);
+        return Ok(session);
+    }
+
     pub async fn create_session(&self, identity: &IdentityEntry, site: SiteInfo) -> Result<SessionEntry, IdentityError> {
-        let mut try_count = 3usize;
-        //todo: use backoff::retry
-        loop {
-            try_count -= 1;
-
-            let session = match self.try_insert_session(identity, &site).await {
-                Ok(session) => session,
-                Err(IdentityError::SessionKeyConflict) if try_count > 0 => {
-                    log::info!(
-                        "Retrying ({}) session key already used by user: {}",
-                        try_count,
-                        identity.user_id()
-                    );
-                    continue;
-                }
-                Err(err) => return Err(err),
-            };
-
-            let session_index = match self.try_insert_session_index(&session).await {
-                Ok(index) => index,
-                Err(IdentityError::SessionKeyConflict) if try_count > 0 => {
-                    log::info!("Retrying ({}) session key already used", try_count);
-                    self.delete_session(session.into_entry()).await;
-                    continue;
-                }
-                Err(err) => {
-                    log::info!("Creating session failed: {:?}, {:?}", identity, err);
-                    self.delete_session(session.into_entry()).await;
-                    return Err(err);
-                }
-            };
-
-            log::info!("New session: {:?}", session);
-            log::debug!("Session index: {:?}", session_index);
-            return Ok(session);
-        }
+        backoff::Exponential::new(3, Duration::from_micros(10))
+            .async_execute(|_| self.try_create_session(identity, &site))
+            .await
     }
 
     pub async fn find_identity_by_session(&self, session_key: &str) -> Result<(IdentityEntry, SessionEntry), IdentityError> {
