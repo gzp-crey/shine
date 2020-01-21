@@ -1,0 +1,433 @@
+use super::*;
+use argon2;
+use azure_utils::table_storage::EmptyData;
+use percent_encoding::{self, utf8_percent_encode};
+use rand::{self, seq::SliceRandom};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use shine_core::session::UserId;
+use validator::validate_email;
+
+const ID_LEN: usize = 8;
+const ID_ABC: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+
+const MAX_SALT_LEN: usize = 32;
+const SALT_ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+/// Data associated to each identity
+pub trait IdentityData : Serialize + DeserializeOwned
+{
+    fn id(&self) -> &str;
+    fn name(&self) -> &str;
+}
+
+/// Identity
+pub trait Identity {
+    type Data: IdentityData;
+
+    fn entity_keys(id: &str) -> (String, String);
+    fn from_entity(data: TableEntry<Self::Data>) -> Self where Self: Sized;
+    fn into_entity(self) -> TableEntry<Self::Data>;
+    fn entity(&self) -> &TableEntry<Self::Data>;
+    fn entity_mut(&mut self) -> &mut TableEntry<Self::Data>;
+    
+    fn data(&self) -> &Self::Data;
+    fn data_mut(&mut self) -> &mut Self::Data;
+    fn id(&self) -> &str { self.data().id()}
+    fn name(&self) -> &str { self.data().name()}
+}
+
+/// General index data for identity indices
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct IdentityIndexData {
+    identity_id: String
+}
+
+/// Data associated to a user identity
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UserIdentityData {
+    pub id: String,
+    pub sequence_id: u64,
+    pub salt: String,
+    pub name: String,
+    pub email: Option<String>,
+    pub email_validated: bool,
+    pub password_hash: String,
+}
+
+impl IdentityData for UserIdentityData {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+
+/// Identity assigned to a user
+#[derive(Debug)]
+pub struct UserIdentity(TableEntry<UserIdentityData>);
+
+impl UserIdentity {
+    pub fn new(
+        id: String,
+        sequence_id: u64,
+        salt: String,
+        name: String,
+        email: Option<String>,
+        password_hash: String,
+    ) -> UserIdentity {
+        let (partition_key, row_key) = Self::entity_keys(&id);
+        UserIdentity(TableEntry {
+            partition_key,
+            row_key,
+            etag: None,
+            payload: UserIdentityData {
+                id,
+                sequence_id,
+                salt,
+                name,
+                email,
+                email_validated: false,
+                password_hash,
+            },
+        })
+    }
+}
+
+impl Identity for UserIdentity {
+    type Data = UserIdentityData;
+
+    fn entity_keys(id: &str) -> (String, String) {
+        let id = id.splitn(2, '-').skip(1).next().unwrap();
+        (id[0..2].to_string(), id.to_string())
+    }
+
+    fn from_entity(entity: TableEntry<UserIdentityData>) -> Self {
+        Self(entity)
+    }
+
+    fn into_entity(self) -> TableEntry<UserIdentityData> {
+        self.0
+    }
+
+    fn entity(&self) -> &TableEntry<UserIdentityData> {
+        &self.0
+    }
+
+    fn entity_mut(&mut self) -> &TableEntry<UserIdentityData> {
+        &mut self.0
+    }
+
+    fn data(&self) -> &UserIdentityData {
+        &self.0.payload
+    }
+
+    fn data_mut(&mut self) -> &mut UserIdentityData {
+        &mut self.0.payload
+    }
+}
+
+impl From<UserIdentity> for UserId {
+    fn from(user: UserIdentity) -> Self {
+        UserId::new(user.data().id, user.data().name, vec![] /*user.roles*/)
+    }
+}
+
+/// Identity index by name
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct NameIndexData {
+    pub identity_id: String,
+}
+
+/// Storage type for index by name
+#[derive(Debug)]
+struct NameIndex(TableEntry<NameIndexData>);
+
+impl NameIndex {
+    pub fn entity_keys(name: &str) -> (String, String) {
+        (format!("name_{}", &name[0..2]), name.to_string())
+    }
+
+    pub fn from_identity<T>(entity: &TableEntry<T>) -> Self
+    where
+        T: Identity,
+    {
+        let name = &entity.payload.name();
+        let (partition_key, row_key) = Self::entity_keys(name);
+        Self(TableEntry {
+            partition_key,
+            row_key,
+            etag: None,
+            payload: NameIndexData {
+                identity_id: entity.payload.id().to_owned(),
+            },
+        })
+    }
+
+    pub fn from_entity(entity: TableEntry<NameIndexData>) -> Self {
+        Self(entity)
+    }
+
+    pub fn into_entity(self) -> TableEntry<NameIndexData> {
+        self.0
+    }
+
+    pub fn entity(&self) -> &TableEntry<NameIndexData> {
+        &self.0
+    }
+}
+
+/// Storage type for index by email
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct EmailIndexData {
+    pub identity_id: String,
+}
+
+#[derive(Debug)]
+pub struct EmailIndex(TableEntry<EmailIndexData>);
+
+impl EmailIndex {
+    pub fn entity_keys(email: &str) -> (String, String) {
+        (format!("email_{}", &email[0..2]), email.to_string())
+    }
+
+    pub fn from_identity(entity: &UserIdentity) -> Option<Self> {
+        if let Some(ref email) = entity.data().email {
+            let (partition_key, row_key) = Self::entity_keys(email);
+            Some(EmailIndex(TableEntry {
+                partition_key,
+                row_key,
+                etag: None,
+                payload: EmailIndexData {
+                    identity_id: entity.id().to_owned(),
+                },
+            }))
+        } else {
+            None
+        }
+    }
+
+    pub fn from_entity(entity: TableEntry<EmailIndexData>) -> Self {
+        Self(entity)
+    }
+
+    pub fn into_entity(self) -> TableEntry<EmailIndexData> {
+        self.0
+    }
+
+    pub fn entity(&self) -> &TableEntry<EmailIndexData> {
+        &self.0
+    }
+}
+
+fn validate_username(name: &str) -> bool {
+    name.chars().all(char::is_alphanumeric)
+}
+
+// Handling identites
+impl IdentityManager {
+    async fn find_identity_by_index<T>(&self, query: &str, password: Option<&str>) -> Result<T, IdentityError>
+    where
+        T: Identity,
+    {
+        let index = self.indices.query_entries::<IdentityIndexData>(Some(&query)).await?;
+        assert!(index.len() <= 1);
+        let index = index.first().ok_or(IdentityError::IdentityNotFound)?;
+
+        let identity_id = &index.payload.identity_id;
+        let (p, r) = T::entity_keys(&identity_id);
+        let identity = self.identities.get_entry(&p, &r).await?;
+        let identity = identity.map(T::from_entity).ok_or(IdentityError::IdentityNotFound)?;
+
+        if let Some(password) = password {
+            // check password if provided, this is a low level function and it's ok if no password was
+            if !argon2::verify_encoded(&identity.data().password_hash, password.as_bytes())? {
+                return Err(IdentityError::PasswordNotMatching);
+            }
+        }
+
+        Ok(identity)
+    }
+
+    async fn delete_identity<T>(&self, identity: TableEntry<T>)
+    where
+        T: Identity,
+    {
+        self.identities
+            .delete_entry(&identity.partition_key, &identity.row_key, identity.etag.as_deref())
+            .await
+            .unwrap_or_else(|e| {
+                log::error!(
+                    "Failed to delete identity([{}]/[{}]): {}",
+                    identity.partition_key,
+                    identity.row_key,
+                    e
+                )
+            });
+    }
+
+    pub async fn is_name_available(&self, name: &str) -> Result<bool, IdentityError> {
+        let (partition_key, row_key) = NameIndex::entity_keys(name);
+        Ok(self.indices.get_entry::<EmptyData>(&partition_key, row_key).await?.is_none())
+    }
+
+    async fn insert_name_index(&self, identity: &UserIdentity) -> Result<NameIndex, IdentityError> {
+        let name_index = NameIndex::from_identity(identity.entity());
+        match self.indices.insert_entry(name_index.into_entity()).await {
+            Ok(name_index) => Ok(NameIndex::from_entity(name_index)),
+            Err(e) => {
+                if azure_utils::is_precodition_error(&e) {
+                    Err(IdentityError::NameTaken)
+                } else {
+                    Err(IdentityError::from(e))
+                }
+            }
+        }
+    }
+
+    pub async fn is_email_available(&self, email: &str) -> Result<bool, IdentityError> {
+        let (partition_key, row_key) = EmailIndex::entity_keys(email);
+        Ok(self.indices.get_entry::<EmptyData>(&partition_key, &row_key).await?.is_none())
+    }
+
+    async fn insert_email_index(&self, identity: &UserIdentity) -> Result<Option<EmailIndex>, IdentityError> {
+        if let Some(email_index) = EmailIndex::from_identity(&identity) {
+            match self.indices.insert_entry(email_index.into_entity()).await {
+                Ok(email_index) => Ok(Some(EmailIndex::from_entity(email_index))),
+                Err(err) => {
+                    if azure_utils::is_precodition_error(&err) {
+                        Err(IdentityError::EmailTaken)
+                    } else {
+                        Err(IdentityError::from(err))
+                    }
+                }
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn try_create_user_identity(
+        &self,
+        sequence_id: u64,
+        name: &str,
+        password: &str,
+        email: Option<&str>,
+    ) -> Result<UserIdentity, BackoffError<IdentityError>> {
+        let mut rng = rand::thread_rng();
+        let salt = String::from_utf8(SALT_ABC.choose_multiple(&mut rng, MAX_SALT_LEN).cloned().collect::<Vec<_>>()).unwrap();
+        let id = String::from_utf8(ID_ABC.choose_multiple(&mut rng, ID_LEN).cloned().collect::<Vec<_>>()).unwrap();
+        let password_config = argon2::Config::default();
+        let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &password_config)
+            .map_err(IdentityError::from)
+            .map_err(IdentityError::into_backoff)?;
+
+        log::info!("Created new user id:{}, pwh:{}", id, password_hash);
+        let identity = UserIdentity::new(
+            format!("user-{}", id),
+            sequence_id,
+            salt,
+            name.to_owned(),
+            email.map(|e| e.to_owned()),
+            password_hash,
+        );
+
+        let identity = self
+            .identities
+            .insert_entry(identity.into_entity())
+            .await
+            .map_err(|err| {
+                if azure_utils::is_precodition_error(&err) {
+                    IdentityError::IdentityIdConflict
+                } else {
+                    IdentityError::from(err)
+                }
+            })
+            .map_err(IdentityError::into_backoff)?;
+
+        Ok(UserIdentity::from_entity(identity))
+    }
+
+    pub async fn create_user(
+        &self,
+        name: String,
+        email: Option<String>,
+        password: String,
+    ) -> Result<UserIdentity, IdentityError> {
+        // validate input
+        if !validate_username(&name) {
+            log::info!("Invalid user name: {}", name);
+            return Err(IdentityError::InvalidName);
+        }
+        if let Some(ref email) = email {
+            if !validate_email(email) {
+                log::info!("Invalid email: {}", email);
+                return Err(IdentityError::InvalidEmail);
+            }
+        }
+
+        // preliminary db checks (reduce the number of rollbacks)
+        if !self.is_name_available(&name).await? {
+            log::info!("User name {} already taken", name);
+            return Err(IdentityError::NameTaken);
+        }
+        if let Some(ref email) = email {
+            if !self.is_email_available(email).await? {
+                log::info!("Email {} already taken", email);
+                return Err(IdentityError::EmailTaken);
+            }
+        }
+
+        let identity = {
+            let sequence_id = self.identity_id_generator.get().await?;
+            backoff::Exponential::new(3, Duration::from_micros(10))
+                .async_execute(|_| self.try_create_user_identity(sequence_id, &name, &password, email.as_deref()))
+                .await?
+        };
+
+        let name_index = match self.insert_name_index(&identity).await {
+            Ok(index) => index,
+            Err(e) => {
+                log::info!("Creating user failed (name_index): {:?}, {:?}", identity, e);
+                self.delete_identity(identity.into_entity()).await;
+                return Err(e);
+            }
+        };
+
+        let email_index = match self.insert_email_index(&identity).await {
+            Ok(index) => index,
+            Err(e) => {
+                log::info!("Creating user failed (email_index): {:?}, {:?}", identity, e);
+                self.delete_identity(identity.into_entity()).await;
+                self.delete_index(name_index.into_entity()).await;
+                return Err(e);
+            }
+        };
+
+        log::info!("New user registered: {:?}", identity);
+        log::debug!("Name index: {:?}", name_index);
+        log::debug!("Email index: {:?}", email_index);
+        Ok(identity)
+    }
+
+    pub async fn find_user_by_name_email(&self, name_email: &str, password: Option<&str>) -> Result<UserIdentity, IdentityError> {
+        let query_name = {
+            let (p, r) = NameIndex::entity_keys(name_email);
+            format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
+        };
+        let query_email = {
+            let (p, r) = EmailIndex::entity_keys(name_email);
+            format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
+        };
+        let query = format!("(({}) or ({}))", query_name, query_email);
+        let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
+
+        self.find_identity_by_index(&query, password).await
+    }
+}
