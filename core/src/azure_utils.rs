@@ -1,4 +1,5 @@
 use azure_sdk_core::errors::AzureError;
+use serde::{Deserialize, Serialize};
 
 /// Unexpected status code error for CONFLICT (409)
 /// [[RFC7231, Section 6.5.8](https://tools.ietf.org/html/rfc7231#section-6.5.8)]
@@ -17,4 +18,9 @@ pub fn is_precodition_error(err: &AzureError) -> bool {
         AzureError::UnexpectedHTTPResult(e) if e.status_code() == 412 => true,
         _ => false,
     }
+}
+
+pub mod table_storage {
+    #[derive(Serialize, Deserialize)]
+    pub struct EmptyEntry {}
 }

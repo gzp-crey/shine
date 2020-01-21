@@ -1,6 +1,5 @@
 use super::identityentry::IdentityIndex;
 use azure_sdk_storage_table::TableEntry;
-//use shine_core::serde::date_serializer;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shine_core::{session::SessionKey, siteinfo::SiteInfo};
@@ -11,8 +10,8 @@ pub struct Session {
     pub remote: String,
     pub agent: String,
 
-    //#[serde(with = "date_serializer")]
     pub issued: DateTime<Utc>,
+    pub refreshed: DateTime<Utc>,
 }
 
 #[derive(Debug)]
@@ -34,6 +33,7 @@ impl SessionEntry {
                 remote: site.remote().to_string(),
                 agent: site.agent().to_string(),
                 issued: Utc::now(),
+                refreshed: Utc::now(),
             },
         })
     }

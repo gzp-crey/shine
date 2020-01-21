@@ -10,14 +10,10 @@ env_logger = "0.7.1"
 
 futures = "0.3"
 bytes = "0.5"
-itertools = "0.8"
 chrono = "0.4"
 
 data-encoding = "2.1"
 rand = "0.7"
-block-modes = "0.3"
-block-cipher-trait = "0.6"
-blowfish = "0.4"
 rust-argon2 = "0.6"
 
 serde = "1.0"

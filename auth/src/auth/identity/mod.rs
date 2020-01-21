@@ -1,11 +1,9 @@
 mod error;
-mod identityentry;
 mod manager;
-mod sessionentry;
+//mod sessionentry;
 
 use super::State;
 use actix_web::{web, Error as ActixError, HttpResponse};
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use shine_core::authheader::BasicAuth;
 use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
@@ -17,7 +15,7 @@ pub use self::manager::*;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityConfig {
     password_pepper: String,
-    user_id_secret: String,
+    identity_id_secret: String,
     storage_account: String,
     storage_account_key: String,
 }
@@ -80,9 +78,15 @@ pub async fn refresh_session(
     log::info!("refresh session {:?}, {:?}, {:?}", user_id, session_key, site);
 
     IdentityCookie::clear(&identity_session);
-    let (identity, mut session) = state.identity_db().find_identity_by_session(session_key.key()).await?;
-    session.data_mut().issued = Utc::now();
-    state.identity_db().update_session(session).await?;
-
-    Ok(HttpResponse::Ok().finish())
+    match state.identity_db().refresh_session(session_key.key(), &site).await {
+        Ok((identity, session)) => {
+            UserId::from(identity).to_session(&identity_session)?;
+            SessionKey::from(session).to_session(&identity_session)?;
+            Ok(HttpResponse::Ok().finish())
+        }
+        Err(e) => {
+            IdentityCookie::clear(&identity_session);
+            Err(e.into())
+        }
+    }
 }

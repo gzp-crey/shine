@@ -1,4 +1,5 @@
 use super::*;
+use chrono::Utc;
 use data_encoding;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::Rng;
@@ -15,11 +16,11 @@ impl IdentityManager {
     }
 
     async fn try_insert_session(&self, identity: &IdentityEntry, site: &SiteInfo) -> Result<SessionEntry, IdentityError> {
-        let user_id = identity.user_id();
+        let id = identity.id();
         let key = self.genrate_session_key();
-        log::info!("Created new session key [{}] for {}", key, user_id);
+        log::info!("Created new session key [{}] for {}", key, id);
 
-        let session = SessionEntry::new(user_id.to_owned(), key, &site);
+        let session = SessionEntry::new(id.to_owned(), key, &site);
         match self.sessions.insert_entry(session.into_entry()).await {
             Ok(session) => Ok(SessionEntry::from_entry(session)),
             Err(err) if azure_utils::is_precodition_error(&err) => Err(IdentityError::SessionKeyConflict),
@@ -28,7 +29,7 @@ impl IdentityManager {
     }
 
     async fn delete_session(&self, session: TableEntry<Session>) {
-        self.users
+        self.sessions
             .delete_entry(&session.partition_key, &session.row_key, session.etag.as_deref())
             .await
             .unwrap_or_else(|e| log::error!("Failed to delete session {:?}: {}", session, e));
@@ -48,21 +49,16 @@ impl IdentityManager {
         identity: &IdentityEntry,
         site: &SiteInfo,
     ) -> Result<SessionEntry, BackoffError<IdentityError>> {
-        let session = match self.try_insert_session(identity, site).await {
-            Ok(session) => session,
-            Err(IdentityError::SessionKeyConflict) => return Err(BackoffError::Transient(IdentityError::SessionKeyConflict)),
-            Err(err) => return Err(BackoffError::Permanent(err)),
-        };
+        let session = self
+            .try_insert_session(identity, site)
+            .await
+            .map_err(IdentityError::into_backoff)?;
 
         let session_index = match self.try_insert_session_index(&session).await {
             Ok(index) => index,
-            Err(IdentityError::SessionKeyConflict) => {
+            Err(e) => {
                 self.delete_session(session.into_entry()).await;
-                return Err(BackoffError::Transient(IdentityError::SessionKeyConflict));
-            }
-            Err(err) => {
-                self.delete_session(session.into_entry()).await;
-                return Err(BackoffError::Permanent(err));
+                return Err(e.into_backoff());
             }
         };
 
@@ -89,20 +85,55 @@ impl IdentityManager {
         };
 
         let session = {
-            let partion_key = format!("{}", identity.user_id());
+            let partion_key = format!("{}", identity.id());
             let row_key = format!("session-{}", session_key);
             self.sessions
                 .get_entry(&partion_key, &row_key)
                 .await?
                 .map(SessionEntry::from_entry)
-                .ok_or(IdentityError::UserNotFound)?
+                .ok_or(IdentityError::IdentityNotFound)?
         };
 
         log::debug!("Session found {:?} for identity {:?}", session, identity);
         Ok((identity, session))
     }
 
-    pub async fn update_session(&self, _session: SessionEntry) -> Result<(), IdentityError> {
-        unimplemented!()
+    async fn update_session(&self, session: SessionEntry) -> Result<SessionEntry, IdentityError> {
+        self.sessions
+            .update_entry(session.into_entry())
+            .await
+            .map_err(IdentityError::from)
+            .map(SessionEntry::from_entry)
+    }
+
+    async fn try_refresh_session(
+        &self,
+        session_key: &str,
+        site: &SiteInfo,
+    ) -> Result<(IdentityEntry, SessionEntry), BackoffError<IdentityError>> {
+        let (identity, mut session) = self
+            .find_identity_by_session(session_key)
+            .await
+            .map_err(IdentityError::into_backoff)?;
+
+        // validate site
+        if session.data().remote != site.remote() || session.data().agent != site.agent() {
+            return Err(IdentityError::SessionExpired.into_backoff());
+        }
+
+        session.data_mut().refreshed = Utc::now();
+
+        let session = self.update_session(session).await.map_err(IdentityError::into_backoff)?;
+        Ok((identity, session))
+    }
+
+    pub async fn refresh_session(
+        &self,
+        session_key: &str,
+        site: &SiteInfo,
+    ) -> Result<(IdentityEntry, SessionEntry), IdentityError> {
+        backoff::Exponential::new(3, Duration::from_micros(10))
+            .async_execute(|_| self.try_refresh_session(session_key, site))
+            .await
     }
 }

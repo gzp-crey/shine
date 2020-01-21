@@ -2,10 +2,8 @@ use actix_web::http::StatusCode;
 use actix_web::ResponseError;
 use argon2::Error as Argon2Error;
 use azure_sdk_core::errors::AzureError;
-use block_cipher_trait;
-use block_modes;
 use data_encoding;
-use shine_core::idgenerator::IdSequenceError;
+use shine_core::{backoff::BackoffError, idgenerator::IdSequenceError};
 use std::{fmt, str};
 
 #[derive(Debug)]
@@ -17,11 +15,22 @@ pub enum IdentityError {
     InvalidEmail,
     NameTaken,
     EmailTaken,
-    UserNotFound,
+    IdentityNotFound,
     PasswordNotMatching,
-    UserIdConflict,
+    IdentityIdConflict,
     SessionKeyConflict,
     SessionRequired,
+    SessionExpired,
+}
+
+impl IdentityError {
+    pub fn into_backoff(self) -> BackoffError<IdentityError> {
+        match self {
+            IdentityError::IdentityIdConflict => BackoffError::Transient(IdentityError::IdentityIdConflict),
+            IdentityError::SessionKeyConflict => BackoffError::Transient(IdentityError::SessionKeyConflict),
+            e => BackoffError::Permanent(e),
+        }
+    }
 }
 
 impl fmt::Display for IdentityError {
@@ -29,14 +38,16 @@ impl fmt::Display for IdentityError {
         match *self {
             IdentityError::DB(ref e) => write!(f, "DB, {}", e),
             IdentityError::Encryption(ref e) => write!(f, "Encryption, encryption failed: {}", e),
-            IdentityError::InvalidName => write!(f, "Invalid user name"),
+            IdentityError::InvalidName => write!(f, "Invalid name"),
             IdentityError::InvalidEmail => write!(f, "Invalid email"),
-            IdentityError::NameTaken => write!(f, "User name already taken"),
+            IdentityError::NameTaken => write!(f, "Name already taken"),
             IdentityError::EmailTaken => write!(f, "Email already taken"),
-            IdentityError::UserIdConflict => write!(f, "User id already in use"),
+            IdentityError::IdentityIdConflict => write!(f, "Identity id already in use"),
             IdentityError::SessionKeyConflict => write!(f, "Login key already in use"),
-            IdentityError::UserNotFound | IdentityError::PasswordNotMatching => write!(f, "Invalid user or password"),
+            IdentityError::IdentityNotFound => write!(f, "Identity not found"),
+            IdentityError::PasswordNotMatching => write!(f, "Invalid user or password"),
             IdentityError::SessionRequired => write!(f, "Login required"),
+            IdentityError::SessionExpired => write!(f, "Login expired"),
         }
     }
 }
@@ -49,11 +60,12 @@ impl ResponseError for IdentityError {
             IdentityError::Encryption(_) => StatusCode::BAD_REQUEST,
             IdentityError::NameTaken => StatusCode::CONFLICT,
             IdentityError::EmailTaken => StatusCode::CONFLICT,
-            IdentityError::UserIdConflict => StatusCode::TOO_MANY_REQUESTS,
+            IdentityError::IdentityIdConflict => StatusCode::TOO_MANY_REQUESTS,
             IdentityError::SessionKeyConflict => StatusCode::TOO_MANY_REQUESTS,
-            IdentityError::UserNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
+            IdentityError::IdentityNotFound | IdentityError::PasswordNotMatching => StatusCode::FORBIDDEN,
             IdentityError::SessionRequired => StatusCode::UNAUTHORIZED,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+            IdentityError::SessionExpired => StatusCode::UNAUTHORIZED,
+            IdentityError::DB(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -81,24 +93,6 @@ impl From<Argon2Error> for IdentityError {
 
 impl From<data_encoding::DecodeError> for IdentityError {
     fn from(err: data_encoding::DecodeError) -> IdentityError {
-        IdentityError::Encryption(err.to_string())
-    }
-}
-
-impl From<block_modes::InvalidKeyIvLength> for IdentityError {
-    fn from(err: block_modes::InvalidKeyIvLength) -> IdentityError {
-        IdentityError::Encryption(err.to_string())
-    }
-}
-
-impl From<block_modes::BlockModeError> for IdentityError {
-    fn from(err: block_modes::BlockModeError) -> IdentityError {
-        IdentityError::Encryption(err.to_string())
-    }
-}
-
-impl From<block_cipher_trait::InvalidKeyLength> for IdentityError {
-    fn from(err: block_cipher_trait::InvalidKeyLength) -> IdentityError {
         IdentityError::Encryption(err.to_string())
     }
 }
