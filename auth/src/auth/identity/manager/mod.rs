@@ -1,7 +1,4 @@
-use super::{
-    error::IdentityError,
-    IdentityConfig,
-};
+use super::{error::IdentityError, IdentityConfig};
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
@@ -66,28 +63,6 @@ impl IdentityManager {
             .await
             .unwrap_or_else(|e| log::error!("Failed to delete index: {}", e));
     }
-
-    /*async fn find_identity_by_index(&self, query: &str, password: Option<&str>) -> Result<IdentityEntry, IdentityError> {
-        let index = self.indices.query_entries::<IdentityIndex>(Some(&query)).await?;
-        assert!(index.len() <= 1);
-        let index = index.first().ok_or(IdentityError::IdentityNotFound)?;
-
-        let identity_id = &index.payload.identity_id;
-        let partion_key = IdentityEntry::generate_partion_key(&identity_id);
-        let identity = self.identities.get_entry(&partion_key, &identity_id).await?;
-        let identity = identity
-            .map(IdentityEntry::from_entry)
-            .ok_or(IdentityError::IdentityNotFound)?;
-
-        if let Some(password) = password {
-            // check password if provided, this is a low level function and it's ok if no password was
-            if !argon2::verify_encoded(&identity.data().password_hash, password.as_bytes())? {
-                return Err(IdentityError::PasswordNotMatching);
-            }
-        }
-
-        Ok(identity)
-    }*/
 }
 
 mod identity;
