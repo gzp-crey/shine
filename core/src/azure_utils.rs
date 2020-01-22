@@ -1,5 +1,4 @@
 use azure_sdk_core::errors::AzureError;
-use serde::{Deserialize, Serialize};
 
 /// Unexpected status code error for CONFLICT (409)
 /// [[RFC7231, Section 6.5.8](https://tools.ietf.org/html/rfc7231#section-6.5.8)]
@@ -21,6 +20,8 @@ pub fn is_precodition_error(err: &AzureError) -> bool {
 }
 
 pub mod table_storage {
+    use serde::{Deserialize, Serialize};
+
     #[derive(Serialize, Deserialize)]
-    pub struct EmptyEntry {}
+    pub struct EmptyData {}
 }

@@ -1,6 +1,5 @@
 mod error;
 mod manager;
-//mod sessionentry;
 
 use super::State;
 use actix_web::{web, Error as ActixError, HttpResponse};
@@ -58,7 +57,7 @@ pub async fn login_basic_auth(
 
     let identity = state
         .identity_db()
-        .find_identity_by_name_email(&user_id, password.as_deref())
+        .find_user_by_name_email(&user_id, password.as_deref())
         .await?;
     let session = state.identity_db().create_session(&identity, site).await?;
 

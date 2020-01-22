@@ -1,10 +1,16 @@
-use super::*;
+use super::super::{error::IdentityError, IdentityManager};
 use argon2;
+use azure_sdk_storage_table::TableEntry;
 use azure_utils::table_storage::EmptyData;
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{self, seq::SliceRandom};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shine_core::session::UserId;
+use shine_core::{
+    azure_utils,
+    backoff::{self, Backoff, BackoffError},
+};
+use std::{str, time::Duration};
 use validator::validate_email;
 
 const ID_LEN: usize = 8;
@@ -14,8 +20,7 @@ const MAX_SALT_LEN: usize = 32;
 const SALT_ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 /// Data associated to each identity
-pub trait IdentityData : Serialize + DeserializeOwned
-{
+pub trait IdentityData: Serialize + DeserializeOwned {
     fn id(&self) -> &str;
     fn name(&self) -> &str;
 }
@@ -24,23 +29,80 @@ pub trait IdentityData : Serialize + DeserializeOwned
 pub trait Identity {
     type Data: IdentityData;
 
+    /// Generate partition and row keys from the id of an identity
     fn entity_keys(id: &str) -> (String, String);
-    fn from_entity(data: TableEntry<Self::Data>) -> Self where Self: Sized;
+
+    /// Create Self from the stored table entity
+    fn from_entity(data: TableEntry<Self::Data>) -> Self
+    where
+        Self: Sized;
+
+    /// Create a the table entity to store from Self
     fn into_entity(self) -> TableEntry<Self::Data>;
-    fn entity(&self) -> &TableEntry<Self::Data>;
-    fn entity_mut(&mut self) -> &mut TableEntry<Self::Data>;
-    
+
+    /// Return the associated data
+    fn into_data(self) -> Self::Data;
+
+    /// Return the data associated to an identity
     fn data(&self) -> &Self::Data;
+
+    /// Return the mutable data associated to an identity
     fn data_mut(&mut self) -> &mut Self::Data;
-    fn id(&self) -> &str { self.data().id()}
-    fn name(&self) -> &str { self.data().name()}
+
+    /// Return the (unique) id of the identity
+    fn id(&self) -> &str {
+        self.data().id()
+    }
+
+    /// Return the (unique) name of an identity
+    fn name(&self) -> &str {
+        self.data().name()
+    }
+}
+
+/// Data associated to each identity
+pub trait IdentityIndexData: Serialize + DeserializeOwned {
+    /// Id of the associated identity
+    fn id(&self) -> &str;
+}
+
+pub trait IdentityIndex {
+    type Index: IdentityIndexData;
+
+    /// Generate partition and row keys from the key to use as the indexed for an identity
+    fn entity_keys(key: &str) -> (String, String);
+
+    /// Create Self from the stored table entity
+    fn from_entity(data: TableEntry<Self::Index>) -> Self
+    where
+        Self: Sized;
+
+    /// Create a the table entity to store from Self
+    fn into_entity(self) -> TableEntry<Self::Index>;
+
+    /// Return the associated data
+    fn into_data(self) -> Self::Index;
+
+    /// Return the data associated to the index (and not to the identity)
+    fn data(&self) -> &Self::Index;
+
+    /// Return the mutable data associated to the index (and not to the identity)
+    fn data_mut(&mut self) -> &mut Self::Index;
+
+    /// The unique key to index
+    fn key(&self) -> &str;
+
+    /// Return the (unique) id of the identity
+    fn id(&self) -> &str {
+        self.data().id()
+    }
 }
 
 /// General index data for identity indices
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct IdentityIndexData {
-    identity_id: String
+pub struct IdentityIndexedId {
+    pub identity_id: String,
 }
 
 /// Data associated to a user identity
@@ -65,7 +127,6 @@ impl IdentityData for UserIdentityData {
         &self.name
     }
 }
-
 
 /// Identity assigned to a user
 #[derive(Debug)]
@@ -114,12 +175,8 @@ impl Identity for UserIdentity {
         self.0
     }
 
-    fn entity(&self) -> &TableEntry<UserIdentityData> {
-        &self.0
-    }
-
-    fn entity_mut(&mut self) -> &TableEntry<UserIdentityData> {
-        &mut self.0
+    fn into_data(self) -> UserIdentityData {
+        self.0.payload
     }
 
     fn data(&self) -> &UserIdentityData {
@@ -133,52 +190,79 @@ impl Identity for UserIdentity {
 
 impl From<UserIdentity> for UserId {
     fn from(user: UserIdentity) -> Self {
-        UserId::new(user.data().id, user.data().name, vec![] /*user.roles*/)
+        let data = user.into_data();
+        UserId::new(data.id, data.name, vec![] /*user.roles*/)
     }
 }
 
-/// Identity index by name
+/// Data associated to an identity index by name
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct NameIndexData {
-    pub identity_id: String,
+    #[serde(flatten)]
+    pub indexed_id: IdentityIndexedId,
 }
 
-/// Storage type for index by name
+impl IdentityIndexData for NameIndexData {
+    fn id(&self) -> &str {
+        &self.indexed_id.identity_id
+    }
+}
+
+/// Index identity by name
 #[derive(Debug)]
 struct NameIndex(TableEntry<NameIndexData>);
 
 impl NameIndex {
-    pub fn entity_keys(name: &str) -> (String, String) {
-        (format!("name_{}", &name[0..2]), name.to_string())
-    }
-
-    pub fn from_identity<T>(entity: &TableEntry<T>) -> Self
+    pub fn from_identity<T>(identity: &T) -> Self
     where
         T: Identity,
     {
-        let name = &entity.payload.name();
-        let (partition_key, row_key) = Self::entity_keys(name);
+        let name = &identity.name();
+        let (partition_key, row_key) = <Self as IdentityIndex>::entity_keys(name);
         Self(TableEntry {
             partition_key,
             row_key,
             etag: None,
             payload: NameIndexData {
-                identity_id: entity.payload.id().to_owned(),
+                indexed_id: IdentityIndexedId {
+                    identity_id: identity.id().to_owned(),
+                },
             },
         })
     }
+}
 
-    pub fn from_entity(entity: TableEntry<NameIndexData>) -> Self {
+impl IdentityIndex for NameIndex {
+    type Index = NameIndexData;
+
+    fn entity_keys(id: &str) -> (String, String) {
+        let id = id.splitn(2, '-').skip(1).next().unwrap();
+        (format!("name-{}", &id[0..2]), id.to_string())
+    }
+
+    fn from_entity(entity: TableEntry<NameIndexData>) -> Self {
         Self(entity)
     }
 
-    pub fn into_entity(self) -> TableEntry<NameIndexData> {
+    fn into_entity(self) -> TableEntry<NameIndexData> {
         self.0
     }
 
-    pub fn entity(&self) -> &TableEntry<NameIndexData> {
-        &self.0
+    fn into_data(self) -> NameIndexData {
+        self.0.payload
+    }
+
+    fn data(&self) -> &NameIndexData {
+        &self.0.payload
+    }
+
+    fn data_mut(&mut self) -> &mut NameIndexData {
+        &mut self.0.payload
+    }
+
+    fn key(&self) -> &str {
+        &self.0.row_key
     }
 }
 
@@ -186,7 +270,14 @@ impl NameIndex {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct EmailIndexData {
-    pub identity_id: String,
+    #[serde(flatten)]
+    pub indexed_id: IdentityIndexedId,
+}
+
+impl IdentityIndexData for EmailIndexData {
+    fn id(&self) -> &str {
+        &self.indexed_id.identity_id
+    }
 }
 
 #[derive(Debug)]
@@ -194,35 +285,58 @@ pub struct EmailIndex(TableEntry<EmailIndexData>);
 
 impl EmailIndex {
     pub fn entity_keys(email: &str) -> (String, String) {
-        (format!("email_{}", &email[0..2]), email.to_string())
+        (format!("email-{}", &email[0..2]), email.to_string())
     }
 
-    pub fn from_identity(entity: &UserIdentity) -> Option<Self> {
-        if let Some(ref email) = entity.data().email {
+    pub fn from_identity(identity: &UserIdentity) -> Option<Self> {
+        if let Some(ref email) = identity.data().email {
             let (partition_key, row_key) = Self::entity_keys(email);
             Some(EmailIndex(TableEntry {
                 partition_key,
                 row_key,
                 etag: None,
                 payload: EmailIndexData {
-                    identity_id: entity.id().to_owned(),
+                    indexed_id: IdentityIndexedId {
+                        identity_id: identity.id().to_owned(),
+                    },
                 },
             }))
         } else {
             None
         }
     }
+}
 
-    pub fn from_entity(entity: TableEntry<EmailIndexData>) -> Self {
+impl IdentityIndex for EmailIndex {
+    type Index = EmailIndexData;
+
+    fn entity_keys(id: &str) -> (String, String) {
+        let id = id.splitn(2, '-').skip(1).next().unwrap();
+        (id[0..2].to_string(), id.to_string())
+    }
+
+    fn from_entity(entity: TableEntry<EmailIndexData>) -> Self {
         Self(entity)
     }
 
-    pub fn into_entity(self) -> TableEntry<EmailIndexData> {
+    fn into_entity(self) -> TableEntry<EmailIndexData> {
         self.0
     }
 
-    pub fn entity(&self) -> &TableEntry<EmailIndexData> {
-        &self.0
+    fn into_data(self) -> EmailIndexData {
+        self.0.payload
+    }
+
+    fn data(&self) -> &EmailIndexData {
+        &self.0.payload
+    }
+
+    fn data_mut(&mut self) -> &mut EmailIndexData {
+        &mut self.0.payload
+    }
+
+    fn key(&self) -> &str {
+        &self.0.row_key
     }
 }
 
@@ -232,11 +346,22 @@ fn validate_username(name: &str) -> bool {
 
 // Handling identites
 impl IdentityManager {
-    async fn find_identity_by_index<T>(&self, query: &str, password: Option<&str>) -> Result<T, IdentityError>
+    pub(crate) async fn remove_index<T>(&self, index: T)
+    where
+        T: IdentityIndex,
+    {
+        let index = index.into_entity();
+        self.indices
+            .delete_entry(&index.partition_key, &index.row_key, index.etag.as_deref())
+            .await
+            .unwrap_or_else(|e| log::error!("Failed to delete index: {}", e));
+    }
+
+    pub(crate) async fn find_identity_by_index<T>(&self, query: &str) -> Result<T, IdentityError>
     where
         T: Identity,
     {
-        let index = self.indices.query_entries::<IdentityIndexData>(Some(&query)).await?;
+        let index = self.indices.query_entries::<IdentityIndexedId>(Some(&query)).await?;
         assert!(index.len() <= 1);
         let index = index.first().ok_or(IdentityError::IdentityNotFound)?;
 
@@ -245,8 +370,14 @@ impl IdentityManager {
         let identity = self.identities.get_entry(&p, &r).await?;
         let identity = identity.map(T::from_entity).ok_or(IdentityError::IdentityNotFound)?;
 
+        Ok(identity)
+    }
+
+    pub(crate) async fn find_user_by_index(&self, query: &str, password: Option<&str>) -> Result<UserIdentity, IdentityError> {
+        let identity = self.find_identity_by_index::<UserIdentity>(query).await?;
+
         if let Some(password) = password {
-            // check password if provided, this is a low level function and it's ok if no password was
+            // check password if provided
             if !argon2::verify_encoded(&identity.data().password_hash, password.as_bytes())? {
                 return Err(IdentityError::PasswordNotMatching);
             }
@@ -255,10 +386,11 @@ impl IdentityManager {
         Ok(identity)
     }
 
-    async fn delete_identity<T>(&self, identity: TableEntry<T>)
+    async fn remove_identity<T>(&self, identity: T)
     where
         T: Identity,
     {
+        let identity = identity.into_entity();
         self.identities
             .delete_entry(&identity.partition_key, &identity.row_key, identity.etag.as_deref())
             .await
@@ -272,13 +404,14 @@ impl IdentityManager {
             });
     }
 
+    /// Return if the given name can be used as a new identity name
     pub async fn is_name_available(&self, name: &str) -> Result<bool, IdentityError> {
         let (partition_key, row_key) = NameIndex::entity_keys(name);
-        Ok(self.indices.get_entry::<EmptyData>(&partition_key, row_key).await?.is_none())
+        Ok(self.indices.get_entry::<EmptyData>(&partition_key, &row_key).await?.is_none())
     }
 
     async fn insert_name_index(&self, identity: &UserIdentity) -> Result<NameIndex, IdentityError> {
-        let name_index = NameIndex::from_identity(identity.entity());
+        let name_index = NameIndex::from_identity(identity);
         match self.indices.insert_entry(name_index.into_entity()).await {
             Ok(name_index) => Ok(NameIndex::from_entity(name_index)),
             Err(e) => {
@@ -291,6 +424,7 @@ impl IdentityManager {
         }
     }
 
+    /// Return if the given email can be used.
     pub async fn is_email_available(&self, email: &str) -> Result<bool, IdentityError> {
         let (partition_key, row_key) = EmailIndex::entity_keys(email);
         Ok(self.indices.get_entry::<EmptyData>(&partition_key, &row_key).await?.is_none())
@@ -354,6 +488,7 @@ impl IdentityManager {
         Ok(UserIdentity::from_entity(identity))
     }
 
+    /// Creates a new user identity.
     pub async fn create_user(
         &self,
         name: String,
@@ -395,7 +530,7 @@ impl IdentityManager {
             Ok(index) => index,
             Err(e) => {
                 log::info!("Creating user failed (name_index): {:?}, {:?}", identity, e);
-                self.delete_identity(identity.into_entity()).await;
+                self.remove_identity(identity).await;
                 return Err(e);
             }
         };
@@ -404,8 +539,8 @@ impl IdentityManager {
             Ok(index) => index,
             Err(e) => {
                 log::info!("Creating user failed (email_index): {:?}, {:?}", identity, e);
-                self.delete_identity(identity.into_entity()).await;
-                self.delete_index(name_index.into_entity()).await;
+                self.remove_identity(identity).await;
+                self.remove_index(name_index).await;
                 return Err(e);
             }
         };
@@ -416,6 +551,8 @@ impl IdentityManager {
         Ok(identity)
     }
 
+    /// Find a user identity by email or name.
+    /// If a password it is also checked.
     pub async fn find_user_by_name_email(&self, name_email: &str, password: Option<&str>) -> Result<UserIdentity, IdentityError> {
         let query_name = {
             let (p, r) = NameIndex::entity_keys(name_email);
@@ -428,6 +565,6 @@ impl IdentityManager {
         let query = format!("(({}) or ({}))", query_name, query_email);
         let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
 
-        self.find_identity_by_index(&query, password).await
+        self.find_user_by_index(&query, password).await
     }
 }
