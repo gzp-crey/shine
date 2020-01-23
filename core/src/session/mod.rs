@@ -52,6 +52,10 @@ impl SignedCookieConfiguration for IdentityCookie {
         "/"
     }
 
+    fn secure(&self) -> bool {
+        false
+    }
+
     /*fn domain(&self) -> &str {
         "localhost"
     }*/

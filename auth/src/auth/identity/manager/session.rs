@@ -7,7 +7,7 @@ use percent_encoding::{self, utf8_percent_encode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use shine_core::{
-    azure_utils,
+    azure_utils::{self, table_storage::EmptyData},
     backoff::{self, Backoff, BackoffError},
     session::SessionKey,
     siteinfo::SiteInfo,
@@ -25,7 +25,9 @@ pub struct SessionData {
     pub agent: String,
 
     pub issued: DateTime<Utc>,
+    pub refresh_count: u64,
     pub refreshed: DateTime<Utc>,
+    pub disabled: Option<DateTime<Utc>>,
 }
 
 /// The session of a user. Only users may have a session, other type of identites cannot log in and thus cannot
@@ -49,7 +51,9 @@ impl Session {
                 remote: site.remote().to_string(),
                 agent: site.agent().to_string(),
                 issued: Utc::now(),
+                refresh_count: 0,
                 refreshed: Utc::now(),
+                disabled: None,
             },
         })
     }
@@ -81,8 +85,7 @@ impl Session {
 
 impl From<Session> for SessionKey {
     fn from(session: Session) -> SessionKey {
-        let session = session.into_entity();
-        SessionKey::new(session.row_key)
+        SessionKey::new(session.key().to_string())
     }
 }
 
@@ -149,7 +152,7 @@ impl IdentityIndex for SessionIndex {
         &mut self.0.payload
     }
 
-    fn key(&self) -> &str {
+    fn index_key(&self) -> &str {
         &self.0.row_key
     }
 }
@@ -243,11 +246,11 @@ impl IdentityManager {
     }
 
     async fn update_session(&self, session: Session) -> Result<Session, IdentityError> {
-        self.sessions
-            .update_entry(session.into_entity())
-            .await
-            .map_err(IdentityError::from)
-            .map(Session::from_entity)
+        match self.sessions.update_entry(session.into_entity()).await {
+            Ok(session) => Ok(Session::from_entity(session)),
+            Err(err) if azure_utils::is_precodition_error(&err) => Err(IdentityError::SessionKeyConflict),
+            Err(err) => Err(err.into()),
+        }
     }
 
     async fn try_refresh_session(
@@ -260,18 +263,22 @@ impl IdentityManager {
             .await
             .map_err(IdentityError::into_backoff)?;
 
-        // validate site
-        if session.data().remote != site.remote() || session.data().agent != site.agent() {
-            if let Err(err) = self.delete_session(session).await {
-                log::error!("Failed to remove compromised session({}): {:?}", session_key, err);
-            }
+        // session already disabled
+        if session.data().disabled.is_some() {
             return Err(IdentityError::SessionExpired.into_backoff());
         }
 
-        session.data_mut().refreshed = Utc::now();
-
-        let session = self.update_session(session).await.map_err(IdentityError::into_backoff)?;
-        Ok((identity, session))
+        // validate site
+        if session.data().remote != site.remote() || session.data().agent != site.agent() {
+            session.data_mut().disabled = Some(Utc::now());
+            let _ = self.update_session(session).await.map_err(IdentityError::into_backoff)?;
+            Err(IdentityError::SessionExpired.into_backoff())
+        } else {
+            session.data_mut().refresh_count += 1;
+            session.data_mut().refreshed = Utc::now();
+            let session = self.update_session(session).await.map_err(IdentityError::into_backoff)?;
+            Ok((identity, session))
+        }
     }
 
     /// Try to update the session and return a refreshed key.
@@ -282,8 +289,75 @@ impl IdentityManager {
             .await
     }
 
-    /// Delete the session data and the index
-    pub async fn delete_session(&self, session: Session) -> Result<(), IdentityError> {
-        unimplemented!()
+    async fn try_invalidate_session(&self, session_key: &str) -> Result<(), BackoffError<IdentityError>> {
+        let (_, mut session) = self
+            .find_user_by_session(session_key)
+            .await
+            .map_err(IdentityError::into_backoff)?;
+
+        session.data_mut().disabled = Some(Utc::now());
+        self.update_session(session)
+            .await
+            .map_err(IdentityError::into_backoff)
+            .map(|_| ())
+    }
+
+    /// Invalidate the session by a key
+    pub async fn invalidate_session(&self, session_key: &str) -> Result<(), IdentityError> {
+        backoff::Exponential::new(3, Duration::from_micros(10))
+            .async_execute(|_| self.try_invalidate_session(session_key))
+            .await
+    }
+
+    async fn invalidate_session_by_pr_key(&self, partition: &str, row: &str) -> Result<(), BackoffError<IdentityError>> {
+        log::debug!("invalidate session: {},{}", partition, row);
+        if let Some(mut session) = self
+            .sessions
+            .get_entry::<SessionData>(partition, row)
+            .await
+            .map_err(|err| IdentityError::from(err).into_backoff())?
+        {
+            log::debug!("invalidate session: {:?}", session);
+            if session.payload.disabled.is_none() {
+                session.payload.disabled = Some(Utc::now())
+            }
+
+            match self.sessions.update_entry(session).await {
+                Ok(_) => Ok(()),
+                Err(err) if azure_utils::is_precodition_error(&err) => {
+                    Err(BackoffError::Transient(IdentityError::SessionKeyConflict))
+                }
+                Err(err) => Err(BackoffError::Permanent(err.into())),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Invalidate all the sessions corresponding to the same user as the key
+    pub async fn invalidate_all_sessions(&self, session_key: &str) -> Result<(), IdentityError> {
+        let (identity, _) = self.find_user_by_session(session_key).await?;
+
+        let query = format!(
+            "PartitionKey eq '{}' and RowKey gt 'session-' and RowKey lt 'session_'",
+            identity.id()
+        );
+        let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
+        let sessions = self.sessions.query_entries::<EmptyData>(Some(&query)).await?;
+        for session in sessions.into_iter() {
+            if let Err(err) = backoff::Exponential::new(3, Duration::from_micros(10))
+                .async_execute(|_| self.invalidate_session_by_pr_key(&session.partition_key, &session.row_key))
+                .await
+            {
+                log::warn!(
+                    "Failed to invalidate session: {},{}: {:?}",
+                    session.partition_key,
+                    session.row_key,
+                    err
+                )
+            }
+        }
+
+        Ok(())
     }
 }

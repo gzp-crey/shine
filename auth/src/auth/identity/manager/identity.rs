@@ -21,8 +21,13 @@ const SALT_ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01
 
 /// Data associated to each identity
 pub trait IdentityData: Serialize + DeserializeOwned {
-    fn id(&self) -> &str;
-    fn name(&self) -> &str;
+    /// Return the identity core, the common properties for all type of identites
+    fn core(&self) -> &IdentityCore;
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum IdentityCategory {
+    User,
 }
 
 /// Identity
@@ -49,14 +54,19 @@ pub trait Identity {
     /// Return the mutable data associated to an identity
     fn data_mut(&mut self) -> &mut Self::Data;
 
+    /// Return the identity core, the common properties for all type of identites
+    fn core(&self) -> &IdentityCore {
+        self.data().core()
+    }
+
     /// Return the (unique) id of the identity
     fn id(&self) -> &str {
-        self.data().id()
+        &self.core().id
     }
 
     /// Return the (unique) name of an identity
     fn name(&self) -> &str {
-        self.data().name()
+        &self.core().name
     }
 }
 
@@ -90,7 +100,7 @@ pub trait IdentityIndex {
     fn data_mut(&mut self) -> &mut Self::Index;
 
     /// The unique key to index
-    fn key(&self) -> &str;
+    fn index_key(&self) -> &str;
 
     /// Return the (unique) id of the identity
     fn id(&self) -> &str {
@@ -105,26 +115,32 @@ pub struct IdentityIndexedId {
     pub identity_id: String,
 }
 
+/// Common data associated to each identity
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct IdentityCore {
+    pub id: String,
+    pub sequence_id: u64,
+    pub salt: String,
+    pub category: IdentityCategory,
+    pub name: String,
+}
+
 /// Data associated to a user identity
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserIdentityData {
-    pub id: String,
-    pub sequence_id: u64,
-    pub salt: String,
-    pub name: String,
+    #[serde(flatten)]
+    pub core: IdentityCore,
+
     pub email: Option<String>,
     pub email_validated: bool,
     pub password_hash: String,
 }
 
 impl IdentityData for UserIdentityData {
-    fn id(&self) -> &str {
-        &self.id
-    }
-
-    fn name(&self) -> &str {
-        &self.name
+    fn core(&self) -> &IdentityCore {
+        &self.core
     }
 }
 
@@ -147,10 +163,13 @@ impl UserIdentity {
             row_key,
             etag: None,
             payload: UserIdentityData {
-                id,
-                sequence_id,
-                salt,
-                name,
+                core: IdentityCore {
+                    id,
+                    sequence_id,
+                    salt,
+                    name,
+                    category: IdentityCategory::User,
+                },
                 email,
                 email_validated: false,
                 password_hash,
@@ -163,7 +182,6 @@ impl Identity for UserIdentity {
     type Data = UserIdentityData;
 
     fn entity_keys(id: &str) -> (String, String) {
-        let id = id.splitn(2, '-').skip(1).next().unwrap();
         (id[0..2].to_string(), id.to_string())
     }
 
@@ -191,7 +209,7 @@ impl Identity for UserIdentity {
 impl From<UserIdentity> for UserId {
     fn from(user: UserIdentity) -> Self {
         let data = user.into_data();
-        UserId::new(data.id, data.name, vec![] /*user.roles*/)
+        UserId::new(data.core.id, data.core.name, vec![] /*user.roles*/)
     }
 }
 
@@ -237,7 +255,6 @@ impl IdentityIndex for NameIndex {
     type Index = NameIndexData;
 
     fn entity_keys(id: &str) -> (String, String) {
-        let id = id.splitn(2, '-').skip(1).next().unwrap();
         (format!("name-{}", &id[0..2]), id.to_string())
     }
 
@@ -261,7 +278,7 @@ impl IdentityIndex for NameIndex {
         &mut self.0.payload
     }
 
-    fn key(&self) -> &str {
+    fn index_key(&self) -> &str {
         &self.0.row_key
     }
 }
@@ -335,7 +352,7 @@ impl IdentityIndex for EmailIndex {
         &mut self.0.payload
     }
 
-    fn key(&self) -> &str {
+    fn index_key(&self) -> &str {
         &self.0.row_key
     }
 }
@@ -346,6 +363,24 @@ fn validate_username(name: &str) -> bool {
 
 // Handling identites
 impl IdentityManager {
+    /*pub(crate) async fn find_index<T>(&self, query: &str) -> Result<T, IdentityError>
+    where
+        T: IdentityIndex,
+    {
+        let mut index = self.indices.query_entries::<T::Index>(Some(&query)).await?;
+        assert!(index.len() <= 1);
+        let index = index.pop().ok_or(IdentityError::IdentityNotFound)?;
+        Ok(T::from_entity(index))
+    }*/
+
+    pub(crate) async fn find_indices<T>(&self, query: &str) -> Result<Vec<T>, IdentityError>
+    where
+        T: IdentityIndex,
+    {
+        let index = self.indices.query_entries::<T::Index>(Some(&query)).await?;
+        Ok(index.into_iter().map(|e| T::from_entity(e)).collect())
+    }
+
     pub(crate) async fn remove_index<T>(&self, index: T)
     where
         T: IdentityIndex,
@@ -361,9 +396,9 @@ impl IdentityManager {
     where
         T: Identity,
     {
-        let index = self.indices.query_entries::<IdentityIndexedId>(Some(&query)).await?;
+        let mut index = self.indices.query_entries::<IdentityIndexedId>(Some(&query)).await?;
         assert!(index.len() <= 1);
-        let index = index.first().ok_or(IdentityError::IdentityNotFound)?;
+        let index = index.pop().ok_or(IdentityError::IdentityNotFound)?;
 
         let identity_id = &index.payload.identity_id;
         let (p, r) = T::entity_keys(&identity_id);
@@ -464,7 +499,7 @@ impl IdentityManager {
 
         log::info!("Created new user id:{}, pwh:{}", id, password_hash);
         let identity = UserIdentity::new(
-            format!("user-{}", id),
+            id,
             sequence_id,
             salt,
             name.to_owned(),

@@ -55,6 +55,8 @@ pub trait SignedCookieConfiguration: Any {
     }
 
     /// The `http_only` field in the session cookie being built.
+    ///
+    /// If 'http_only' is set, a cookie cannot be accessed by client-side APIs, such as JavaScript.
     fn http_only(&self) -> bool {
         true
     }

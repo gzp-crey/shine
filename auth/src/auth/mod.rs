@@ -110,7 +110,8 @@ impl AuthService {
                     web::scope("user")
                         .service(web::resource("login").route(web::post().to(login_basic_auth)))
                         .service(web::resource("register").route(web::post().to(register_user)))
-                        .service(web::resource("refresh").route(web::post().to(refresh_session))),
+                        .service(web::resource("refresh").route(web::post().to(refresh_session)))
+                        .service(web::resource("logout").route(web::post().to(logout))),
                 ),
         );
     }
