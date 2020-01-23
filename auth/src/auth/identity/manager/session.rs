@@ -242,6 +242,12 @@ impl IdentityManager {
         };
 
         log::debug!("Session found {:?} for identity {:?}", session, identity);
+
+        // session already disabled
+        if session.data().disabled.is_some() {
+            return Err(IdentityError::SessionExpired);
+        }
+
         Ok((identity, session))
     }
 
@@ -262,11 +268,6 @@ impl IdentityManager {
             .find_user_by_session(session_key)
             .await
             .map_err(IdentityError::into_backoff)?;
-
-        // session already disabled
-        if session.data().disabled.is_some() {
-            return Err(IdentityError::SessionExpired.into_backoff());
-        }
 
         // validate site
         if session.data().remote != site.remote() || session.data().agent != site.agent() {
@@ -310,18 +311,18 @@ impl IdentityManager {
     }
 
     async fn invalidate_session_by_pr_key(&self, partition: &str, row: &str) -> Result<(), BackoffError<IdentityError>> {
-        log::debug!("invalidate session: {},{}", partition, row);
         if let Some(mut session) = self
             .sessions
             .get_entry::<SessionData>(partition, row)
             .await
             .map_err(|err| IdentityError::from(err).into_backoff())?
         {
-            log::debug!("invalidate session: {:?}", session);
             if session.payload.disabled.is_none() {
                 session.payload.disabled = Some(Utc::now())
             }
 
+            // ignore any refresh, it is invalidated
+            session.etag = None;
             match self.sessions.update_entry(session).await {
                 Ok(_) => Ok(()),
                 Err(err) if azure_utils::is_precodition_error(&err) => {
