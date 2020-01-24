@@ -20,9 +20,10 @@ COPY ./scripts /webapp/scripts
 ARG RUST_VERSION=nightly
 RUN sh /webapp/scripts/download-rust.sh
 
-RUN mkdir /webapp/source
+COPY ./source /webapp/source
+COPY ./binary /webapp/binary
 
 EXPOSE 8002
 
 ENTRYPOINT ["/webapp/scripts/init.sh"]
-CMD bash
+CMD ["/webapp/binary/start.sh"]
