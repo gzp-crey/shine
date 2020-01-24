@@ -1,6 +1,7 @@
+echo off
+
 set DIR=%~dp0
 set NAME=con_shine
-echo off
 
 docker container inspect %NAME% > NUL
 

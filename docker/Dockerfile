@@ -20,6 +20,8 @@ COPY ./scripts /webapp/scripts
 ARG RUST_VERSION=nightly
 RUN sh /webapp/scripts/download-rust.sh
 
+ARG GIT_ACCESS_TOKEN
+ENV GIT_TOKEN=$GIT_ACCESS_TOKEN
 COPY ./source /webapp/source
 COPY ./binary /webapp/binary
 
