@@ -1,0 +1,28 @@
+FROM debian:buster-slim
+
+RUN true \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ed \
+        less \
+        locales \
+        vim-tiny \
+        wget \
+        curl \
+        nano \
+        ca-certificates \
+        build-essential \
+        git \
+        dos2unix
+
+COPY ./scripts /webapp/scripts
+
+ARG RUST_VERSION=nightly
+RUN sh /webapp/scripts/download-rust.sh
+
+RUN mkdir /webapp/source
+
+EXPOSE 8002
+
+ENTRYPOINT ["/webapp/scripts/init.sh"]
+CMD bash

@@ -1,6 +1,7 @@
 use crate::auth::AuthConfig;
 use config::{self, ConfigError};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -33,11 +34,13 @@ impl Config {
 
         s.merge(Environment::new().separator("--"))?;
 
-        log::info!("The current directory is {:?}", std::env::current_dir());
-        match s.merge(File::from(Path::new("secret.config.json"))) {
-            Ok(_) => {}
-            Err(err) => log::warn!("Faild to parse secret config: {}", err),
-        };
+        if let Some(config_file) = env::args().skip(1).next() {
+            log::info!("Loading cofig file {:?}", config_file);
+            match s.merge(File::from(Path::new(&config_file))) {
+                Ok(_) => {}
+                Err(err) => log::warn!("Faild to parse secret config: {}", err),
+            };
+        }
 
         s.try_into()
     }

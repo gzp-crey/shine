@@ -363,24 +363,6 @@ fn validate_username(name: &str) -> bool {
 
 // Handling identites
 impl IdentityManager {
-    /*pub(crate) async fn find_index<T>(&self, query: &str) -> Result<T, IdentityError>
-    where
-        T: IdentityIndex,
-    {
-        let mut index = self.indices.query_entries::<T::Index>(Some(&query)).await?;
-        assert!(index.len() <= 1);
-        let index = index.pop().ok_or(IdentityError::IdentityNotFound)?;
-        Ok(T::from_entity(index))
-    }*/
-
-    pub(crate) async fn find_indices<T>(&self, query: &str) -> Result<Vec<T>, IdentityError>
-    where
-        T: IdentityIndex,
-    {
-        let index = self.indices.query_entries::<T::Index>(Some(&query)).await?;
-        Ok(index.into_iter().map(|e| T::from_entity(e)).collect())
-    }
-
     pub(crate) async fn remove_index<T>(&self, index: T)
     where
         T: IdentityIndex,

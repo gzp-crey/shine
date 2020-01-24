@@ -7,7 +7,11 @@ use percent_encoding::{self, utf8_percent_encode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use shine_core::{
-    azure_utils::{self, table_storage::EmptyData},
+    azure_utils::{
+        self,
+        serde::{datetime, opt_datetime},
+        table_storage::EmptyData,
+    },
     backoff::{self, Backoff, BackoffError},
     session::SessionKey,
     siteinfo::SiteInfo,
@@ -22,11 +26,18 @@ const KEY_BASE_ENCODE: data_encoding::Encoding = data_encoding::BASE64URL_NOPAD;
 #[serde(rename_all = "PascalCase")]
 pub struct SessionData {
     pub remote: String,
+
     pub agent: String,
 
+    #[serde(with = "datetime")]
     pub issued: DateTime<Utc>,
+
     pub refresh_count: u64,
+
+    #[serde(with = "datetime")]
     pub refreshed: DateTime<Utc>,
+
+    #[serde(with = "opt_datetime")]
     pub disabled: Option<DateTime<Utc>>,
 }
 
@@ -340,11 +351,12 @@ impl IdentityManager {
         let (identity, _) = self.find_user_by_session(session_key).await?;
 
         let query = format!(
-            "PartitionKey eq '{}' and RowKey gt 'session-' and RowKey lt 'session_'",
+            "PartitionKey eq '{}' and RowKey gt 'session-' and RowKey lt 'session_' and Disabled eq ''",
             identity.id()
         );
         let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
         let sessions = self.sessions.query_entries::<EmptyData>(Some(&query)).await?;
+        log::debug!("sessions: {:?}", sessions);
         for session in sessions.into_iter() {
             if let Err(err) = backoff::Exponential::new(3, Duration::from_micros(10))
                 .async_execute(|_| self.invalidate_session_by_pr_key(&session.partition_key, &session.row_key))
