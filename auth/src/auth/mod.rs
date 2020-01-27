@@ -1,7 +1,7 @@
-mod identity;
+mod iam;
 mod oauth;
 
-use self::identity::*;
+use self::iam::*;
 use self::oauth::*;
 use actix_rt::SystemRunner;
 use actix_web::web;
@@ -11,18 +11,18 @@ use shine_core::{session::IdentityCookie, signed_cookie::SignedCookie};
 use std::{fmt, rc::Rc};
 use tera::{Error as TeraError, Tera};
 
-pub use self::identity::{IdentityConfig, IdentityError};
+pub use self::iam::{IAMConfig, IAMError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
-    pub identity: IdentityConfig,
+    pub iam: IAMConfig,
     pub cookie_session_secret: String,
 }
 
 #[derive(Debug)]
 pub enum AuthCreateError {
     ConfigureTera(TeraError),
-    ConfigureIdentity(IdentityError),
+    ConfigureIAM(IAMError),
     ConfigureDecodeSecret(DecodeError),
 }
 
@@ -30,7 +30,7 @@ impl fmt::Display for AuthCreateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AuthCreateError::ConfigureTera(err) => write!(f, "Error in tera configuration: {:?}", err),
-            AuthCreateError::ConfigureIdentity(err) => write!(f, "Error in identity configuration: {:?}", err),
+            AuthCreateError::ConfigureIAM(err) => write!(f, "Error in IAM configuration: {:?}", err),
             AuthCreateError::ConfigureDecodeSecret(err) => write!(f, "Error during secret configuration: {:?}", err),
         }
     }
@@ -38,33 +38,30 @@ impl fmt::Display for AuthCreateError {
 
 struct Inner {
     tera: Tera,
-    identity_db: IdentityManager,
+    iam: IAM,
 }
 
 #[derive(Clone)]
 pub struct State(Rc<Inner>);
 
 impl State {
-    pub fn new(tera: Tera, identity_db: IdentityManager) -> Self {
-        Self(Rc::new(Inner {
-            tera: tera,
-            identity_db: identity_db,
-        }))
+    pub fn new(tera: Tera, iam: IAM) -> Self {
+        Self(Rc::new(Inner { tera: tera, iam: iam }))
     }
 
     pub fn tera(&self) -> &Tera {
         &self.0.tera
     }
 
-    pub fn identity_db(&self) -> &IdentityManager {
-        &self.0.identity_db
+    pub fn iam(&self) -> &IAM {
+        &self.0.iam
     }
 }
 
 #[derive(Clone)]
 pub struct AuthService {
     tera: Tera,
-    identity_db: IdentityManager,
+    iam: IAM,
     cookie_session_secret: Vec<u8>,
 }
 
@@ -72,23 +69,23 @@ impl AuthService {
     pub fn create(sys: &mut SystemRunner, config: &AuthConfig) -> Result<AuthService, AuthCreateError> {
         let tera = Tera::new("tera_web/**/*").map_err(|err| AuthCreateError::ConfigureTera(err.into()))?;
 
-        let identity_cfg = config.identity.clone();
-        let identity_db = sys
-            .block_on(IdentityManager::new(identity_cfg))
-            .map_err(|err| AuthCreateError::ConfigureIdentity(err.into()))?;
+        let iam_config = config.iam.clone();
+        let iam = sys
+            .block_on(IAM::new(iam_config))
+            .map_err(|err| AuthCreateError::ConfigureIAM(err.into()))?;
         let cookie_session_secret = BASE64
             .decode(config.cookie_session_secret.as_bytes())
             .map_err(|err| AuthCreateError::ConfigureDecodeSecret(err.into()))?;
 
         Ok(AuthService {
-            identity_db,
+            iam,
             tera,
             cookie_session_secret,
         })
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
-        let state = State::new(self.tera.clone(), self.identity_db.clone());
+        let state = State::new(self.tera.clone(), self.iam.clone());
 
         services.service(
             web::scope("auth/api")
