@@ -5,7 +5,6 @@ use crate::auth::iam::{
 };
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::table::{TableService, TableStorage};
-use chrono::Utc;
 use data_encoding;
 use rand::Rng;
 use shine_core::{
@@ -127,13 +126,10 @@ impl SessionManager {
     async fn try_refresh_session_with_id_key(
         &self,
         id: &str,
-        session_key: &str,
+        key: &str,
         site: &SiteInfo,
     ) -> Result<Session, BackoffError<IAMError>> {
-        let mut session = self
-            .find_session_by_id_key(id, session_key)
-            .await
-            .map_err(IAMError::into_backoff)?;
+        let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
 
         // validate site
         if self.is_session_valid(&session, site) {
@@ -148,19 +144,19 @@ impl SessionManager {
     }
 
     /// Refresh the session when both the user and key is known.
-    /// In case of a compromised session_key the session is also removed from the database.
-    pub async fn refresh_session_with_id_key(&self, id: &str, session_key: &str, site: &SiteInfo) -> Result<Session, IAMError> {
+    /// In case of a compromised key the session is also removed from the database.
+    pub async fn refresh_session_with_id_key(&self, id: &str, key: &str, site: &SiteInfo) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_refresh_session_with_id_key(id, session_key, site))
+            .async_execute(|_| self.try_refresh_session_with_id_key(id, key, site))
             .await
     }
 
     async fn try_refresh_session_with_key(
         &self,
-        session_key: &str,
+        key: &str,
         site: &SiteInfo,
     ) -> Result<(String, Session), BackoffError<IAMError>> {
-        let (id, mut session) = self.find_session_by_key(session_key).await.map_err(IAMError::into_backoff)?;
+        let (id, mut session) = self.find_session_by_key(key).await.map_err(IAMError::into_backoff)?;
 
         // validate site
 
@@ -176,10 +172,10 @@ impl SessionManager {
     }
 
     /// Refresh the session when only the key is known.
-    /// In case of a compromised session_key the session is also removed from the database.
-    pub async fn refresh_session_with_key(&self, session_key: &str, site: &SiteInfo) -> Result<(String, Session), IAMError> {
+    /// In case of a compromised key the session is also removed from the database.
+    pub async fn refresh_session_with_key(&self, key: &str, site: &SiteInfo) -> Result<(String, Session), IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_refresh_session_with_key(session_key, site))
+            .async_execute(|_| self.try_refresh_session_with_key(key, site))
             .await
     }
 }
@@ -188,9 +184,9 @@ impl SessionManager {
 impl IdentityManager {
 
     /// Find a user and the session by the given session key.
-    pub async fn find_user_by_session(&self, session_key: &str) -> Result<(UserIdentity, Session), IAMError> {
+    pub async fn find_user_by_session(&self, key: &str) -> Result<(UserIdentity, Session), IAMError> {
         let identity = {
-            let (p, r) = SessionIndex::entity_keys(session_key);
+            let (p, r) = SessionIndex::entity_keys(key);
             let query = format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r);
             let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
             self.find_user_by_index(&query, None).await?
@@ -198,7 +194,7 @@ impl IdentityManager {
 
         let session = {
             let partion_key = format!("{}", identity.id());
-            let row_key = format!("session-{}", session_key);
+            let row_key = format!("session-{}", key);
             self.sessions
                 .get_entry(&partion_key, &row_key)
                 .await?
@@ -226,11 +222,11 @@ impl IdentityManager {
 
     async fn try_refresh_session(
         &self,
-        session_key: &str,
+        key: &str,
         site: &SiteInfo,
     ) -> Result<(UserIdentity, Session), BackoffError<IAMError>> {
         let (identity, mut session) = self
-            .find_user_by_session(session_key)
+            .find_user_by_session(key)
             .await
             .map_err(IAMError::into_backoff)?;
 
@@ -248,16 +244,16 @@ impl IdentityManager {
     }
 
     /// Try to update the session and return a refreshed key.
-    /// In case of a compromised session_key the session is also removed from the database.
-    pub async fn refresh_session(&self, session_key: &str, site: &SiteInfo) -> Result<(UserIdentity, Session), IAMError> {
+    /// In case of a compromised key the session is also removed from the database.
+    pub async fn refresh_session(&self, key: &str, site: &SiteInfo) -> Result<(UserIdentity, Session), IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_refresh_session(session_key, site))
+            .async_execute(|_| self.try_refresh_session(key, site))
             .await
     }
 
-    async fn try_invalidate_session(&self, session_key: &str) -> Result<(), BackoffError<IAMError>> {
+    async fn try_invalidate_session(&self, key: &str) -> Result<(), BackoffError<IAMError>> {
         let (_, mut session) = self
-            .find_user_by_session(session_key)
+            .find_user_by_session(key)
             .await
             .map_err(IAMError::into_backoff)?;
 
@@ -269,9 +265,9 @@ impl IdentityManager {
     }
 
     /// Invalidate the session by a key
-    pub async fn invalidate_session(&self, session_key: &str) -> Result<(), IAMError> {
+    pub async fn invalidate_session(&self, key: &str) -> Result<(), IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_invalidate_session(session_key))
+            .async_execute(|_| self.try_invalidate_session(key))
             .await
     }
 
@@ -301,8 +297,8 @@ impl IdentityManager {
     }
 
     /// Invalidate all the sessions corresponding to the same user as the key
-    pub async fn invalidate_all_sessions(&self, session_key: &str) -> Result<(), IAMError> {
-        let (identity, _) = self.find_user_by_session(session_key).await?;
+    pub async fn invalidate_all_sessions(&self, key: &str) -> Result<(), IAMError> {
+        let (identity, _) = self.find_user_by_session(key).await?;
 
         let query = format!(
             "PartitionKey eq '{}' and RowKey gt 'session-' and RowKey lt 'session_' and Disabled eq ''",
