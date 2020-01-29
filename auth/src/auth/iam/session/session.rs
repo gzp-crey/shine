@@ -67,16 +67,23 @@ impl Session {
         &self.0.payload
     }
 
-    pub fn data_mut(&mut self) -> &mut SessionData {
-        &mut self.0.payload
-    }
-
     pub fn id(&self) -> &str {
         &self.0.partition_key.splitn(2, '-').skip(1).next().unwrap()
     }
 
     pub fn key(&self) -> &str {
         &self.0.row_key
+    }
+
+    pub fn invalidate(&mut self) {
+        let data = &mut self.0.payload;
+        data.disabled = Some(Utc::now());
+    }
+
+    pub fn refresh(&mut self) {
+        let data = &mut self.0.payload;
+        data.refresh_count += 1;
+        data.refreshed = Utc::now();
     }
 }
 

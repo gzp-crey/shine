@@ -5,20 +5,12 @@ use crate::auth::iam::{
 };
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::table::{TableService, TableStorage};
-use azure_sdk_storage_table::TableEntry;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use data_encoding;
-use percent_encoding::{self, utf8_percent_encode};
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 use shine_core::{
-    azure_utils::{
-        self,
-        serde::{datetime, opt_datetime},
-        table_storage::EmptyData,
-    },
+    azure_utils,
     backoff::{self, Backoff, BackoffError},
-    session::SessionKey,
     siteinfo::SiteInfo,
 };
 use std::time::Duration;
@@ -116,12 +108,20 @@ impl SessionManager {
         }
     }
 
+    async fn find_session_by_key(&self, key: &str) -> Result<(String, Session), IAMError> {
+        unimplemented!()
+    }
+
     async fn update_session(&self, session: Session) -> Result<Session, IAMError> {
         match self.db.update_entry(session.into_entity()).await {
             Ok(session) => Ok(Session::from_entity(session)),
             Err(err) if azure_utils::is_precodition_error(&err) => Err(IAMError::SessionKeyConflict),
             Err(err) => Err(err.into()),
         }
+    }
+
+    fn is_session_valid(&self, session: &Session, site: &SiteInfo) -> bool {
+        session.data().remote != site.remote() || session.data().agent != site.agent()
     }
 
     async fn try_refresh_session_with_id_key(
@@ -136,23 +136,50 @@ impl SessionManager {
             .map_err(IAMError::into_backoff)?;
 
         // validate site
-        if session.data().remote != site.remote() || session.data().agent != site.agent() {
-            session.data_mut().disabled = Some(Utc::now());
+        if self.is_session_valid(&session, site) {
+            session.invalidate();
             let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
             Err(IAMError::SessionExpired.into_backoff())
         } else {
-            session.data_mut().refresh_count += 1;
-            session.data_mut().refreshed = Utc::now();
+            session.refresh();
             let session = self.update_session(session).await.map_err(IAMError::into_backoff)?;
             Ok(session)
         }
     }
 
-    /// Try to update the session and return a refreshed key.
+    /// Refresh the session when both the user and key is known.
     /// In case of a compromised session_key the session is also removed from the database.
     pub async fn refresh_session_with_id_key(&self, id: &str, session_key: &str, site: &SiteInfo) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
             .async_execute(|_| self.try_refresh_session_with_id_key(id, session_key, site))
+            .await
+    }
+
+    async fn try_refresh_session_with_key(
+        &self,
+        session_key: &str,
+        site: &SiteInfo,
+    ) -> Result<(String, Session), BackoffError<IAMError>> {
+        let (id, mut session) = self.find_session_by_key(session_key).await.map_err(IAMError::into_backoff)?;
+
+        // validate site
+
+        if self.is_session_valid(&session, site) {
+            session.invalidate();
+            let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+            Err(IAMError::SessionExpired.into_backoff())
+        } else {
+            session.refresh();
+            let session = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+            Ok((id, session))
+        }
+    }
+
+    /// Refresh the session when only the key is known.
+    /// In case of a compromised session_key the session is also removed from the database.
+    pub async fn refresh_session_with_key(&self, session_key: &str, site: &SiteInfo) -> Result<(String, Session), IAMError> {
+        backoff::Exponential::new(3, Duration::from_micros(10))
+            .async_execute(|_| self.try_refresh_session_with_key(session_key, site))
             .await
     }
 }

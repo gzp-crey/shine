@@ -1,7 +1,8 @@
 mod iam;
+mod iam_handler;
 mod oauth;
 
-use self::iam::*;
+use self::iam::{IAMConfig, IAMError, IAM};
 use self::oauth::*;
 use actix_rt::SystemRunner;
 use actix_web::web;
@@ -10,8 +11,6 @@ use serde::{Deserialize, Serialize};
 use shine_core::{session::IdentityCookie, signed_cookie::SignedCookie};
 use std::{fmt, rc::Rc};
 use tera::{Error as TeraError, Tera};
-
-pub use self::iam::{IAMConfig, IAMError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
@@ -105,10 +104,10 @@ impl AuthService {
                 .service(
                     // user authentication
                     web::scope("user")
-                        .service(web::resource("login").route(web::post().to(login_basic_auth)))
-                        .service(web::resource("register").route(web::post().to(register_user)))
-                        .service(web::resource("refresh").route(web::post().to(refresh_session)))
-                        .service(web::resource("logout").route(web::post().to(logout))),
+                        .service(web::resource("login").route(web::post().to(iam_handler::login_basic_auth)))
+                        .service(web::resource("register").route(web::post().to(iam_handler::register_user)))
+                        .service(web::resource("refresh").route(web::post().to(iam_handler::refresh_session)))
+                        .service(web::resource("logout").route(web::post().to(iam_handler::logout))),
                 ),
         );
     }
