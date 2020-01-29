@@ -1,6 +1,6 @@
 use crate::auth::iam::{
     identity::{Identity, UserIdentity},
-    session::Session,
+    session::{Session, SessionData, SessionIndex},
     IAMConfig, IAMError,
 };
 use azure_sdk_storage_core::client::Client as AZClient;
@@ -49,12 +49,12 @@ impl SessionManager {
         KEY_BASE_ENCODE.encode(&key_sequence)
     }
 
-    async fn remove_session(&self, session: Session) {
+    async fn remove_index(&self, session: SessionIndex) {
         let session = session.into_entity();
         self.db
             .delete_entry(&session.partition_key, &session.row_key, session.etag.as_deref())
             .await
-            .unwrap_or_else(|e| log::error!("Failed to delete session {:?}: {}", session, e));
+            .unwrap_or_else(|e| log::error!("Failed to delete session index {:?}: {}", session, e));
     }
 
     async fn try_insert_session(&self, identity: &UserIdentity, site: &SiteInfo) -> Result<Session, IAMError> {
@@ -62,12 +62,31 @@ impl SessionManager {
         let key = self.genrate_session_key();
         log::info!("Created new session key [{}] for {}", key, id);
 
+        // fisrt insert index, it also ensures key uniqueness.
+        let session_index = {
+            let index = SessionIndex::new(&key, id);
+            let index = match self.db.insert_entry(index.into_entity()).await {
+                Ok(index) => index,
+                Err(err) if azure_utils::is_precodition_error(&err) => return Err(IAMError::SessionKeyConflict),
+                Err(err) => return Err(err.into()),
+            };
+            SessionIndex::from_entity(index)
+        };
+
         let session = Session::new(id.to_owned(), key, &site);
-        match self.db.insert_entry(session.into_entity()).await {
-            Ok(session) => Ok(Session::from_entity(session)),
-            Err(err) if azure_utils::is_precodition_error(&err) => Err(IAMError::SessionKeyConflict),
-            Err(err) => Err(err.into()),
-        }
+        let session = match self.db.insert_entry(session.into_entity()).await {
+            Ok(session) => Session::from_entity(session),
+            Err(err) => {
+                self.remove_index(session_index).await;
+                return Err(err.into());
+            }
+        };
+
+        log::info!("New session for {}", id);
+        log::debug!("Session index: {:?}", session_index);
+        log::debug!("Session: {:?}", session);
+
+        Ok(session)
     }
 
     async fn try_create_session(&self, identity: &UserIdentity, site: &SiteInfo) -> Result<Session, BackoffError<IAMError>> {
@@ -82,9 +101,58 @@ impl SessionManager {
 
     /// Creates a new user session for the given identity.
     /// It is assumed that, the identity has been already authenticated.
-    pub async fn create_session(&self, identity: &UserIdentity, site: SiteInfo) -> Result<Session, IAMError> {
+    pub async fn create_session(&self, identity: &UserIdentity, site: &SiteInfo) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_create_session(identity, &site))
+            .async_execute(|_| self.try_create_session(identity, site))
+            .await
+    }
+
+    async fn find_session_by_id_key(&self, id: &str, key: &str) -> Result<Session, IAMError> {
+        let (p, r) = Session::entity_keys(id, key);
+        match self.db.get_entry::<SessionData>(&p, &r).await {
+            Ok(Some(session)) => Ok(Session::from_entity(session)),
+            Ok(None) => Err(IAMError::SessionExpired),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    async fn update_session(&self, session: Session) -> Result<Session, IAMError> {
+        match self.db.update_entry(session.into_entity()).await {
+            Ok(session) => Ok(Session::from_entity(session)),
+            Err(err) if azure_utils::is_precodition_error(&err) => Err(IAMError::SessionKeyConflict),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    async fn try_refresh_session_with_id_key(
+        &self,
+        id: &str,
+        session_key: &str,
+        site: &SiteInfo,
+    ) -> Result<Session, BackoffError<IAMError>> {
+        let mut session = self
+            .find_session_by_id_key(id, session_key)
+            .await
+            .map_err(IAMError::into_backoff)?;
+
+        // validate site
+        if session.data().remote != site.remote() || session.data().agent != site.agent() {
+            session.data_mut().disabled = Some(Utc::now());
+            let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+            Err(IAMError::SessionExpired.into_backoff())
+        } else {
+            session.data_mut().refresh_count += 1;
+            session.data_mut().refreshed = Utc::now();
+            let session = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+            Ok(session)
+        }
+    }
+
+    /// Try to update the session and return a refreshed key.
+    /// In case of a compromised session_key the session is also removed from the database.
+    pub async fn refresh_session_with_id_key(&self, id: &str, session_key: &str, site: &SiteInfo) -> Result<Session, IAMError> {
+        backoff::Exponential::new(3, Duration::from_micros(10))
+            .async_execute(|_| self.try_refresh_session_with_id_key(id, session_key, site))
             .await
     }
 }

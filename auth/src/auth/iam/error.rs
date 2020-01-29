@@ -45,7 +45,7 @@ impl fmt::Display for IAMError {
             IAMError::NameTaken => write!(f, "Name already taken"),
             IAMError::EmailTaken => write!(f, "Email already taken"),
             IAMError::IdentityIdConflict => write!(f, "Identity id already in use"),
-            IAMError::SessionKeyConflict => write!(f, "Login key already in use"),
+            IAMError::SessionKeyConflict => write!(f, "Session key already in use"),
             IAMError::IdentityNotFound => write!(f, "Identity not found"),
             IAMError::PasswordNotMatching => write!(f, "Invalid user or password"),
             IAMError::SessionRequired => write!(f, "Login required"),

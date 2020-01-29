@@ -22,7 +22,7 @@ pub struct SequenceIndex(TableEntry<SequenceIndexData>);
 
 impl SequenceIndex {
     pub fn entity_keys(sequence_id: u64) -> (String, String) {
-        (format!("idx_seq-{}", sequence_id % 100), sequence_id.to_string())
+        (format!("x_seq-{}", sequence_id % 100), sequence_id.to_string())
     }
 
     pub fn from_identity<T>(identity: &T) -> Self

@@ -17,6 +17,10 @@ pub struct SyncCounterConfig {
     pub storage_account: String,
     pub storage_account_key: String,
     pub table_name: String,
+
+    /// The initial value of the counter. The retuned id is not less
+    /// then this value both for new and running seqeunces.
+    pub starting_value: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,6 +29,7 @@ struct Counter {
 }
 
 struct Inner {
+    starting_value: u64,
     counters: TableStorage,
 }
 
@@ -39,7 +44,10 @@ impl SyncCounterStore {
 
         counters.create_if_not_exists().await?;
 
-        Ok(SyncCounterStore(Arc::new(Inner { counters })))
+        Ok(SyncCounterStore(Arc::new(Inner {
+            starting_value: config.starting_value,
+            counters,
+        })))
     }
 
     async fn get_range_step(&self, sequence_id: &str, count: u64) -> Result<Range<u64>, BackoffError<IdSequenceError>> {
@@ -51,22 +59,28 @@ impl SyncCounterStore {
             .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))?
         {
             None => {
+                let start = self.0.starting_value;
                 let entry = TableEntry {
                     partition_key: PARTITION_KEY.to_string(),
                     row_key: sequence_id.to_string(),
                     etag: None,
-                    payload: Counter { value: count },
+                    payload: Counter { value: start + count },
                 };
                 self.0
                     .counters
                     .insert_entry(entry)
                     .await
                     .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))
-                    .map(|ok| 0..(ok.payload.value))
+                    .map(|ok| start..(ok.payload.value))
             }
             Some(mut entry) => {
-                let start = entry.payload.value;
-                entry.payload.value += count;
+                //ensure counter is larger than the requested initial
+                let start = if entry.payload.value < self.0.starting_value {
+                    self.0.starting_value
+                } else {
+                    entry.payload.value
+                };
+                entry.payload.value = start + count;
                 self.0
                     .counters
                     .update_entry(entry)

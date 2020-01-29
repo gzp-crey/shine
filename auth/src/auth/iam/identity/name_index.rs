@@ -22,7 +22,7 @@ pub struct NameIndex(TableEntry<NameIndexData>);
 
 impl NameIndex {
     pub fn entity_keys(name: &str) -> (String, String) {
-        (format!("idx_name-{}", &name[0..2]), name.to_string())
+        (format!("x_name-{}", &name[0..2]), name.to_string())
     }
 
     pub fn from_identity<T>(identity: &T) -> Self

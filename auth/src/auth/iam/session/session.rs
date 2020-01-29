@@ -33,12 +33,12 @@ pub struct SessionData {
 pub struct Session(TableEntry<SessionData>);
 
 impl Session {
-    pub fn entity_keys(user_id: &str, key: &str) -> (String, String) {
-        (user_id.to_owned(), key.to_owned())
+    pub fn entity_keys(id: &str, key: &str) -> (String, String) {
+        (format!("id-{}", id), key.to_owned())
     }
 
-    pub fn new(user_id: String, key: String, site: &SiteInfo) -> Session {
-        let (partition_key, row_key) = Self::entity_keys(&user_id, &key);
+    pub fn new(id: String, key: String, site: &SiteInfo) -> Session {
+        let (partition_key, row_key) = Self::entity_keys(&id, &key);
 
         Session(TableEntry {
             partition_key,
@@ -72,11 +72,11 @@ impl Session {
     }
 
     pub fn id(&self) -> &str {
-        &self.0.partition_key
+        &self.0.partition_key.splitn(2, '-').skip(1).next().unwrap()
     }
 
     pub fn key(&self) -> &str {
-        &self.0.row_key.splitn(2, '-').skip(1).next().unwrap()
+        &self.0.row_key
     }
 }
 

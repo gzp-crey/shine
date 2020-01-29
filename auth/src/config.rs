@@ -22,11 +22,7 @@ impl Config {
             {
                 "bind_host": "0.0.0.0",
                 "bind_port": "12345",
-                "worker_count": "4",
-                "auth" : {
-                    "identity": {
-                    }
-                }
+                "worker_count": "4"
             }
             "#,
             FileFormat::Json,

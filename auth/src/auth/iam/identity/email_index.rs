@@ -21,7 +21,7 @@ pub struct EmailIndex(TableEntry<EmailIndexData>);
 
 impl EmailIndex {
     pub fn entity_keys(email: &str) -> (String, String) {
-        (format!("idx_email-{}", &email[0..2]), email.to_string())
+        (format!("x_email-{}", &email[0..2]), email.to_string())
     }
 
     pub fn from_identity<T>(identity: &T) -> Option<Self>

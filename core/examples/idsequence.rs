@@ -74,6 +74,7 @@ fn main() {
         storage_account: env::var("STORAGE_ACCOUNT").expect("Missing STORAGE_ACCOUNT env variable"),
         storage_account_key: env::var("STORAGE_ACCOUNT_KEY").expect("Missing STORAGE_ACCOUNT_KEY env variable"),
         table_name: "testcounter".to_string(),
+        starting_value: 0,
     };
 
     let matches = App::new("test sequences")

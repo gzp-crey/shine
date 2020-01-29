@@ -48,6 +48,7 @@ impl IdentityManager {
             let id_config = SyncCounterConfig {
                 storage_account: config.storage_account.clone(),
                 storage_account_key: config.storage_account_key.clone(),
+                starting_value: 1_000_000,
                 table_name: "idcounter".to_string(),
             };
             let id_counter = SyncCounterStore::new(id_config).await?;
@@ -59,17 +60,6 @@ impl IdentityManager {
             identity_id_generator,
             db: identities_db,
         })
-    }
-
-    async fn remove_index<T>(&self, index: T)
-    where
-        T: IdentityIndex,
-    {
-        let index = index.into_entity();
-        self.db
-            .delete_entry(&index.partition_key, &index.row_key, index.etag.as_deref())
-            .await
-            .unwrap_or_else(|e| log::error!("Failed to delete index: {}", e));
     }
 
     async fn remove_identity<T>(&self, identity: T)
@@ -88,6 +78,28 @@ impl IdentityManager {
                     e
                 )
             });
+    }
+
+    async fn find_identity_by_id<T>(&self, id: &str) -> Result<T, IAMError>
+    where
+        T: Identity,
+    {
+        let (p, r) = T::entity_keys(&id);
+        let identity = self.db.get_entry(&p, &r).await?;
+        let identity = identity.map(T::from_entity).ok_or(IAMError::IdentityNotFound)?;
+
+        Ok(identity)
+    }
+
+    async fn remove_index<T>(&self, index: T)
+    where
+        T: IdentityIndex,
+    {
+        let index = index.into_entity();
+        self.db
+            .delete_entry(&index.partition_key, &index.row_key, index.etag.as_deref())
+            .await
+            .unwrap_or_else(|e| log::error!("Failed to delete index: {}", e));
     }
 
     async fn find_identity_by_index<T>(&self, query: &str) -> Result<T, IAMError>
@@ -227,9 +239,9 @@ impl IdentityManager {
     }
 
     /// Creates a new user identity.
-    pub async fn create_user(&self, name: String, email: Option<String>, password: String) -> Result<UserIdentity, IAMError> {
+    pub async fn create_user(&self, name: &str, email: Option<&str>, password: &str) -> Result<UserIdentity, IAMError> {
         // validate input
-        if !validate_username(&name) {
+        if !validate_username(name) {
             log::info!("Invalid user name: {}", name);
             return Err(IAMError::InvalidName);
         }
@@ -241,7 +253,7 @@ impl IdentityManager {
         }
 
         // preliminary db checks (reduce the number of rollbacks)
-        if !self.is_name_available(&name).await? {
+        if !self.is_name_available(name).await? {
             log::info!("User name {} already taken", name);
             return Err(IAMError::NameTaken);
         }
@@ -255,7 +267,7 @@ impl IdentityManager {
         let identity = {
             let sequence_id = self.identity_id_generator.get().await?;
             backoff::Exponential::new(3, Duration::from_micros(10))
-                .async_execute(|_| self.try_create_user_identity(sequence_id, &name, &password, email.as_deref()))
+                .async_execute(|_| self.try_create_user_identity(sequence_id, name, password, email))
                 .await?
         };
 
@@ -311,5 +323,10 @@ impl IdentityManager {
         let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
 
         self.find_user_by_index(&query, password).await
+    }
+
+    /// Find a user identity by the id
+    pub async fn find_user_by_id(&self, id: &str) -> Result<UserIdentity, IAMError> {
+        self.find_identity_by_id(id).await
     }
 }

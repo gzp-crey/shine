@@ -56,7 +56,7 @@ impl Identity for UserIdentity {
     type Data = UserIdentityData;
 
     fn entity_keys(id: &str) -> (String, String) {
-        (id[0..2].to_string(), id.to_string())
+        (format!("id-{}", &id[0..2]), id.to_string())
     }
 
     fn from_entity(entity: TableEntry<UserIdentityData>) -> Self {

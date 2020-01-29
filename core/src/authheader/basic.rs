@@ -5,7 +5,7 @@ use futures::future::{err, ok, Ready};
 use std::str;
 
 /// Credentials for `Basic` authentication scheme, defined in [RFC 7617](https://tools.ietf.org/html/rfc7617)
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BasicAuth {
     user_id: String,
     password: Option<String>,

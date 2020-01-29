@@ -11,8 +11,8 @@ pub mod session;
 
 pub use self::error::*;
 
-use identity::IdentityManager;
-use session::SessionManager;
+use identity::{IdentityManager, UserIdentity};
+use session::{Session, SessionManager};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IAMConfig {
@@ -34,6 +34,42 @@ impl IAM {
 
         Ok(IAM { identity, session })
     }
+
+    pub async fn register_user(
+        &self,
+        name: &str,
+        email: Option<&str>,
+        password: &str,
+        site: &SiteInfo,
+    ) -> Result<(UserIdentity, Session), IAMError> {
+        let identity = self.identity.create_user(name, email, password).await?;
+        let session = self.session.create_session(&identity, site).await?;
+
+        Ok((identity, session))
+    }
+
+    pub async fn login_name_email(
+        &self,
+        name_email: &str,
+        password: &str,
+        site: &SiteInfo,
+    ) -> Result<(UserIdentity, Session), IAMError> {
+        let identity = self.identity.find_user_by_name_email(name_email, Some(&password)).await?;
+        let session = self.session.create_session(&identity, site).await?;
+
+        Ok((identity, session))
+    }
+
+    pub async fn refresh_session_by_id_key(
+        &self,
+        user_id: &str,
+        session_key: &str,
+        site: &SiteInfo,
+    ) -> Result<(UserIdentity, Session), IAMError> {
+        let session = self.session.refresh_session_with_id_key(user_id, session_key, site).await?;
+        let identity = self.identity.find_user_by_id(user_id).await?;
+        Ok((identity, session))
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,11 +86,11 @@ pub async fn register_user(
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     log::info!("register {:?} {:?}", registration_params, site);
+    let RegistrationParams { name, password, email } = registration_params.into_inner();
+
     IdentityCookie::clear(&identity_session);
 
-    let RegistrationParams { name, password, email } = registration_params.into_inner();
-    let identity = state.iam().identity.create_user(name, email, password).await?;
-    let session = state.iam().session.create_session(&identity, site).await?;
+    let (identity, session) = state.iam().register_user(&name, email.as_deref(), &password, &site).await?;
 
     UserId::from(identity).to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
@@ -68,16 +104,14 @@ pub async fn login_basic_auth(
     auth: BasicAuth,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    let (user_id, password) = (auth.user_id(), auth.password());
-    log::info!("login {:?}, {:?}, {:?}", user_id, password, site);
+    log::info!("login {:?}, {:?}", auth, site);
+
+    let user_id = auth.user_id();
+    let password = auth.password().ok_or(IAMError::PasswordNotMatching)?;
+
     IdentityCookie::clear(&identity_session);
 
-    let identity = state
-        .iam()
-        .identity
-        .find_user_by_name_email(&user_id, password.as_deref())
-        .await?;
-    let session = state.iam().session.create_session(&identity, site).await?;
+    let (identity, session) = state.iam().login_name_email(&user_id, password, &site).await?;
 
     UserId::from(identity).to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
@@ -94,9 +128,11 @@ pub async fn refresh_session(
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     log::info!("refresh session {:?}, {:?}, {:?}", user_id, session_key, site);
 
-    unimplemented!()
-
-    /*match state.identity_db().refresh_session(session_key.key(), &site).await {
+    match state
+        .iam()
+        .refresh_session_by_id_key(user_id.user_id(), session_key.key(), &site)
+        .await
+    {
         Ok((identity, session)) => {
             IdentityCookie::clear(&identity_session);
             UserId::from(identity).to_session(&identity_session)?;
@@ -111,7 +147,7 @@ pub async fn refresh_session(
             IdentityCookie::clear(&identity_session);
             Err(e.into())
         }
-    }*/
+    }
 }
 
 #[derive(Debug, Deserialize)]
