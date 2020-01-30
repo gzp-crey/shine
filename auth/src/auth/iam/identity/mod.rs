@@ -13,12 +13,12 @@ pub use self::name_index::*;
 pub use self::sequence_index::*;
 pub use self::user_identity::*;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum IdentityCategory {
     User,
+    //Application,
     //Google,
     //Facebook,
-    //Studio,
 }
 
 /// Common data associated to each identity

@@ -1,4 +1,4 @@
-use super::{Identity, IdentityIndex, IdentityIndexData, IdentityIndexedId};
+use super::{Identity, IdentityCategory, IdentityIndex, IdentityIndexData, IdentityIndexedId};
 use azure_sdk_storage_table::TableEntry;
 use serde::{Deserialize, Serialize};
 
@@ -20,8 +20,10 @@ impl IdentityIndexData for EmailIndexData {
 pub struct EmailIndex(TableEntry<EmailIndexData>);
 
 impl EmailIndex {
-    pub fn entity_keys(email: &str) -> (String, String) {
-        (format!("x_email-{}", &email[0..2]), email.to_string())
+    pub fn entity_keys(cat: IdentityCategory, email: &str) -> (String, String) {
+        match cat {
+            IdentityCategory::User => (format!("x_user_email-{}", &email[0..2]), email.to_string()),
+        }
     }
 
     pub fn from_identity<T>(identity: &T) -> Option<Self>
@@ -30,7 +32,7 @@ impl EmailIndex {
     {
         let core = identity.core();
         if let Some(ref email) = core.email {
-            let (partition_key, row_key) = Self::entity_keys(email);
+            let (partition_key, row_key) = Self::entity_keys(core.category, email);
             Some(EmailIndex(TableEntry {
                 partition_key,
                 row_key,

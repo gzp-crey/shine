@@ -10,10 +10,10 @@ use auth::AuthService;
 pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
     env_logger::Builder::from_default_env()
-        //.filter_level(log::LevelFilter::Info)
-        .filter_level(log::LevelFilter::Trace)
+        .filter_level(log::LevelFilter::Info)
+        //.filter_level(log::LevelFilter::Trace)
         .filter_module("shine_auth", log::LevelFilter::Trace)
-        .filter_module("shine_core", log::LevelFilter::Trace)
+        .filter_module("shine_core", log::LevelFilter::Debug)
         .filter_module("mio", log::LevelFilter::Info)
         .filter_module("hyper", log::LevelFilter::Info)
         .filter_module("rustls", log::LevelFilter::Info)

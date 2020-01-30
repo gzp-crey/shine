@@ -11,20 +11,46 @@ use shine_core::{
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SessionData {
-    pub remote: String,
+    remote: String,
 
-    pub agent: String,
-
-    #[serde(with = "datetime")]
-    pub issued: DateTime<Utc>,
-
-    pub refresh_count: u64,
+    agent: String,
 
     #[serde(with = "datetime")]
-    pub refreshed: DateTime<Utc>,
+    issued: DateTime<Utc>,
+
+    refresh_count: u64,
+
+    #[serde(with = "datetime")]
+    refreshed: DateTime<Utc>,
 
     #[serde(with = "opt_datetime")]
-    pub disabled: Option<DateTime<Utc>>,
+    disabled: Option<DateTime<Utc>>,
+}
+
+impl SessionData {
+    pub fn remote(&self) -> &str {
+        &self.remote
+    }
+
+    pub fn agent(&self) -> &str {
+        &self.agent
+    }
+
+    pub fn issue_date(&self) -> DateTime<Utc> {
+        self.issued
+    }
+
+    pub fn refresh_count(&self) -> u64 {
+        self.refresh_count
+    }
+
+    pub fn refresh_date(&self) -> DateTime<Utc> {
+        self.refreshed
+    }
+
+    pub fn disable_date(&self) -> Option<DateTime<Utc>> {
+        self.disabled
+    }
 }
 
 /// The session of a user. Only users may have a session, other type of identites cannot log in and thus cannot
@@ -78,6 +104,11 @@ impl Session {
     pub fn invalidate(&mut self) {
         let data = &mut self.0.payload;
         data.disabled = Some(Utc::now());
+    }
+
+    pub fn is_invalidated(&self) -> bool {
+        let data = &self.0.payload;
+        data.disabled.is_some()
     }
 
     pub fn refresh(&mut self) {

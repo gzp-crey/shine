@@ -113,6 +113,20 @@ impl SignedCookie {
         Ok(SessionData::new(name.to_owned(), values))
     }
 
+    fn set_cookie_options(cookie: &mut Cookie, config: &dyn SignedCookieConfiguration) {
+        cookie.set_path(config.path().to_owned());
+        cookie.set_secure(config.secure());
+        cookie.set_http_only(config.http_only());
+
+        if let Some(domain) = config.domain() {
+            cookie.set_domain(domain.to_owned());
+        }
+
+        if let Some(same_site) = config.same_site() {
+            cookie.set_same_site(same_site);
+        }
+    }
+
     fn set_cookie<B>(
         res: &mut ServiceResponse<B>,
         name: &str,
@@ -122,20 +136,10 @@ impl SignedCookie {
         let value = serde_json::to_string(&values).map_err(SignedCookieError::Serialize)?;
 
         let mut cookie = Cookie::new(name.to_owned(), value);
-        cookie.set_path(config.path().to_owned());
-        cookie.set_secure(config.secure());
-        cookie.set_http_only(config.http_only());
-
-        if let Some(domain) = config.domain() {
-            cookie.set_domain(domain.to_owned());
-        }
+        Self::set_cookie_options(&mut cookie, config);
 
         if let Some(max_age) = config.max_age() {
             cookie.set_max_age(max_age);
-        }
-
-        if let Some(same_site) = config.same_site() {
-            cookie.set_same_site(same_site);
         }
 
         let mut jar = CookieJar::new();
@@ -152,9 +156,10 @@ impl SignedCookie {
         Ok(())
     }
 
-    fn purge_cookie<B>(res: &mut ServiceResponse<B>, name: &str) -> Result<(), Error> {
-        let mut cookie = Cookie::named(name.to_owned());
-        cookie.set_value("");
+    fn purge_cookie<B>(res: &mut ServiceResponse<B>, name: &str, config: &dyn SignedCookieConfiguration) -> Result<(), Error> {
+        let mut cookie = Cookie::new(name.to_owned(), "");
+        Self::set_cookie_options(&mut cookie, config);
+
         //removed as postman does not supports cookie.set_max_age(time::Duration::seconds(0));
         cookie.set_expires(time::now_utc() - time::Duration::days(365));
 
@@ -208,10 +213,12 @@ impl SignedCookie {
         for (name, (type_id, config)) in self.0.iter() {
             if let Some(data) = store.get_changes(type_id.clone()) {
                 if !config.read_only() {
-                    log::debug!("Signed cookie {} changed: {:?}", name, data);
                     if data.is_empty() {
-                        Self::purge_cookie(res, name).unwrap_or_else(|err| log::warn!("Failed to purge cookie: {:?}", err));
+                        log::debug!("Purge cookie {}", name);
+                        Self::purge_cookie(res, name, &**config)
+                            .unwrap_or_else(|err| log::warn!("Failed to purge cookie: {:?}", err));
                     } else {
+                        log::debug!("Set cookie {}", name);
                         Self::set_cookie(res, name, &**config, data)
                             .unwrap_or_else(|err| log::warn!("Failed to set cookie: {:?}", err));
                     }

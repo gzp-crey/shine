@@ -1,5 +1,7 @@
 use crate::auth::iam::{
-    identity::{EmailIndex, Identity, IdentityIndex, IdentityIndexedId, NameIndex, SequenceIndex, UserIdentity},
+    identity::{
+        EmailIndex, Identity, IdentityCategory, IdentityIndex, IdentityIndexedId, NameIndex, SequenceIndex, UserIdentity,
+    },
     IAMConfig, IAMError,
 };
 use argon2;
@@ -172,8 +174,8 @@ impl IdentityManager {
     }
 
     /// Return if the given email can be used.
-    pub async fn is_email_available(&self, email: &str) -> Result<bool, IAMError> {
-        let (partition_key, row_key) = EmailIndex::entity_keys(email);
+    pub async fn is_email_available(&self, cat: IdentityCategory, email: &str) -> Result<bool, IAMError> {
+        let (partition_key, row_key) = EmailIndex::entity_keys(cat, email);
         Ok(self.db.get_entry::<EmptyData>(&partition_key, &row_key).await?.is_none())
     }
 
@@ -258,7 +260,7 @@ impl IdentityManager {
             return Err(IAMError::NameTaken);
         }
         if let Some(ref email) = email {
-            if !self.is_email_available(email).await? {
+            if !self.is_email_available(IdentityCategory::User, email).await? {
                 log::info!("Email {} already taken", email);
                 return Err(IAMError::EmailTaken);
             }
@@ -316,7 +318,7 @@ impl IdentityManager {
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query_email = {
-            let (p, r) = EmailIndex::entity_keys(name_email);
+            let (p, r) = EmailIndex::entity_keys(IdentityCategory::User, name_email);
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query = format!("(({}) or ({}))", query_name, query_email);

@@ -56,7 +56,7 @@ impl IAM {
         Ok((identity, session))
     }
 
-    pub async fn refresh_session_by_id_key(
+    pub async fn refresh_session(
         &self,
         user_id: &str,
         session_key: &str,
@@ -73,7 +73,11 @@ impl IAM {
         Ok((identity, session))
     }
 
-    pub async fn invalidate_session(&self, session_key: &str, invalidate_all: bool) -> Result<(), IAMError> {
-        unimplemented!()
+    pub async fn invalidate_session(&self, user_id: &str, session_key: &str, invalidate_all: bool) -> Result<(), IAMError> {
+        if invalidate_all {
+            self.session.invalidate_all_session(user_id, Some(session_key)).await
+        } else {
+            self.session.invalidate_session(user_id, session_key).await
+        }
     }
 }
