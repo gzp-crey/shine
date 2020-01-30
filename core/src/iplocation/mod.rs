@@ -1,4 +1,6 @@
+use std::future::Future;
 use std::net::IpAddr;
+use std::pin::Pin;
 
 mod cached_location;
 mod error;
@@ -21,5 +23,5 @@ pub struct IpLocation {
 
 /// Trait to query geo-location by ip addresses
 pub trait IpLocationProvider {
-    fn get_location(&self, ip: IpAddr) -> Result<IpLocation, IpLocationError>;
+    fn get_location<'s>(&'s self, ip: IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>>;
 }

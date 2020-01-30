@@ -7,6 +7,9 @@ pub enum IpLocationError {
     /// Database related error
     DB(String),
 
+    /// Provider service error
+    ExternalProvider(String),
+
     /// Could not determine ip location
     LocationUnknown,
 }
@@ -16,6 +19,7 @@ impl fmt::Display for IpLocationError {
         match *self {
             IpLocationError::DB(ref e) => write!(f, "DB, {}", e),
             IpLocationError::LocationUnknown => write!(f, "Ip location is not known"),
+            IpLocationError::ExternalProvider(ref e) => write!(f, "Ip location query failed from external provider: {}", e),
         }
     }
 }

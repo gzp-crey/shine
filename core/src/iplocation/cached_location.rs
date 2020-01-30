@@ -4,7 +4,9 @@ use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
     TableEntry,
 };
+use std::future::Future;
 use std::net::IpAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,7 +29,10 @@ struct Inner {
 pub struct IpCachedLocation(Arc<Inner>);
 
 impl IpCachedLocation {
-    pub async fn new<P: 'static + IpLocationProvider>(provider: P, config: IpCachedLocationConfig) -> Result<Self, IpLocationError> {
+    pub async fn new<P: 'static + IpLocationProvider>(
+        provider: P,
+        config: IpCachedLocationConfig,
+    ) -> Result<Self, IpLocationError> {
         let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
         let table_service = TableService::new(client.clone());
         let cache = TableStorage::new(table_service.clone(), config.table_name);
@@ -43,7 +48,7 @@ impl IpCachedLocation {
 }
 
 impl IpLocationProvider for IpCachedLocation {
-    fn get_location(&self, ip: IpAddr) -> Result<IpLocation, IpLocationError> {
+    fn get_location<'s>(&'s self, ip: IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
         unimplemented!()
     }
 }
