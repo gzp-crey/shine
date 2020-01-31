@@ -4,15 +4,16 @@ use std::pin::Pin;
 
 mod cached_location;
 mod error;
-mod ipdata_location;
+mod ipdataco_location;
 mod no_location;
 
 pub use self::cached_location::*;
 pub use self::error::*;
-pub use self::ipdata_location::*;
+pub use self::ipdataco_location::*;
 pub use self::no_location::*;
 
 /// Geo-location of an ip addres
+#[derive(Clone, Debug)]
 pub struct IpLocation {
     pub country: String,
     pub continent: String,
