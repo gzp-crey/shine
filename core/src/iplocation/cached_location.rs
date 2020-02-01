@@ -22,7 +22,7 @@ pub struct IpCachedLocationConfig {
     pub time_to_live: Duration,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct CachedData {
     #[serde(with = "datetime")]
@@ -85,11 +85,13 @@ impl IpCachedLocation {
         let p_key = format!("{}", &r_key[0..2]);
 
         // look up the cache
+        let mut update = false;
         if let Ok(Some(loc)) = self.0.cache.get_entry::<CachedData>(&p_key, &r_key).await {
             let age = (Utc::now() - loc.payload.issued).to_std().unwrap_or(self.0.ttl);
             if age < self.0.ttl {
                 return Ok(loc.payload.into_location());
             }
+            update = true;
         }
 
         // query form the provider
@@ -101,9 +103,18 @@ impl IpCachedLocation {
             payload: CachedData::from_location(loc.clone()),
         };
 
-        // update cache
-        if let Err(err) = self.0.cache.insert_entry::<CachedData>(loc_entity).await {
-            log::warn!("Could not cache ip: {:?}", err);
+        /*if let Err(err) = self.0.cache.insert_or_update_entry::<CachedData>(loc_entity).await {
+            log::warn!("Could not update cached ip: {:?}", err);
+        }*/
+
+        if update {
+            if let Err(err) = self.0.cache.update_entry::<CachedData>(loc_entity).await {
+                log::warn!("Could not update cached ip: {:?}", err);
+            }
+        } else {
+            if let Err(err) = self.0.cache.insert_entry::<CachedData>(loc_entity).await {
+                log::warn!("Could not insert cached ip: {:?}", err);
+            }
         }
 
         Ok(loc)

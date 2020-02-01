@@ -70,6 +70,8 @@ async fn salted_sequence_counter(
 }
 
 fn main() {
+    env_logger::init();
+
     let cfg = SyncCounterConfig {
         storage_account: env::var("STORAGE_ACCOUNT").expect("Missing STORAGE_ACCOUNT env variable"),
         storage_account_key: env::var("STORAGE_ACCOUNT_KEY").expect("Missing STORAGE_ACCOUNT_KEY env variable"),
