@@ -1,4 +1,4 @@
-use azure_sdk_storage_table::TableEntry;
+use azure_sdk_storage_table::TableEntity;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shine_core::{
@@ -56,7 +56,7 @@ impl SessionData {
 /// The session of a user. Only users may have a session, other type of identites cannot log in and thus cannot
 /// have session.
 #[derive(Debug)]
-pub struct Session(TableEntry<SessionData>);
+pub struct Session(TableEntity<SessionData>);
 
 impl Session {
     pub fn entity_keys(id: &str, key: &str) -> (String, String) {
@@ -66,7 +66,7 @@ impl Session {
     pub fn new(id: String, key: String, site: &SiteInfo) -> Session {
         let (partition_key, row_key) = Self::entity_keys(&id, &key);
 
-        Session(TableEntry {
+        Session(TableEntity {
             partition_key,
             row_key,
             etag: None,
@@ -81,11 +81,11 @@ impl Session {
         })
     }
 
-    pub fn from_entity(entity: TableEntry<SessionData>) -> Self {
+    pub fn from_entity(entity: TableEntity<SessionData>) -> Self {
         Self(entity)
     }
 
-    pub fn into_entity(self) -> TableEntry<SessionData> {
+    pub fn into_entity(self) -> TableEntity<SessionData> {
         self.0
     }
 

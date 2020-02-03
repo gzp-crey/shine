@@ -1,5 +1,5 @@
 use super::{Identity, IdentityIndex, IdentityIndexData, IdentityIndexedId};
-use azure_sdk_storage_table::TableEntry;
+use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
 /// Data associated to an identity index by name
@@ -18,7 +18,7 @@ impl IdentityIndexData for NameIndexData {
 
 /// Index identity by name
 #[derive(Debug)]
-pub struct NameIndex(TableEntry<NameIndexData>);
+pub struct NameIndex(TableEntity<NameIndexData>);
 
 impl NameIndex {
     pub fn entity_keys(name: &str) -> (String, String) {
@@ -32,7 +32,7 @@ impl NameIndex {
         let core = identity.core();
         let name = &core.name;
         let (partition_key, row_key) = Self::entity_keys(name);
-        Self(TableEntry {
+        Self(TableEntity {
             partition_key,
             row_key,
             etag: None,
@@ -48,11 +48,11 @@ impl NameIndex {
 impl IdentityIndex for NameIndex {
     type Index = NameIndexData;
 
-    fn from_entity(entity: TableEntry<NameIndexData>) -> Self {
+    fn from_entity(entity: TableEntity<NameIndexData>) -> Self {
         Self(entity)
     }
 
-    fn into_entity(self) -> TableEntry<NameIndexData> {
+    fn into_entity(self) -> TableEntity<NameIndexData> {
         self.0
     }
 

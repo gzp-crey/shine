@@ -70,7 +70,7 @@ impl IdentityManager {
     {
         let identity = identity.into_entity();
         self.db
-            .delete_entry(&identity.partition_key, &identity.row_key, identity.etag.as_deref())
+            .delete_entity(&identity.partition_key, &identity.row_key, identity.etag.as_deref())
             .await
             .unwrap_or_else(|e| {
                 log::error!(
@@ -87,7 +87,7 @@ impl IdentityManager {
         T: Identity,
     {
         let (p, r) = T::entity_keys(&id);
-        let identity = self.db.get_entry(&p, &r).await?;
+        let identity = self.db.get_entity(&p, &r).await?;
         let identity = identity.map(T::from_entity).ok_or(IAMError::IdentityNotFound)?;
 
         Ok(identity)
@@ -99,7 +99,7 @@ impl IdentityManager {
     {
         let index = index.into_entity();
         self.db
-            .delete_entry(&index.partition_key, &index.row_key, index.etag.as_deref())
+            .delete_entity(&index.partition_key, &index.row_key, index.etag.as_deref())
             .await
             .unwrap_or_else(|e| log::error!("Failed to delete index: {}", e));
     }
@@ -108,13 +108,13 @@ impl IdentityManager {
     where
         T: Identity,
     {
-        let mut index = self.db.query_entries::<IdentityIndexedId>(Some(&query)).await?;
+        let mut index = self.db.query_entities::<IdentityIndexedId>(Some(&query)).await?;
         assert!(index.len() <= 1);
         let index = index.pop().ok_or(IAMError::IdentityNotFound)?;
 
         let identity_id = &index.payload.identity_id;
         let (p, r) = T::entity_keys(&identity_id);
-        let identity = self.db.get_entry(&p, &r).await?;
+        let identity = self.db.get_entity(&p, &r).await?;
         let identity = identity.map(T::from_entity).ok_or(IAMError::IdentityNotFound)?;
 
         Ok(identity)
@@ -138,7 +138,7 @@ impl IdentityManager {
         T: Identity,
     {
         let sequence_index = SequenceIndex::from_identity(identity);
-        match self.db.insert_entry(sequence_index.into_entity()).await {
+        match self.db.insert_entity(sequence_index.into_entity()).await {
             Ok(sequence_index) => Ok(SequenceIndex::from_entity(sequence_index)),
             Err(e) => {
                 if azure_utils::is_precodition_error(&e) {
@@ -153,7 +153,7 @@ impl IdentityManager {
     /// Return if the given name can be used as a new identity name
     pub async fn is_name_available(&self, name: &str) -> Result<bool, IAMError> {
         let (partition_key, row_key) = NameIndex::entity_keys(name);
-        Ok(self.db.get_entry::<EmptyData>(&partition_key, &row_key).await?.is_none())
+        Ok(self.db.get_entity::<EmptyData>(&partition_key, &row_key).await?.is_none())
     }
 
     async fn insert_name_index<T>(&self, identity: &T) -> Result<NameIndex, IAMError>
@@ -161,7 +161,7 @@ impl IdentityManager {
         T: Identity,
     {
         let name_index = NameIndex::from_identity(identity);
-        match self.db.insert_entry(name_index.into_entity()).await {
+        match self.db.insert_entity(name_index.into_entity()).await {
             Ok(name_index) => Ok(NameIndex::from_entity(name_index)),
             Err(e) => {
                 if azure_utils::is_precodition_error(&e) {
@@ -176,7 +176,7 @@ impl IdentityManager {
     /// Return if the given email can be used.
     pub async fn is_email_available(&self, cat: IdentityCategory, email: &str) -> Result<bool, IAMError> {
         let (partition_key, row_key) = EmailIndex::entity_keys(cat, email);
-        Ok(self.db.get_entry::<EmptyData>(&partition_key, &row_key).await?.is_none())
+        Ok(self.db.get_entity::<EmptyData>(&partition_key, &row_key).await?.is_none())
     }
 
     async fn insert_email_index<T>(&self, identity: &T) -> Result<Option<EmailIndex>, IAMError>
@@ -184,7 +184,7 @@ impl IdentityManager {
         T: Identity,
     {
         if let Some(email_index) = EmailIndex::from_identity(identity) {
-            match self.db.insert_entry(email_index.into_entity()).await {
+            match self.db.insert_entity(email_index.into_entity()).await {
                 Ok(email_index) => Ok(Some(EmailIndex::from_entity(email_index))),
                 Err(err) => {
                     if azure_utils::is_precodition_error(&err) {
@@ -226,7 +226,7 @@ impl IdentityManager {
 
         let identity = self
             .db
-            .insert_entry(identity.into_entity())
+            .insert_entity(identity.into_entity())
             .await
             .map_err(|err| {
                 if azure_utils::is_precodition_error(&err) {

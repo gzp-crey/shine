@@ -44,7 +44,7 @@ impl SessionManager {
     async fn remove_index(&self, session: SessionIndex) {
         let session = session.into_entity();
         self.db
-            .delete_entry(&session.partition_key, &session.row_key, session.etag.as_deref())
+            .delete_entity(&session.partition_key, &session.row_key, session.etag.as_deref())
             .await
             .unwrap_or_else(|e| log::error!("Failed to delete session index {:?}: {}", session, e));
     }
@@ -57,7 +57,7 @@ impl SessionManager {
         // fisrt insert index, it also ensures key uniqueness.
         let session_index = {
             let index = SessionIndex::new(&key, id);
-            let index = match self.db.insert_entry(index.into_entity()).await {
+            let index = match self.db.insert_entity(index.into_entity()).await {
                 Ok(index) => index,
                 Err(err) if azure_utils::is_precodition_error(&err) => return Err(IAMError::SessionKeyConflict),
                 Err(err) => return Err(err.into()),
@@ -66,7 +66,7 @@ impl SessionManager {
         };
 
         let session = Session::new(id.to_owned(), key, &site);
-        let session = match self.db.insert_entry(session.into_entity()).await {
+        let session = match self.db.insert_entity(session.into_entity()).await {
             Ok(session) => Session::from_entity(session),
             Err(err) => {
                 self.remove_index(session_index).await;
@@ -101,7 +101,7 @@ impl SessionManager {
 
     async fn find_session_by_id_key(&self, id: &str, key: &str) -> Result<Session, IAMError> {
         let (p, r) = Session::entity_keys(id, key);
-        match self.db.get_entry::<SessionData>(&p, &r).await {
+        match self.db.get_entity::<SessionData>(&p, &r).await {
             Ok(Some(session)) => {
                 if session.payload.disable_date().is_some() {
                     Err(IAMError::SessionExpired)
@@ -116,7 +116,7 @@ impl SessionManager {
 
     async fn find_session_by_key(&self, key: &str) -> Result<(String, Session), IAMError> {
         let (p, r) = SessionIndex::entity_keys(key);
-        let index = match self.db.get_entry::<SessionIndexData>(&p, &r).await {
+        let index = match self.db.get_entity::<SessionIndexData>(&p, &r).await {
             Ok(Some(index)) => SessionIndex::from_entity(index),
             Ok(None) => return Err(IAMError::SessionExpired),
             Err(err) => return Err(err.into()),
@@ -128,7 +128,7 @@ impl SessionManager {
     }
 
     async fn update_session(&self, session: Session) -> Result<Session, IAMError> {
-        match self.db.update_entry(session.into_entity()).await {
+        match self.db.update_entity(session.into_entity()).await {
             Ok(session) => Ok(Session::from_entity(session)),
             Err(err) if azure_utils::is_precodition_error(&err) => Err(IAMError::SessionKeyConflict),
             Err(err) => Err(err.into()),
@@ -214,7 +214,7 @@ impl SessionManager {
         // query all the active session
         let query = format!("PartitionKey eq 'id-{}' and Disabled eq ''", id);
         let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
-        let sessions = self.db.query_entries::<SessionData>(Some(&query)).await?;
+        let sessions = self.db.query_entities::<SessionData>(Some(&query)).await?;
         log::debug!("Sessions to invalidate: {:?}", sessions);
 
         let mut has_conflict = false;

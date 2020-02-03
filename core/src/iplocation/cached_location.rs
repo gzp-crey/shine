@@ -3,7 +3,7 @@ use crate::azure_utils::serde::datetime;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
-    TableEntry,
+    TableEntity,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -80,41 +80,29 @@ impl IpCachedLocation {
     }
 
     async fn find_location(&self, ip: IpAddr) -> Result<IpLocation, IpLocationError> {
-        //find entry
+        //find entity
         let r_key = ip.to_string();
         let p_key = format!("{}", &r_key[0..2]);
 
         // look up the cache
-        let mut update = false;
-        if let Ok(Some(loc)) = self.0.cache.get_entry::<CachedData>(&p_key, &r_key).await {
+        if let Ok(Some(loc)) = self.0.cache.get_entity::<CachedData>(&p_key, &r_key).await {
             let age = (Utc::now() - loc.payload.issued).to_std().unwrap_or(self.0.ttl);
             if age < self.0.ttl {
-                return Ok(loc.payload.into_location());
+                //return Ok(loc.payload.into_location());
             }
-            update = true;
         }
 
         // query form the provider
         let loc = self.0.provider.get_location(ip).await?;
-        let loc_entity = TableEntry {
+        let loc_entity = TableEntity {
             partition_key: p_key,
             row_key: r_key,
-            etag: Some("*".to_string()),
+            etag: None,
             payload: CachedData::from_location(loc.clone()),
         };
 
-        /*if let Err(err) = self.0.cache.insert_or_update_entry::<CachedData>(loc_entity).await {
+        if let Err(err) = self.0.cache.update_entity::<CachedData>(loc_entity).await {
             log::warn!("Could not update cached ip: {:?}", err);
-        }*/
-
-        if update {
-            if let Err(err) = self.0.cache.update_entry::<CachedData>(loc_entity).await {
-                log::warn!("Could not update cached ip: {:?}", err);
-            }
-        } else {
-            if let Err(err) = self.0.cache.insert_entry::<CachedData>(loc_entity).await {
-                log::warn!("Could not insert cached ip: {:?}", err);
-            }
         }
 
         Ok(loc)

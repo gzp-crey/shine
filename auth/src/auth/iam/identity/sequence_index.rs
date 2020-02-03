@@ -1,5 +1,5 @@
 use super::{Identity, IdentityIndex, IdentityIndexData, IdentityIndexedId};
-use azure_sdk_storage_table::TableEntry;
+use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
 /// Data associated to an identity index by the sequence id
@@ -18,7 +18,7 @@ impl IdentityIndexData for SequenceIndexData {
 
 /// Index identity by the sequence id
 #[derive(Debug)]
-pub struct SequenceIndex(TableEntry<SequenceIndexData>);
+pub struct SequenceIndex(TableEntity<SequenceIndexData>);
 
 impl SequenceIndex {
     pub fn entity_keys(sequence_id: u64) -> (String, String) {
@@ -32,7 +32,7 @@ impl SequenceIndex {
         let core = identity.core();
         let sequence_id = core.sequence_id;
         let (partition_key, row_key) = Self::entity_keys(sequence_id);
-        Self(TableEntry {
+        Self(TableEntity {
             partition_key,
             row_key,
             etag: None,
@@ -48,11 +48,11 @@ impl SequenceIndex {
 impl IdentityIndex for SequenceIndex {
     type Index = SequenceIndexData;
 
-    fn from_entity(entity: TableEntry<SequenceIndexData>) -> Self {
+    fn from_entity(entity: TableEntity<SequenceIndexData>) -> Self {
         Self(entity)
     }
 
-    fn into_entity(self) -> TableEntry<SequenceIndexData> {
+    fn into_entity(self) -> TableEntity<SequenceIndexData> {
         self.0
     }
 

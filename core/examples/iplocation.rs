@@ -79,7 +79,7 @@ fn main() {
         return eprintln!("invalid subcommand");
     };
 
-    let ips: Vec<IpAddr> = vec!["127.0.0.1", "62.77.220.46", "8.8.8.8", "62.77.220.47"]
+    let ips: Vec<IpAddr> = vec!["127.0.0.1", "104.215.148.63", "8.8.8.8", "2a00:1450:400d:805::2005"]
         .iter()
         .map(|x| x.parse().unwrap())
         .collect();

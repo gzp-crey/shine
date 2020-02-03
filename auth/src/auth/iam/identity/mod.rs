@@ -1,4 +1,4 @@
-use azure_sdk_storage_table::TableEntry;
+use azure_sdk_storage_table::TableEntity;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 mod email_index;
@@ -55,12 +55,12 @@ pub trait Identity {
     fn entity_keys(id: &str) -> (String, String);
 
     /// Create Self from the stored table entity
-    fn from_entity(data: TableEntry<Self::Data>) -> Self
+    fn from_entity(data: TableEntity<Self::Data>) -> Self
     where
         Self: Sized;
 
     /// Create a the table entity to store from Self
-    fn into_entity(self) -> TableEntry<Self::Data>;
+    fn into_entity(self) -> TableEntity<Self::Data>;
 
     /// Return the associated data
     fn into_data(self) -> Self::Data;
@@ -87,12 +87,12 @@ pub trait IdentityIndex {
     type Index: IdentityIndexData;
 
     /// Create Self from the stored table entity
-    fn from_entity(data: TableEntry<Self::Index>) -> Self
+    fn from_entity(data: TableEntity<Self::Index>) -> Self
     where
         Self: Sized;
 
     /// Create a the table entity to store from Self
-    fn into_entity(self) -> TableEntry<Self::Index>;
+    fn into_entity(self) -> TableEntity<Self::Index>;
 
     /// Return the associated data
     fn into_data(self) -> Self::Index;

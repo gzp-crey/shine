@@ -1,4 +1,4 @@
-use azure_sdk_storage_table::TableEntry;
+use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
 /// Data associated to an session index by key
@@ -10,7 +10,7 @@ pub struct SessionIndexData {
 
 /// Index session by key
 #[derive(Debug)]
-pub struct SessionIndex(TableEntry<SessionIndexData>);
+pub struct SessionIndex(TableEntity<SessionIndexData>);
 
 impl SessionIndex {
     pub fn entity_keys(key: &str) -> (String, String) {
@@ -19,7 +19,7 @@ impl SessionIndex {
 
     pub fn new(key: &str, id: &str) -> Self {
         let (partition_key, row_key) = Self::entity_keys(key);
-        Self(TableEntry {
+        Self(TableEntity {
             partition_key,
             row_key,
             etag: None,
@@ -29,11 +29,11 @@ impl SessionIndex {
         })
     }
 
-    pub fn from_entity(entity: TableEntry<SessionIndexData>) -> Self {
+    pub fn from_entity(entity: TableEntity<SessionIndexData>) -> Self {
         Self(entity)
     }
 
-    pub fn into_entity(self) -> TableEntry<SessionIndexData> {
+    pub fn into_entity(self) -> TableEntity<SessionIndexData> {
         self.0
     }
 

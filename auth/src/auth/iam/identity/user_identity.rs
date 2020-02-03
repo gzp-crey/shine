@@ -1,5 +1,5 @@
 use super::{Identity, IdentityCategory, IdentityCore, IdentityData};
-use azure_sdk_storage_table::TableEntry;
+use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 use shine_core::session::UserId;
 
@@ -20,7 +20,7 @@ impl IdentityData for UserIdentityData {
 
 /// Identity assigned to a user
 #[derive(Debug)]
-pub struct UserIdentity(TableEntry<UserIdentityData>);
+pub struct UserIdentity(TableEntity<UserIdentityData>);
 
 impl UserIdentity {
     pub fn new(
@@ -32,7 +32,7 @@ impl UserIdentity {
         password_hash: String,
     ) -> UserIdentity {
         let (partition_key, row_key) = Self::entity_keys(&id);
-        UserIdentity(TableEntry {
+        UserIdentity(TableEntity {
             partition_key,
             row_key,
             etag: None,
@@ -59,11 +59,11 @@ impl Identity for UserIdentity {
         (format!("id-{}", &id[0..2]), id.to_string())
     }
 
-    fn from_entity(entity: TableEntry<UserIdentityData>) -> Self {
+    fn from_entity(entity: TableEntity<UserIdentityData>) -> Self {
         Self(entity)
     }
 
-    fn into_entity(self) -> TableEntry<UserIdentityData> {
+    fn into_entity(self) -> TableEntity<UserIdentityData> {
         self.0
     }
 

@@ -3,7 +3,7 @@ use crate::backoff::{self, Backoff, BackoffError};
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
-    TableEntry,
+    TableEntity,
 };
 use core::ops::Range;
 use serde::{Deserialize, Serialize};
@@ -54,13 +54,13 @@ impl SyncCounterStore {
         match self
             .0
             .counters
-            .get_entry::<Counter>(PARTITION_KEY, sequence_id)
+            .get_entity::<Counter>(PARTITION_KEY, sequence_id)
             .await
             .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))?
         {
             None => {
                 let start = self.0.starting_value;
-                let entry = TableEntry {
+                let entity = TableEntity {
                     partition_key: PARTITION_KEY.to_string(),
                     row_key: sequence_id.to_string(),
                     etag: None,
@@ -68,22 +68,22 @@ impl SyncCounterStore {
                 };
                 self.0
                     .counters
-                    .insert_entry(entry)
+                    .insert_entity(entity)
                     .await
                     .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))
                     .map(|ok| start..(ok.payload.value))
             }
-            Some(mut entry) => {
+            Some(mut entity) => {
                 //ensure counter is larger than the requested initial
-                let start = if entry.payload.value < self.0.starting_value {
+                let start = if entity.payload.value < self.0.starting_value {
                     self.0.starting_value
                 } else {
-                    entry.payload.value
+                    entity.payload.value
                 };
-                entry.payload.value = start + count;
+                entity.payload.value = start + count;
                 self.0
                     .counters
-                    .update_entry(entry)
+                    .update_entity(entity)
                     .await
                     .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))
                     .map(|ok| start..(ok.payload.value))
