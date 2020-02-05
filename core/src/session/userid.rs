@@ -1,19 +1,24 @@
 use super::IdentitySession;
+use crate::serde_with;
 use actix_web::Error as ActixError;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::iter::FromIterator;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserId {
     user_id: String,
     name: String,
-    //roles: Vec<String>,
+    #[serde(with = "serde_with::hashset_list")]
+    roles: HashSet<String>,
 }
 
 impl UserId {
     pub fn new(user_id: String, name: String, roles: Vec<String>) -> Self {
         UserId {
             user_id,
-            name, /*, roles*/
+            name,
+            roles: HashSet::from_iter(roles.into_iter()),
         }
     }
 
@@ -25,9 +30,13 @@ impl UserId {
         &self.name
     }
 
-    /*pub fn roles(&self) -> &Vec<String> {
+    pub fn roles(&self) -> &HashSet<String> {
         &self.roles
-    }*/
+    }
+
+    pub fn has_role(&self, role: &str) -> bool {
+        self.roles.contains(role)
+    }
 }
 
 impl UserId {

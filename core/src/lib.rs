@@ -4,5 +4,6 @@ pub mod idgenerator;
 pub mod iplocation;
 pub mod requestinfo;
 pub mod serde;
+pub mod serde_with;
 pub mod session;
 pub mod signed_cookie;

@@ -29,15 +29,12 @@ impl SessionManager {
     pub async fn new(config: &IAMConfig) -> Result<Self, IAMError> {
         let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
         let table_service = TableService::new(client.clone());
-        let session_db = TableStorage::new(table_service.clone(), "sessions");
+        let db = TableStorage::new(table_service.clone(), "sessions");
 
-        session_db.create_if_not_exists().await?;
+        db.create_if_not_exists().await?;
         let time_to_live = ChronoDuration::hours(config.session_time_to_live_h as i64);
 
-        Ok(SessionManager {
-            db: session_db,
-            time_to_live,
-        })
+        Ok(SessionManager { db, time_to_live })
     }
 
     fn genrate_session_key(&self) -> String {
@@ -196,7 +193,12 @@ impl SessionManager {
 
     /// Check if session key is valid when both the id and the key is known.
     /// In case of a compromised key the session is also disabled in the database.
-    pub async fn validate_session_with_id_key(&self, id: &str, key: &str, fingerprint: &Fingerprint) -> Result<Session, IAMError> {
+    pub async fn validate_session_with_id_key(
+        &self,
+        id: &str,
+        key: &str,
+        fingerprint: &Fingerprint,
+    ) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
             .async_execute(|_| self.try_validate_session_with_id_key(id, key, fingerprint))
             .await
@@ -231,9 +233,9 @@ impl SessionManager {
 
     async fn try_invalidate_session(&self, id: &str, key: &str) -> Result<(), BackoffError<IAMError>> {
         let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
-        //todo: securitiy consideration, this way a user might be forced to login 
-        // again knowing only the session key and hence the login handshake could be 
-        // triggered and captured. 
+        //todo: securitiy consideration, this way a user might be forced to login
+        // again knowing only the session key and hence the login handshake could be
+        // triggered and captured.
         session.disable();
         self.update_session(session).await.map_err(IAMError::into_backoff).map(|_| ())
     }

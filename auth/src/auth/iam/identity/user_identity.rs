@@ -1,7 +1,6 @@
 use super::{Identity, IdentityCategory, IdentityCore, IdentityData};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
-use shine_core::session::UserId;
 
 /// Data associated to a user identity
 #[derive(Debug, Serialize, Deserialize)]
@@ -77,12 +76,5 @@ impl Identity for UserIdentity {
 
     fn data_mut(&mut self) -> &mut UserIdentityData {
         &mut self.0.payload
-    }
-}
-
-impl From<UserIdentity> for UserId {
-    fn from(user: UserIdentity) -> Self {
-        let data = user.into_data();
-        UserId::new(data.core.id, data.core.name, vec![] /*user.roles*/)
     }
 }

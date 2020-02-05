@@ -1,10 +1,19 @@
-use super::iam::IAMError;
+use super::iam::{
+    identity::{Identity, UserIdentity},
+    role::Roles,
+    IAMError,
+};
 use super::State;
 use actix_web::HttpRequest;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
 use shine_core::requestinfo::BasicAuth;
 use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
+
+fn create_user_id(user: UserIdentity, roles: Roles) -> UserId {
+    let data = user.into_data();
+    UserId::new(data.core.id, data.core.name, roles)
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegistrationParams {
@@ -25,12 +34,12 @@ pub async fn register_user(
 
     IdentityCookie::clear(&identity_session);
 
-    let (identity, session) = state
+    let (identity, roles, session) = state
         .iam()
         .register_user(&name, email.as_deref(), &password, &fingerprint)
         .await?;
 
-    UserId::from(identity).to_session(&identity_session)?;
+    create_user_id(identity, roles).to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
 
     Ok(HttpResponse::Ok().finish())
@@ -48,9 +57,9 @@ pub async fn login_basic_auth(
 
     IdentityCookie::clear(&identity_session);
 
-    let (identity, session) = state.iam().login_name_email(&user_id, password, &fingerprint).await?;
+    let (identity, roles, session) = state.iam().login_name_email(&user_id, password, &fingerprint).await?;
 
-    UserId::from(identity).to_session(&identity_session)?;
+    create_user_id(identity, roles).to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
 
     Ok(HttpResponse::Ok().finish())
@@ -70,9 +79,9 @@ pub async fn refresh_session_by_key(
     let fingerprint = state.iam().get_fingerprint(&req).await?;
 
     match state.iam().refresh_session_by_key(&key_params.key, &fingerprint).await {
-        Ok((identity, session)) => {
+        Ok((identity, roles, session)) => {
             IdentityCookie::clear(&identity_session);
-            UserId::from(identity).to_session(&identity_session)?;
+            create_user_id(identity, roles).to_session(&identity_session)?;
             SessionKey::from(session).to_session(&identity_session)?;
             Ok(HttpResponse::Ok().finish())
         }
@@ -101,13 +110,11 @@ pub async fn validate_session(
         .validate_session(user_id.user_id(), session_key.key(), &fingerprint)
         .await
     {
-        Ok(identity) => {
-            let user_id = UserId::from(identity);
+        Ok((identity, roles)) => {
+            let user_id = create_user_id(identity, roles);
             Ok(HttpResponse::Ok().json(user_id))
         }
-        Err(e) => {
-            Err(e.into())
-        }
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -125,9 +132,9 @@ pub async fn refresh_session(
         .refresh_session(user_id.user_id(), session_key.key(), &fingerprint)
         .await
     {
-        Ok((identity, session)) => {
+        Ok((identity, roles, session)) => {
             IdentityCookie::clear(&identity_session);
-            UserId::from(identity).to_session(&identity_session)?;
+            create_user_id(identity, roles).to_session(&identity_session)?;
             SessionKey::from(session).to_session(&identity_session)?;
             Ok(HttpResponse::Ok().finish())
         }

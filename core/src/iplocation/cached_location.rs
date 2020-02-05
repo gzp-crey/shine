@@ -1,5 +1,5 @@
 use super::{IpLocation, IpLocationError, IpLocationProvider};
-use crate::azure_utils::serde_with_datetime;
+use crate::serde_with;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
@@ -25,7 +25,7 @@ pub struct IpCachedLocationConfig {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct CachedData {
-    #[serde(with = "serde_with_datetime")]
+    #[serde(with = "serde_with::datetime")]
     issued: DateTime<Utc>,
 
     country: String,

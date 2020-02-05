@@ -2,10 +2,7 @@ use crate::auth::iam::fingerprint::Fingerprint;
 use azure_sdk_storage_table::TableEntity;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use shine_core::{
-    azure_utils::{serde_with_datetime, serde_with_opt_datetime},
-    session::SessionKey,
-};
+use shine_core::{serde_with, session::SessionKey};
 
 /// Data associated to a session
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,15 +13,15 @@ pub struct SessionData {
     remote_continent: String,
     remote_country: String,
 
-    #[serde(with = "serde_with_datetime")]
+    #[serde(with = "serde_with::datetime")]
     issued: DateTime<Utc>,
 
     refresh_count: u64,
 
-    #[serde(with = "serde_with_datetime")]
+    #[serde(with = "serde_with::datetime")]
     refreshed: DateTime<Utc>,
 
-    #[serde(with = "serde_with_opt_datetime")]
+    #[serde(with = "serde_with::opt_datetime")]
     disabled: Option<DateTime<Utc>>,
 }
 
