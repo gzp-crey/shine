@@ -9,7 +9,7 @@ use std::time::Duration;
 async fn query(provider: Box<dyn IpLocationProvider>, ips: Vec<IpAddr>) -> Vec<Result<IpLocation, IpLocationError>> {
     let mut locs = Vec::new();
     for ip in ips {
-        locs.push(provider.get_location(ip).await);
+        locs.push(provider.get_location(&ip).await);
     }
 
     locs

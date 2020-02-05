@@ -1,10 +1,10 @@
 use super::iam::IAMError;
 use super::State;
+use actix_web::HttpRequest;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
-use shine_core::authheader::BasicAuth;
+use shine_core::requestinfo::BasicAuth;
 use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
-use shine_core::siteinfo::SiteInfo;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegistrationParams {
@@ -14,17 +14,21 @@ pub struct RegistrationParams {
 }
 
 pub async fn register_user(
+    req: HttpRequest,
     identity_session: IdentitySession,
-    site: SiteInfo,
     registration_params: web::Json<RegistrationParams>,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    log::info!("register {:?} {:?}", registration_params, site);
     let RegistrationParams { name, password, email } = registration_params.into_inner();
+    let fingerprint = state.iam().get_fingerprint(&req).await?;
+    log::info!("register_user: {}, {}, {:?}, {:?}", name, password, email, fingerprint);
 
     IdentityCookie::clear(&identity_session);
 
-    let (identity, session) = state.iam().register_user(&name, email.as_deref(), &password, &site).await?;
+    let (identity, session) = state
+        .iam()
+        .register_user(&name, email.as_deref(), &password, &fingerprint)
+        .await?;
 
     UserId::from(identity).to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
@@ -33,19 +37,18 @@ pub async fn register_user(
 }
 
 pub async fn login_basic_auth(
+    req: HttpRequest,
     identity_session: IdentitySession,
-    site: SiteInfo,
     auth: BasicAuth,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    log::info!("login {:?}, {:?}", auth, site);
-
     let user_id = auth.user_id();
     let password = auth.password().ok_or(IAMError::PasswordNotMatching)?;
+    let fingerprint = state.iam().get_fingerprint(&req).await?;
 
     IdentityCookie::clear(&identity_session);
 
-    let (identity, session) = state.iam().login_name_email(&user_id, password, &site).await?;
+    let (identity, session) = state.iam().login_name_email(&user_id, password, &fingerprint).await?;
 
     UserId::from(identity).to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
@@ -59,14 +62,14 @@ pub struct RefreshKeyParams {
 }
 
 pub async fn refresh_session_by_key(
+    req: HttpRequest,
     identity_session: IdentitySession,
     key_params: web::Json<RefreshKeyParams>,
-    site: SiteInfo,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    log::info!("refresh session by key {:?}, {:?}", key_params, site);
+    let fingerprint = state.iam().get_fingerprint(&req).await?;
 
-    match state.iam().refresh_session_by_key(&key_params.key, &site).await {
+    match state.iam().refresh_session_by_key(&key_params.key, &fingerprint).await {
         Ok((identity, session)) => {
             IdentityCookie::clear(&identity_session);
             UserId::from(identity).to_session(&identity_session)?;
@@ -84,16 +87,44 @@ pub async fn refresh_session_by_key(
     }
 }
 
-pub async fn refresh_session(
+pub async fn validate_session(
+    req: HttpRequest,
     identity_session: IdentitySession,
-    site: SiteInfo,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
-    log::info!("refresh session {:?}, {:?}, {:?}", user_id, session_key, site);
+    let fingerprint = state.iam().get_fingerprint(&req).await?;
 
-    match state.iam().refresh_session(user_id.user_id(), session_key.key(), &site).await {
+    match state
+        .iam()
+        .validate_session(user_id.user_id(), session_key.key(), &fingerprint)
+        .await
+    {
+        Ok(identity) => {
+            let user_id = UserId::from(identity);
+            Ok(HttpResponse::Ok().json(user_id))
+        }
+        Err(e) => {
+            Err(e.into())
+        }
+    }
+}
+
+pub async fn refresh_session(
+    req: HttpRequest,
+    identity_session: IdentitySession,
+    state: web::Data<State>,
+) -> Result<HttpResponse, ActixError> {
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let fingerprint = state.iam().get_fingerprint(&req).await?;
+
+    match state
+        .iam()
+        .refresh_session(user_id.user_id(), session_key.key(), &fingerprint)
+        .await
+    {
         Ok((identity, session)) => {
             IdentityCookie::clear(&identity_session);
             UserId::from(identity).to_session(&identity_session)?;

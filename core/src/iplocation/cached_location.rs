@@ -1,5 +1,5 @@
 use super::{IpLocation, IpLocationError, IpLocationProvider};
-use crate::azure_utils::serde::datetime;
+use crate::azure_utils::serde_with_datetime;
 use azure_sdk_storage_core::client::Client as AZClient;
 use azure_sdk_storage_table::{
     table::{TableService, TableStorage},
@@ -25,7 +25,7 @@ pub struct IpCachedLocationConfig {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct CachedData {
-    #[serde(with = "datetime")]
+    #[serde(with = "serde_with_datetime")]
     issued: DateTime<Utc>,
 
     country: String,
@@ -79,7 +79,7 @@ impl IpCachedLocation {
         })))
     }
 
-    async fn find_location(&self, ip: IpAddr) -> Result<IpLocation, IpLocationError> {
+    async fn find_location(&self, ip: &IpAddr) -> Result<IpLocation, IpLocationError> {
         //find entity
         let r_key = ip.to_string();
         let p_key = format!("{}", &r_key[0..2]);
@@ -88,12 +88,12 @@ impl IpCachedLocation {
         if let Ok(Some(loc)) = self.0.cache.get_entity::<CachedData>(&p_key, &r_key).await {
             let age = (Utc::now() - loc.payload.issued).to_std().unwrap_or(self.0.ttl);
             if age < self.0.ttl {
-                //return Ok(loc.payload.into_location());
+                return Ok(loc.payload.into_location());
             }
         }
 
         // query form the provider
-        let loc = self.0.provider.get_location(ip).await?;
+        let loc = self.0.provider.get_location(&ip).await?;
         let loc_entity = TableEntity {
             partition_key: p_key,
             row_key: r_key,
@@ -110,7 +110,7 @@ impl IpCachedLocation {
 }
 
 impl IpLocationProvider for IpCachedLocation {
-    fn get_location<'s>(&'s self, ip: IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
-        Box::pin(self.find_location(ip))
+    fn get_location<'s>(&'s self, ip: &'s IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
+        Box::pin(self.find_location(&ip))
     }
 }

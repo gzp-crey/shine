@@ -1,39 +1,60 @@
+use crate::auth::iam::fingerprint::Fingerprint;
 use azure_sdk_storage_table::TableEntity;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shine_core::{
-    azure_utils::serde::{datetime, opt_datetime},
+    azure_utils::{serde_with_datetime, serde_with_opt_datetime},
     session::SessionKey,
-    siteinfo::SiteInfo,
 };
 
 /// Data associated to a session
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SessionData {
-    remote: String,
-
     agent: String,
+    remote_ip: String,
+    remote_continent: String,
+    remote_country: String,
 
-    #[serde(with = "datetime")]
+    #[serde(with = "serde_with_datetime")]
     issued: DateTime<Utc>,
 
     refresh_count: u64,
 
-    #[serde(with = "datetime")]
+    #[serde(with = "serde_with_datetime")]
     refreshed: DateTime<Utc>,
 
-    #[serde(with = "opt_datetime")]
+    #[serde(with = "serde_with_opt_datetime")]
     disabled: Option<DateTime<Utc>>,
 }
 
 impl SessionData {
-    pub fn remote(&self) -> &str {
-        &self.remote
-    }
+    pub fn check(&self, fingerprint: &Fingerprint) -> bool {
+        // check agent
+        if self.agent != fingerprint.agent() {
+            log::debug!("fingerprint: agent has changed: {} -> {}", self.agent, fingerprint.agent());
+            return false;
+        }
 
-    pub fn agent(&self) -> &str {
-        &self.agent
+        // check ip
+        let ip = fingerprint.remote().map(|ip| ip.to_string()).unwrap_or("unknown".to_string());
+        let country = fingerprint
+            .location()
+            .map(|l| l.country.to_owned())
+            .unwrap_or("unknown".to_string());
+
+        if self.remote_ip != ip {
+            log::debug!("fingerprint: ip has changed: {} -> {}", self.remote_ip, ip);
+            return false;
+        }
+
+        // check location
+        if self.remote_country != country {
+            log::debug!("fingerprint: country has changed: {} -> {}", self.remote_country, country);
+            return false;
+        }
+
+        true
     }
 
     pub fn issue_date(&self) -> DateTime<Utc> {
@@ -63,7 +84,7 @@ impl Session {
         (format!("id-{}", id), key.to_owned())
     }
 
-    pub fn new(id: String, key: String, site: &SiteInfo) -> Session {
+    pub fn new(id: String, key: String, fingerprint: &Fingerprint) -> Session {
         let (partition_key, row_key) = Self::entity_keys(&id, &key);
 
         Session(TableEntity {
@@ -71,8 +92,16 @@ impl Session {
             row_key,
             etag: None,
             payload: SessionData {
-                remote: site.remote().to_string(),
-                agent: site.agent().to_string(),
+                agent: fingerprint.agent().to_string(),
+                remote_ip: fingerprint.remote().map(|ip| ip.to_string()).unwrap_or("unknown".to_string()),
+                remote_continent: fingerprint
+                    .location()
+                    .map(|l| l.continent.to_owned())
+                    .unwrap_or("unknown".to_string()),
+                remote_country: fingerprint
+                    .location()
+                    .map(|l| l.country.to_owned())
+                    .unwrap_or("unknown".to_string()),
                 issued: Utc::now(),
                 refresh_count: 0,
                 refreshed: Utc::now(),
@@ -101,14 +130,21 @@ impl Session {
         &self.0.row_key
     }
 
-    pub fn invalidate(&mut self) {
-        let data = &mut self.0.payload;
-        data.disabled = Some(Utc::now());
+    pub fn check(&mut self, fingerprint: &Fingerprint, minimum_refresh_date: DateTime<Utc>) -> bool {
+        let data = &self.0.payload;
+        data.disabled.is_none() && data.refreshed >= minimum_refresh_date && data.check(fingerprint)
     }
 
-    pub fn is_invalidated(&self) -> bool {
+    pub fn is_disabled(&self) -> bool {
         let data = &self.0.payload;
         data.disabled.is_some()
+    }
+
+    pub fn disable(&mut self) {
+        let data = &mut self.0.payload;
+        if data.disabled.is_none() {
+            data.disabled = Some(Utc::now());
+        }
     }
 
     pub fn refresh(&mut self) {

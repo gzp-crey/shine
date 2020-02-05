@@ -23,6 +23,6 @@ pub struct IpLocation {
 }
 
 /// Trait to query geo-location by ip addresses
-pub trait IpLocationProvider {
-    fn get_location<'s>(&'s self, ip: IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>>;
+pub trait IpLocationProvider: Sync + Send {
+    fn get_location<'s>(&'s self, ip: &'s IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>>;
 }

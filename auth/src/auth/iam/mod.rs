@@ -1,12 +1,16 @@
+use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
-use shine_core::siteinfo::SiteInfo;
+use shine_core::iplocation::{IpCachedLocation, IpCachedLocationConfig, IpLocationIpDataCo, IpLocationIpDataCoConfig};
+use std::time::Duration;
 
 mod error;
+pub mod fingerprint;
 pub mod identity;
 pub mod session;
 
 pub use self::error::*;
 
+use fingerprint::Fingerprint;
 use identity::{IdentityManager, UserIdentity};
 use session::{Session, SessionManager};
 
@@ -15,12 +19,15 @@ pub struct IAMConfig {
     pub password_pepper: String,
     pub storage_account: String,
     pub storage_account_key: String,
+    pub ipdataco_key: String,
+    pub session_time_to_live_h: u16,
 }
 
 #[derive(Clone)]
 pub struct IAM {
     identity: IdentityManager,
     session: SessionManager,
+    iplocation: IpCachedLocation,
 }
 
 impl IAM {
@@ -28,7 +35,27 @@ impl IAM {
         let identity = IdentityManager::new(&config).await?;
         let session = SessionManager::new(&config).await?;
 
-        Ok(IAM { identity, session })
+        let cfg = IpLocationIpDataCoConfig {
+            api_key: config.ipdataco_key.clone(),
+        };
+        let provider = IpLocationIpDataCo::new(cfg);
+        let cfg = IpCachedLocationConfig {
+            storage_account: config.storage_account.clone(),
+            storage_account_key: config.storage_account_key.clone(),
+            table_name: "ipcache".to_owned(),
+            time_to_live: Duration::from_secs(12 * 60 * 60),
+        };
+        let iplocation = IpCachedLocation::new(provider, cfg).await?;
+
+        Ok(IAM {
+            identity,
+            session,
+            iplocation,
+        })
+    }
+
+    pub async fn get_fingerprint(&self, req: &HttpRequest) -> Result<Fingerprint, IAMError> {
+        Fingerprint::new(req, &self.iplocation).await
     }
 
     pub async fn register_user(
@@ -36,10 +63,10 @@ impl IAM {
         name: &str,
         email: Option<&str>,
         password: &str,
-        site: &SiteInfo,
+        fingerprint: &Fingerprint,
     ) -> Result<(UserIdentity, Session), IAMError> {
         let identity = self.identity.create_user(name, email, password).await?;
-        let session = self.session.create_session(&identity, site).await?;
+        let session = self.session.create_session(&identity, fingerprint).await?;
 
         Ok((identity, session))
     }
@@ -48,27 +75,48 @@ impl IAM {
         &self,
         name_email: &str,
         password: &str,
-        site: &SiteInfo,
+        fingerprint: &Fingerprint,
     ) -> Result<(UserIdentity, Session), IAMError> {
         let identity = self.identity.find_user_by_name_email(name_email, Some(&password)).await?;
-        let session = self.session.create_session(&identity, site).await?;
+        let session = self.session.create_session(&identity, fingerprint).await?;
 
         Ok((identity, session))
+    }
+
+    pub async fn validate_session(
+        &self,
+        user_id: &str,
+        session_key: &str,
+        fingerprint: &Fingerprint,
+    ) -> Result<UserIdentity, IAMError> {
+        let _session = self
+            .session
+            .validate_session_with_id_key(user_id, session_key, fingerprint)
+            .await?;
+        let identity = self.identity.find_user_by_id(user_id).await?;
+        Ok(identity)
     }
 
     pub async fn refresh_session(
         &self,
         user_id: &str,
         session_key: &str,
-        site: &SiteInfo,
+        fingerprint: &Fingerprint,
     ) -> Result<(UserIdentity, Session), IAMError> {
-        let session = self.session.refresh_session_with_id_key(user_id, session_key, site).await?;
+        let session = self
+            .session
+            .refresh_session_with_id_key(user_id, session_key, fingerprint)
+            .await?;
         let identity = self.identity.find_user_by_id(user_id).await?;
         Ok((identity, session))
     }
 
-    pub async fn refresh_session_by_key(&self, session_key: &str, site: &SiteInfo) -> Result<(UserIdentity, Session), IAMError> {
-        let (user_id, session) = self.session.refresh_session_with_key(session_key, site).await?;
+    pub async fn refresh_session_by_key(
+        &self,
+        session_key: &str,
+        fingerprint: &Fingerprint,
+    ) -> Result<(UserIdentity, Session), IAMError> {
+        let (user_id, session) = self.session.refresh_session_with_key(session_key, fingerprint).await?;
         let identity = self.identity.find_user_by_id(&user_id).await?;
         Ok((identity, session))
     }

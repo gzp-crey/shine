@@ -3,14 +3,16 @@ use actix_web::ResponseError;
 use argon2::Error as Argon2Error;
 use azure_sdk_core::errors::AzureError;
 use data_encoding;
-use shine_core::{backoff::BackoffError, idgenerator::IdSequenceError};
+use shine_core::{
+    backoff::BackoffError, idgenerator::IdSequenceError, iplocation::IpLocationError, requestinfo::RequestInfoError,
+};
 use std::{fmt, str};
 
 #[derive(Debug)]
 pub enum IAMError {
     /// Database related error
     DB(String),
-    Encryption(String),
+    Request(String),
     InvalidName,
     InvalidEmail,
     SequenceIdTaken,
@@ -38,7 +40,7 @@ impl fmt::Display for IAMError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             IAMError::DB(ref e) => write!(f, "DB, {}", e),
-            IAMError::Encryption(ref e) => write!(f, "Encryption, encryption failed: {}", e),
+            IAMError::Request(ref e) => write!(f, "Request, {}", e),
             IAMError::InvalidName => write!(f, "Invalid name"),
             IAMError::InvalidEmail => write!(f, "Invalid email"),
             IAMError::SequenceIdTaken => write!(f, "Sequence id already taken"),
@@ -58,8 +60,8 @@ impl ResponseError for IAMError {
     fn status_code(&self) -> StatusCode {
         match *self {
             IAMError::InvalidEmail => StatusCode::BAD_REQUEST,
+            IAMError::Request(_) => StatusCode::BAD_REQUEST,
             IAMError::InvalidName => StatusCode::BAD_REQUEST,
-            IAMError::Encryption(_) => StatusCode::BAD_REQUEST,
             IAMError::SequenceIdTaken => StatusCode::CONFLICT,
             IAMError::NameTaken => StatusCode::CONFLICT,
             IAMError::EmailTaken => StatusCode::CONFLICT,
@@ -79,6 +81,12 @@ impl From<AzureError> for IAMError {
     }
 }
 
+impl From<IpLocationError> for IAMError {
+    fn from(err: IpLocationError) -> IAMError {
+        IAMError::DB(format!("{:?}", err))
+    }
+}
+
 impl From<IdSequenceError> for IAMError {
     fn from(err: IdSequenceError) -> IAMError {
         match err {
@@ -88,20 +96,26 @@ impl From<IdSequenceError> for IAMError {
     }
 }
 
+impl From<RequestInfoError> for IAMError {
+    fn from(err: RequestInfoError) -> IAMError {
+        IAMError::Request(err.to_string())
+    }
+}
+
 impl From<Argon2Error> for IAMError {
     fn from(err: Argon2Error) -> IAMError {
-        IAMError::Encryption(err.to_string())
+        IAMError::Request(err.to_string())
     }
 }
 
 impl From<data_encoding::DecodeError> for IAMError {
     fn from(err: data_encoding::DecodeError) -> IAMError {
-        IAMError::Encryption(err.to_string())
+        IAMError::Request(err.to_string())
     }
 }
 
 impl From<str::Utf8Error> for IAMError {
     fn from(err: str::Utf8Error) -> IAMError {
-        IAMError::Encryption(err.to_string())
+        IAMError::Request(err.to_string())
     }
 }

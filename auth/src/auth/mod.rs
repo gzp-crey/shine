@@ -107,6 +107,7 @@ impl AuthService {
                         .service(web::resource("login").route(web::post().to(iam_handler::login_basic_auth)))
                         .service(web::resource("register").route(web::post().to(iam_handler::register_user)))
                         .service(web::resource("refresh").route(web::post().to(iam_handler::refresh_session)))
+                        .service(web::resource("validate").route(web::post().to(iam_handler::validate_session)))
                         .service(web::resource("refresh_key").route(web::post().to(iam_handler::refresh_session_by_key)))
                         .service(web::resource("logout").route(web::post().to(iam_handler::logout))),
                 ),
