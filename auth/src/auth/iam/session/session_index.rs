@@ -23,6 +23,7 @@ impl SessionIndex {
             partition_key,
             row_key,
             etag: None,
+            timestamp: None,
             payload: SessionIndexData {
                 identity_id: id.to_owned(),
             },

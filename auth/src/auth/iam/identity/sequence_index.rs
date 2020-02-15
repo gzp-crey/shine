@@ -36,6 +36,7 @@ impl SequenceIndex {
             partition_key,
             row_key,
             etag: None,
+            timestamp: None,
             payload: SequenceIndexData {
                 indexed_id: IdentityIndexedId {
                     identity_id: core.id.clone(),

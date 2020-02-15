@@ -37,6 +37,7 @@ impl EmailIndex {
                 partition_key,
                 row_key,
                 etag: None,
+                timestamp: None,
                 payload: EmailIndexData {
                     indexed_id: IdentityIndexedId {
                         identity_id: core.id.clone(),

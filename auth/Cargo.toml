@@ -32,8 +32,8 @@ actix-web = "2.0"
 oxide-auth = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 oxide-auth-actix = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 
-azure_sdk_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "gzp" }
-azure_sdk_storage_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "gzp" }
-azure_sdk_storage_table = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "gzp" }
+azure_sdk_core = { git = "https://github.com/MindFlavor/AzureSDKForRust.git", branch = "master" }
+azure_sdk_storage_core = { git = "https://github.com/MindFlavor/AzureSDKForRust.git", branch = "master" }
+azure_sdk_storage_table = { git = "https://github.com/MindFlavor/AzureSDKForRust.git", branch = "master" }
 
 shine-core = {path = "../core", version = "0.1.0"}

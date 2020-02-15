@@ -5,8 +5,7 @@ use crate::auth::iam::{
     IAMConfig, IAMError,
 };
 use argon2;
-use azure_sdk_storage_core::client::Client as AZClient;
-use azure_sdk_storage_table::table::{TableService, TableStorage};
+use azure_sdk_storage_table::{CloudTable, Continuation, TableClient};
 use percent_encoding::{self, utf8_percent_encode};
 use rand::{self, seq::SliceRandom};
 use shine_core::{
@@ -34,17 +33,15 @@ fn validate_email(email: &str) -> bool {
 pub struct IdentityManager {
     password_pepper: String,
     identity_id_generator: IdSequence,
-    db: TableStorage,
+    db: CloudTable,
 }
 
 // Handling identites
 impl IdentityManager {
     pub async fn new(config: &IAMConfig) -> Result<Self, IAMError> {
-        let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
-        let table_service = TableService::new(client.clone());
-        let identities_db = TableStorage::new(table_service.clone(), "identities");
-
-        identities_db.create_if_not_exists().await?;
+        let client = TableClient::new(&config.storage_account, &config.storage_account_key)?;
+        let db = CloudTable::new(client, "identities");
+        db.create_if_not_exists().await?;
 
         let identity_id_generator = {
             let id_config = SyncCounterConfig {
@@ -60,7 +57,7 @@ impl IdentityManager {
         Ok(IdentityManager {
             password_pepper: config.password_pepper.clone(),
             identity_id_generator,
-            db: identities_db,
+            db,
         })
     }
 
@@ -69,17 +66,11 @@ impl IdentityManager {
         T: Identity,
     {
         let identity = identity.into_entity();
+        let (p, r) = (identity.partition_key.clone(), identity.row_key.clone());
         self.db
-            .delete_entity(&identity.partition_key, &identity.row_key, identity.etag.as_deref())
+            .delete_entity(identity)
             .await
-            .unwrap_or_else(|e| {
-                log::error!(
-                    "Failed to delete identity([{}]/[{}]): {}",
-                    identity.partition_key,
-                    identity.row_key,
-                    e
-                )
-            });
+            .unwrap_or_else(|e| log::error!("Failed to delete identity([{}]/[{}]): {}", p, r, e));
     }
 
     async fn find_identity_by_id<T>(&self, id: &str) -> Result<T, IAMError>
@@ -87,7 +78,7 @@ impl IdentityManager {
         T: Identity,
     {
         let (p, r) = T::entity_keys(&id);
-        let identity = self.db.get_entity(&p, &r).await?;
+        let identity = self.db.get(&p, &r, None).await?;
         let identity = identity.map(T::from_entity).ok_or(IAMError::IdentityNotFound)?;
 
         Ok(identity)
@@ -99,7 +90,7 @@ impl IdentityManager {
     {
         let index = index.into_entity();
         self.db
-            .delete_entity(&index.partition_key, &index.row_key, index.etag.as_deref())
+            .delete_entity(index)
             .await
             .unwrap_or_else(|e| log::error!("Failed to delete index: {}", e));
     }
@@ -108,16 +99,23 @@ impl IdentityManager {
     where
         T: Identity,
     {
-        let mut index = self.db.query_entities::<IdentityIndexedId>(Some(&query)).await?;
-        assert!(index.len() <= 1);
-        let index = index.pop().ok_or(IAMError::IdentityNotFound)?;
-
-        let identity_id = &index.payload.identity_id;
-        let (p, r) = T::entity_keys(&identity_id);
-        let identity = self.db.get_entity(&p, &r).await?;
-        let identity = identity.map(T::from_entity).ok_or(IAMError::IdentityNotFound)?;
-
-        Ok(identity)
+        if let Some(indices) = self
+            .db
+            .execute_query::<IdentityIndexedId>(Some(&query), &mut Continuation::start())
+            .await?
+        {
+            match &indices[..] {
+                [index] => {
+                    let identity_id = &index.payload.identity_id;
+                    let (p, r) = T::entity_keys(&identity_id);
+                    let identity = self.db.get(&p, &r, None).await?.ok_or(IAMError::IdentityNotFound)?;
+                    Ok(T::from_entity(identity))
+                }
+                _ => Err(IAMError::IdentityNotFound),
+            }
+        } else {
+            Err(IAMError::IdentityNotFound)
+        }
     }
 
     async fn find_user_by_index(&self, query: &str, password: Option<&str>) -> Result<UserIdentity, IAMError> {
@@ -153,7 +151,7 @@ impl IdentityManager {
     /// Return if the given name can be used as a new identity name
     pub async fn is_name_available(&self, name: &str) -> Result<bool, IAMError> {
         let (partition_key, row_key) = NameIndex::entity_keys(name);
-        Ok(self.db.get_entity::<EmptyData>(&partition_key, &row_key).await?.is_none())
+        Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
     }
 
     async fn insert_name_index<T>(&self, identity: &T) -> Result<NameIndex, IAMError>
@@ -176,7 +174,7 @@ impl IdentityManager {
     /// Return if the given email can be used.
     pub async fn is_email_available(&self, cat: IdentityCategory, email: &str) -> Result<bool, IAMError> {
         let (partition_key, row_key) = EmailIndex::entity_keys(cat, email);
-        Ok(self.db.get_entity::<EmptyData>(&partition_key, &row_key).await?.is_none())
+        Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
     }
 
     async fn insert_email_index<T>(&self, identity: &T) -> Result<Option<EmailIndex>, IAMError>
@@ -311,7 +309,7 @@ impl IdentityManager {
     }
 
     /// Find a user identity by email or name.
-    /// If a password it is also checked.
+    /// If password is given, the its validaity is also ensured
     pub async fn find_user_by_name_email(&self, name_email: &str, password: Option<&str>) -> Result<UserIdentity, IAMError> {
         let query_name = {
             let (p, r) = NameIndex::entity_keys(name_email);

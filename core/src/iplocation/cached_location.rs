@@ -1,10 +1,6 @@
 use super::{IpLocation, IpLocationError, IpLocationProvider};
 use crate::serde_with;
-use azure_sdk_storage_core::client::Client as AZClient;
-use azure_sdk_storage_table::{
-    table::{TableService, TableStorage},
-    TableEntity,
-};
+use azure_sdk_storage_table::{CloudTable, TableClient};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
@@ -55,7 +51,7 @@ impl CachedData {
 struct Inner {
     provider: Box<dyn IpLocationProvider>,
     ttl: Duration,
-    cache: TableStorage,
+    cache: CloudTable,
 }
 
 #[derive(Clone)]
@@ -66,9 +62,8 @@ impl IpCachedLocation {
         provider: P,
         config: IpCachedLocationConfig,
     ) -> Result<Self, IpLocationError> {
-        let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
-        let table_service = TableService::new(client.clone());
-        let cache = TableStorage::new(table_service.clone(), config.table_name);
+        let client = TableClient::new(&config.storage_account, &config.storage_account_key)?;
+        let cache = CloudTable::new(client, config.table_name);
 
         cache.create_if_not_exists().await?;
 
@@ -80,12 +75,10 @@ impl IpCachedLocation {
     }
 
     async fn find_location(&self, ip: &IpAddr) -> Result<IpLocation, IpLocationError> {
-        //find entity
-        let r_key = ip.to_string();
-        let p_key = format!("{}", &r_key[0..2]);
-
         // look up the cache
-        if let Ok(Some(loc)) = self.0.cache.get_entity::<CachedData>(&p_key, &r_key).await {
+        let row_key = ip.to_string();
+        let partition_key = format!("{}", &row_key[0..2]);
+        if let Ok(Some(loc)) = self.0.cache.get::<CachedData>(&partition_key, &row_key, None).await {
             let age = (Utc::now() - loc.payload.issued).to_std().unwrap_or(self.0.ttl);
             if age < self.0.ttl {
                 return Ok(loc.payload.into_location());
@@ -94,14 +87,14 @@ impl IpCachedLocation {
 
         // query form the provider
         let loc = self.0.provider.get_location(&ip).await?;
-        let loc_entity = TableEntity {
-            partition_key: p_key,
-            row_key: r_key,
-            etag: None,
-            payload: CachedData::from_location(loc.clone()),
-        };
 
-        if let Err(err) = self.0.cache.update_entity::<CachedData>(loc_entity).await {
+        // update cache
+        if let Err(err) = self
+            .0
+            .cache
+            .insert_or_update(&partition_key, &row_key, CachedData::from_location(loc.clone()))
+            .await
+        {
             log::warn!("Could not update cached ip: {:?}", err);
         }
 

@@ -12,12 +12,13 @@ use std::{fmt, str};
 pub enum IAMError {
     /// Database related error
     DB(String),
-    Request(String),
+    BadRequest(String),
     InvalidName,
     InvalidEmail,
     SequenceIdTaken,
     NameTaken,
     EmailTaken,
+    RoleNotFound,
     IdentityNotFound,
     PasswordNotMatching,
     IdentityIdConflict,
@@ -40,7 +41,7 @@ impl fmt::Display for IAMError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             IAMError::DB(ref e) => write!(f, "DB, {}", e),
-            IAMError::Request(ref e) => write!(f, "Request, {}", e),
+            IAMError::BadRequest(ref e) => write!(f, "BadRequest, {}", e),
             IAMError::InvalidName => write!(f, "Invalid name"),
             IAMError::InvalidEmail => write!(f, "Invalid email"),
             IAMError::SequenceIdTaken => write!(f, "Sequence id already taken"),
@@ -48,6 +49,7 @@ impl fmt::Display for IAMError {
             IAMError::EmailTaken => write!(f, "Email already taken"),
             IAMError::IdentityIdConflict => write!(f, "Identity id already in use"),
             IAMError::SessionKeyConflict => write!(f, "Session key already in use"),
+            IAMError::RoleNotFound => write!(f, "Role not found"),
             IAMError::IdentityNotFound => write!(f, "Identity not found"),
             IAMError::PasswordNotMatching => write!(f, "Invalid user or password"),
             IAMError::SessionRequired => write!(f, "Login required"),
@@ -60,7 +62,7 @@ impl ResponseError for IAMError {
     fn status_code(&self) -> StatusCode {
         match *self {
             IAMError::InvalidEmail => StatusCode::BAD_REQUEST,
-            IAMError::Request(_) => StatusCode::BAD_REQUEST,
+            IAMError::BadRequest(_) => StatusCode::BAD_REQUEST,
             IAMError::InvalidName => StatusCode::BAD_REQUEST,
             IAMError::SequenceIdTaken => StatusCode::CONFLICT,
             IAMError::NameTaken => StatusCode::CONFLICT,
@@ -70,6 +72,7 @@ impl ResponseError for IAMError {
             IAMError::IdentityNotFound | IAMError::PasswordNotMatching => StatusCode::FORBIDDEN,
             IAMError::SessionRequired => StatusCode::UNAUTHORIZED,
             IAMError::SessionExpired => StatusCode::UNAUTHORIZED,
+            IAMError::RoleNotFound => StatusCode::NOT_FOUND,
             IAMError::DB(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -98,24 +101,24 @@ impl From<IdSequenceError> for IAMError {
 
 impl From<RequestInfoError> for IAMError {
     fn from(err: RequestInfoError) -> IAMError {
-        IAMError::Request(err.to_string())
+        IAMError::BadRequest(err.to_string())
     }
 }
 
 impl From<Argon2Error> for IAMError {
     fn from(err: Argon2Error) -> IAMError {
-        IAMError::Request(err.to_string())
+        IAMError::BadRequest(err.to_string())
     }
 }
 
 impl From<data_encoding::DecodeError> for IAMError {
     fn from(err: data_encoding::DecodeError) -> IAMError {
-        IAMError::Request(err.to_string())
+        IAMError::BadRequest(err.to_string())
     }
 }
 
 impl From<str::Utf8Error> for IAMError {
     fn from(err: str::Utf8Error) -> IAMError {
-        IAMError::Request(err.to_string())
+        IAMError::BadRequest(err.to_string())
     }
 }

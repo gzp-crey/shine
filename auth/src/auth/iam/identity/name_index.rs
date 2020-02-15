@@ -36,6 +36,7 @@ impl NameIndex {
             partition_key,
             row_key,
             etag: None,
+            timestamp: None,
             payload: NameIndexData {
                 indexed_id: IdentityIndexedId {
                     identity_id: core.id.clone(),

@@ -26,9 +26,9 @@ actix-web = "2.0"
 actix-service = "1.0"
 reqwest = "0.10"
 
-azure_sdk_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "gzp" }
-azure_sdk_storage_core = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "gzp" }
-azure_sdk_storage_table = { git = "https://github.com/gzp-crey/AzureSDKForRust.git", branch = "gzp" }
+azure_sdk_core = { git = "https://github.com/MindFlavor/AzureSDKForRust.git", branch = "master" }
+azure_sdk_storage_core = { git = "https://github.com/MindFlavor/AzureSDKForRust.git", branch = "master" }
+azure_sdk_storage_table = { git = "https://github.com/MindFlavor/AzureSDKForRust.git", branch = "master" }
 
 [dev-dependencies]
 env_logger = "0.7.1"

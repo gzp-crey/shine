@@ -161,7 +161,7 @@ pub async fn logout(
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
-    log::info!("logout {:?}, {:?}, {:?}", user_id, session_key, "logout_params");
+    log::info!("logout {:?}, {:?}, {:?}", user_id, session_key, logout_params);
 
     state
         .iam()
@@ -169,4 +169,16 @@ pub async fn logout(
         .await?;
     IdentityCookie::clear(&identity_session);
     Ok(HttpResponse::Ok().finish())
+}
+
+pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    log::info!("get_roles {:?}, {:?}", user_id, session_key);
+
+    //todo: check permission
+
+    let roles = state.iam().get_roles().await?;
+
+    Ok(HttpResponse::Ok().json(roles))
 }

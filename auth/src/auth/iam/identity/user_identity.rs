@@ -35,6 +35,7 @@ impl UserIdentity {
             partition_key,
             row_key,
             etag: None,
+            timestamp: None,
             payload: UserIdentityData {
                 core: IdentityCore {
                     id,

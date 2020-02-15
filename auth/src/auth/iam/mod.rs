@@ -13,7 +13,7 @@ pub use self::error::*;
 
 use fingerprint::Fingerprint;
 use identity::{Identity, IdentityManager, UserIdentity};
-use role::{RoleManager, Roles};
+use role::{RoleManager, RoleMap, Roles};
 use session::{Session, SessionManager};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -140,5 +140,9 @@ impl IAM {
         } else {
             self.session.invalidate_session(user_id, session_key).await
         }
+    }
+
+    pub async fn get_roles(&self) -> Result<RoleMap, IAMError> {
+        self.role.get_roles().await
     }
 }

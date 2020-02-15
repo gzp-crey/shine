@@ -3,10 +3,10 @@ use crate::auth::iam::{
     session::{Session, SessionData, SessionIndex, SessionIndexData},
     Fingerprint, IAMConfig, IAMError,
 };
-use azure_sdk_storage_core::client::Client as AZClient;
-use azure_sdk_storage_table::table::{TableService, TableStorage};
+use azure_sdk_storage_table::{CloudTable, TableClient};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use data_encoding;
+use futures::stream::StreamExt;
 use percent_encoding::utf8_percent_encode;
 use rand::Rng;
 use shine_core::{
@@ -20,18 +20,17 @@ const KEY_BASE_ENCODE: data_encoding::Encoding = data_encoding::BASE64URL_NOPAD;
 
 #[derive(Clone)]
 pub struct SessionManager {
-    db: TableStorage,
+    db: CloudTable,
     time_to_live: ChronoDuration,
 }
 
 // Handling identites
 impl SessionManager {
     pub async fn new(config: &IAMConfig) -> Result<Self, IAMError> {
-        let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
-        let table_service = TableService::new(client.clone());
-        let db = TableStorage::new(table_service.clone(), "sessions");
-
+        let client = TableClient::new(&config.storage_account, &config.storage_account_key)?;
+        let db = CloudTable::new(client.clone(), "sessions");
         db.create_if_not_exists().await?;
+
         let time_to_live = ChronoDuration::hours(config.session_time_to_live_h as i64);
 
         Ok(SessionManager { db, time_to_live })
@@ -49,10 +48,11 @@ impl SessionManager {
 
     async fn remove_index(&self, session: SessionIndex) {
         let session = session.into_entity();
+        let (p, r) = (session.partition_key.clone(), session.row_key.clone());
         self.db
-            .delete_entity(&session.partition_key, &session.row_key, session.etag.as_deref())
+            .delete_entity(session)
             .await
-            .unwrap_or_else(|e| log::error!("Failed to delete session index {:?}: {}", session, e));
+            .unwrap_or_else(|e| log::error!("Failed to delete session index ([{}]/[{}]): {}", p, r, e));
     }
 
     async fn try_insert_session(&self, identity: &UserIdentity, fingerprint: &Fingerprint) -> Result<Session, IAMError> {
@@ -111,7 +111,7 @@ impl SessionManager {
 
     async fn find_session_by_id_key(&self, id: &str, key: &str) -> Result<Session, IAMError> {
         let (p, r) = Session::entity_keys(id, key);
-        match self.db.get_entity::<SessionData>(&p, &r).await {
+        match self.db.get::<SessionData>(&p, &r, None).await {
             Ok(Some(session)) => {
                 if session.payload.disable_date().is_some() {
                     Err(IAMError::SessionExpired)
@@ -126,7 +126,7 @@ impl SessionManager {
 
     async fn find_session_by_key(&self, key: &str) -> Result<(String, Session), IAMError> {
         let (p, r) = SessionIndex::entity_keys(key);
-        let index = match self.db.get_entity::<SessionIndexData>(&p, &r).await {
+        let index = match self.db.get::<SessionIndexData>(&p, &r, None).await {
             Ok(Some(index)) => SessionIndex::from_entity(index),
             Ok(None) => return Err(IAMError::SessionExpired),
             Err(err) => return Err(err.into()),
@@ -145,50 +145,25 @@ impl SessionManager {
         }
     }
 
-    async fn try_refresh_session_with_id_key(
-        &self,
-        id: &str,
-        key: &str,
-        fingerprint: &Fingerprint,
-    ) -> Result<Session, BackoffError<IAMError>> {
-        let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
-
-        // validate fingerprint
-        if !session.check(fingerprint, self.get_minimum_refresh_date()) {
-            session.disable();
-            let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
-            Err(IAMError::SessionExpired.into_backoff())
-        } else {
-            session.refresh();
-            let session = self.update_session(session).await.map_err(IAMError::into_backoff)?;
-            Ok(session)
-        }
-    }
-
     /// Refresh the session when both the id and the key is known.
     /// In case of a compromised key the session is also disabled in the database.
     pub async fn refresh_session_with_id_key(&self, id: &str, key: &str, fingerprint: &Fingerprint) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_refresh_session_with_id_key(id, key, fingerprint))
+            .async_execute(|_| async {
+                let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
+
+                // validate fingerprint
+                if !session.check(fingerprint, self.get_minimum_refresh_date()) {
+                    session.disable();
+                    let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+                    Err(IAMError::SessionExpired.into_backoff())
+                } else {
+                    session.refresh();
+                    let session = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+                    Ok(session)
+                }
+            })
             .await
-    }
-
-    async fn try_validate_session_with_id_key(
-        &self,
-        id: &str,
-        key: &str,
-        fingerprint: &Fingerprint,
-    ) -> Result<Session, BackoffError<IAMError>> {
-        let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
-
-        // validate fingerprint
-        if !session.check(fingerprint, self.get_minimum_refresh_date()) {
-            session.disable();
-            let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
-            Err(IAMError::SessionExpired.into_backoff())
-        } else {
-            Ok(session)
-        }
     }
 
     /// Check if session key is valid when both the id and the key is known.
@@ -200,50 +175,53 @@ impl SessionManager {
         fingerprint: &Fingerprint,
     ) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_validate_session_with_id_key(id, key, fingerprint))
+            .async_execute(|_| async {
+                let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
+
+                // validate fingerprint
+                if !session.check(fingerprint, self.get_minimum_refresh_date()) {
+                    session.disable();
+                    let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+                    Err(IAMError::SessionExpired.into_backoff())
+                } else {
+                    Ok(session)
+                }
+            })
             .await
-    }
-
-    async fn try_refresh_session_with_key(
-        &self,
-        key: &str,
-        fingerprint: &Fingerprint,
-    ) -> Result<(String, Session), BackoffError<IAMError>> {
-        let (id, mut session) = self.find_session_by_key(key).await.map_err(IAMError::into_backoff)?;
-
-        // validate fingerprint
-        if session.check(fingerprint, self.get_minimum_refresh_date()) {
-            session.disable();
-            let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
-            Err(IAMError::SessionExpired.into_backoff())
-        } else {
-            session.refresh();
-            let session = self.update_session(session).await.map_err(IAMError::into_backoff)?;
-            Ok((id, session))
-        }
     }
 
     /// Refresh the session when only the key is known.
     /// In case of a compromised key the session is also removed from the database.
     pub async fn refresh_session_with_key(&self, key: &str, fingerprint: &Fingerprint) -> Result<(String, Session), IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_refresh_session_with_key(key, fingerprint))
-            .await
-    }
+            .async_execute(|_| async {
+                let (id, mut session) = self.find_session_by_key(key).await.map_err(IAMError::into_backoff)?;
 
-    async fn try_invalidate_session(&self, id: &str, key: &str) -> Result<(), BackoffError<IAMError>> {
-        let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
-        //todo: securitiy consideration, this way a user might be forced to login
-        // again knowing only the session key and hence the login handshake could be
-        // triggered and captured.
-        session.disable();
-        self.update_session(session).await.map_err(IAMError::into_backoff).map(|_| ())
+                // validate fingerprint
+                if session.check(fingerprint, self.get_minimum_refresh_date()) {
+                    session.disable();
+                    let _ = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+                    Err(IAMError::SessionExpired.into_backoff())
+                } else {
+                    session.refresh();
+                    let session = self.update_session(session).await.map_err(IAMError::into_backoff)?;
+                    Ok((id, session))
+                }
+            })
+            .await
     }
 
     /// Invalidate a single session when both the id and the key is known.
     pub async fn invalidate_session(&self, id: &str, key: &str) -> Result<(), IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
-            .async_execute(|_| self.try_invalidate_session(id, key))
+            .async_execute(|_| async {
+                let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
+                //todo: securitiy consideration, this way a user might be forced to login
+                // again knowing only the session key and hence the login handshake could be
+                // triggered and captured.
+                session.disable();
+                self.update_session(session).await.map_err(IAMError::into_backoff).map(|_| ())
+            })
             .await
     }
 
@@ -252,34 +230,33 @@ impl SessionManager {
         // query all the active session
         let query = format!("PartitionKey eq 'id-{}' and Disabled eq ''", id);
         let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
-        let sessions = self.db.query_entities::<SessionData>(Some(&query)).await?;
-        log::debug!("Sessions to invalidate: {:?}", sessions);
 
         let mut has_conflict = false;
+        let mut stream = Box::pin(self.db.stream_query::<SessionData>(Some(&query)));
+        while let Some(Ok(sessions)) = stream.next().await {
+            log::debug!("Sessions to invalidate: {:?}", sessions);
 
-        // perform the invalidation one-by-one with backoff to ensure a refresh won't keep the key alive.
-        // due to conflicting updates.
-        // The active key (if provided) is invalidated after all other sessions are invalidate to keep the
-        // session alive on any error
-        for session in sessions.into_iter() {
-            let session = Session::from_entity(session);
-            if let Some(key) = active_key {
-                if key == session.key() {
-                    // skip the active key
-                    continue;
+            // perform the invalidation one-by-one with backoff to ensure a refresh won't keep the key alive.
+            // due to conflicting updates.
+            // The active key (if provided) is invalidated after all other sessions are invalidate to keep the
+            // session alive on any error
+            for session in sessions.into_iter() {
+                let session = Session::from_entity(session);
+                if let Some(key) = active_key {
+                    if key == session.key() {
+                        // skip the active key
+                        continue;
+                    }
                 }
+
+                match self.invalidate_session(session.id(), session.key()).await {
+                    Ok(_) => {}
+                    Err(IAMError::SessionKeyConflict) => {
+                        has_conflict = true;
+                    }
+                    Err(err) => return Err(err),
+                };
             }
-
-            match backoff::Exponential::new(3, Duration::from_micros(10))
-                .async_execute(|_| self.try_invalidate_session(session.id(), session.key()))
-                .await
-            {
-                Ok(_) => {}
-                Err(IAMError::SessionKeyConflict) => {
-                    has_conflict = true;
-                }
-                Err(err) => return Err(err),
-            };
         }
 
         if has_conflict {

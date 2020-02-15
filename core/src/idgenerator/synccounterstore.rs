@@ -1,10 +1,6 @@
 use super::IdSequenceError;
 use crate::backoff::{self, Backoff, BackoffError};
-use azure_sdk_storage_core::client::Client as AZClient;
-use azure_sdk_storage_table::{
-    table::{TableService, TableStorage},
-    TableEntity,
-};
+use azure_sdk_storage_table::{CloudTable, TableClient};
 use core::ops::Range;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -30,7 +26,7 @@ struct Counter {
 
 struct Inner {
     starting_value: u64,
-    counters: TableStorage,
+    counters: CloudTable,
 }
 
 #[derive(Clone)]
@@ -38,9 +34,8 @@ pub struct SyncCounterStore(Arc<Inner>);
 
 impl SyncCounterStore {
     pub async fn new(config: SyncCounterConfig) -> Result<Self, IdSequenceError> {
-        let client = AZClient::new(&config.storage_account, &config.storage_account_key)?;
-        let table_service = TableService::new(client.clone());
-        let counters = TableStorage::new(table_service.clone(), config.table_name);
+        let client = TableClient::new(&config.storage_account, &config.storage_account_key)?;
+        let counters = CloudTable::new(client, config.table_name);
 
         counters.create_if_not_exists().await?;
 
@@ -54,21 +49,15 @@ impl SyncCounterStore {
         match self
             .0
             .counters
-            .get_entity::<Counter>(PARTITION_KEY, sequence_id)
+            .get::<Counter>(PARTITION_KEY, sequence_id, None)
             .await
             .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))?
         {
             None => {
                 let start = self.0.starting_value;
-                let entity = TableEntity {
-                    partition_key: PARTITION_KEY.to_string(),
-                    row_key: sequence_id.to_string(),
-                    etag: None,
-                    payload: Counter { value: start + count },
-                };
                 self.0
                     .counters
-                    .insert_entity(entity)
+                    .insert(PARTITION_KEY, sequence_id, Counter { value: start + count })
                     .await
                     .map_err(|err| BackoffError::Permanent(IdSequenceError::from(err)))
                     .map(|ok| start..(ok.payload.value))

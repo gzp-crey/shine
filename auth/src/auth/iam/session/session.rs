@@ -88,6 +88,7 @@ impl Session {
             partition_key,
             row_key,
             etag: None,
+            timestamp: None,
             payload: SessionData {
                 agent: fingerprint.agent().to_string(),
                 remote_ip: fingerprint.remote().map(|ip| ip.to_string()).unwrap_or("unknown".to_string()),
