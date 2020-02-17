@@ -89,18 +89,7 @@ impl AuthService {
         services.service(
             web::scope("auth/api")
                 .wrap(SignedCookie::new().add(IdentityCookie::write(&self.cookie_session_secret)))
-                .data(state)
-                .service(
-                    // oath2 client (app) authentication
-                    web::scope("client")
-                        .service(
-                            web::resource("authorize")
-                                .route(web::get().to(get_authorization))
-                                .route(web::post().to(post_authorization)),
-                        )
-                        .service(web::resource("refresh").route(web::post().to(post_refresh)))
-                        .service(web::resource("token").route(web::post().to(post_token))),
-                )
+                .data(state)                
                 .service(
                     // user authentication
                     web::scope("users")
