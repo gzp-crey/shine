@@ -1,9 +1,7 @@
 mod iam;
 mod iam_handler;
-mod oauth;
 
 use self::iam::{IAMConfig, IAMError, IAM};
-use self::oauth::*;
 use actix_rt::SystemRunner;
 use actix_web::web;
 use data_encoding::{DecodeError, BASE64};

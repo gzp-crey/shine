@@ -172,7 +172,17 @@ pub async fn logout(
 }
 
 pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
-    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    use gremlin_client::{GremlinClient, Vertex};
+    let client = GremlinClient::connect("localhost").map_err(IAMError::from)?;
+
+    let results = client
+        .execute("g.V(param)", &[("param", &1)]).map_err(IAMError::from)?
+        .filter_map(Result::ok)
+        .map(|f| f.take::<Vertex>())
+        .collect::<Result<Vec<Vertex>, _>>().map_err(IAMError::from)?;
+
+    Ok(HttpResponse::Ok().body(format!("{:?}", results)))
+    /*let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     log::info!("get_roles {:?}, {:?}", user_id, session_key);
 
@@ -180,5 +190,5 @@ pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State
 
     let roles = state.iam().get_roles().await?;
 
-    Ok(HttpResponse::Ok().json(roles))
+    Ok(HttpResponse::Ok().json(roles))*/
 }

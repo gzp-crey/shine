@@ -22,7 +22,7 @@ data-encoding = "2.1"
 rand = "0.7"
 
 tokio = { version = "0.2", features = ["time"] }
-actix-web = "2.0"
+actix-web = { version = "2.0", features = ["secure-cookies"] }
 actix-service = "1.0"
 reqwest = "0.10"
 

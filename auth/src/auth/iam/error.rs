@@ -7,6 +7,7 @@ use shine_core::{
     backoff::BackoffError, idgenerator::IdSequenceError, iplocation::IpLocationError, requestinfo::RequestInfoError,
 };
 use std::{fmt, str};
+use gremlin_client::GremlinError;
 
 #[derive(Debug)]
 pub enum IAMError {
@@ -120,5 +121,11 @@ impl From<data_encoding::DecodeError> for IAMError {
 impl From<str::Utf8Error> for IAMError {
     fn from(err: str::Utf8Error) -> IAMError {
         IAMError::BadRequest(err.to_string())
+    }
+}
+
+impl From<GremlinError> for IAMError {
+    fn from(err: GremlinError) -> IAMError {
+        IAMError::DB(err.to_string())
     }
 }
