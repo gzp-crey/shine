@@ -1,0 +1,25 @@
+[
+    {
+        "name": "user1",
+        "password": "pass1",
+        "email": "user1@example.com"
+    },
+    {
+        "name": "user2",
+        "password": "pass2"
+    },    
+    {        
+        "name": "I'm a ⛄",
+        "password": "with ugly pass as ⛄",
+        
+        "fail": 400,
+        "fail_with": "Invalid user name"
+    },    
+    {        
+        "name": "/#?",
+        "password": "123",
+        
+        "fail": 400,
+        "fail_with": "Invalid user name"
+    }
+]

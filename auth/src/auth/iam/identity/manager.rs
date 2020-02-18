@@ -15,18 +15,24 @@ use shine_core::{
 };
 use std::{str, time::Duration};
 
+const INVALID_CHARACTER : &str = "/\\#?%";
+const VALID_CHARACTER : &str = " ._*@";
+const MIN_NAME_LEN : usize = 3;
+
 const ID_LEN: usize = 8;
 const ID_ABC: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
 const MAX_SALT_LEN: usize = 32;
 const SALT_ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-fn validate_username(name: &str) -> bool {
-    name.chars().all(char::is_alphanumeric)
+fn validate_name(name: &str) -> bool {
+    name.chars().skip(MIN_NAME_LEN).next().is_some() &&
+    name.chars().all(|c| c.is_ascii_alphanumeric() || VALID_CHARACTER.contains(c) )
 }
 
 fn validate_email(email: &str) -> bool {
-    validator::validate_email(email)
+    validator::validate_email(email) &&
+    email.chars().all(|c| c.is_ascii_alphanumeric() || VALID_CHARACTER.contains(c) )
 }
 
 #[derive(Clone)]
@@ -241,7 +247,7 @@ impl IdentityManager {
     /// Creates a new user identity.
     pub async fn create_user(&self, name: &str, email: Option<&str>, password: &str) -> Result<UserIdentity, IAMError> {
         // validate input
-        if !validate_username(name) {
+        if !validate_name(name) {
             log::info!("Invalid user name: {}", name);
             return Err(IAMError::InvalidName);
         }

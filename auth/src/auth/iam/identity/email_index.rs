@@ -22,7 +22,7 @@ pub struct EmailIndex(TableEntity<EmailIndexData>);
 impl EmailIndex {
     pub fn entity_keys(cat: IdentityCategory, email: &str) -> (String, String) {
         match cat {
-            IdentityCategory::User => (format!("x_user_email-{}", &email[0..2]), email.to_string()),
+            IdentityCategory::User => (format!("x_user_email-{}", email.chars().take(2).collect::<String>()), email.to_string()),
         }
     }
 
