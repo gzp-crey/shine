@@ -13,7 +13,7 @@ pub use self::error::*;
 
 use fingerprint::Fingerprint;
 use identity::{Identity, IdentityManager, UserIdentity};
-use role::{RoleManager, RoleMap, Roles};
+use role::{RoleManager, Roles};
 use session::{Session, SessionManager};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -21,6 +21,8 @@ pub struct IAMConfig {
     pub password_pepper: String,
     pub storage_account: String,
     pub storage_account_key: String,
+    pub graph_db_host: String,
+    pub graph_db_port: u16,
     pub ipdataco_key: String,
     pub session_time_to_live_h: u16,
 }
@@ -142,7 +144,7 @@ impl IAM {
         }
     }
 
-    pub async fn get_roles(&self) -> Result<RoleMap, IAMError> {
+    pub async fn get_roles(&self) -> Result<Roles, IAMError> {
         self.role.get_roles().await
     }
 }

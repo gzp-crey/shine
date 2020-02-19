@@ -10,9 +10,14 @@ use serde::{Deserialize, Serialize};
 use shine_core::requestinfo::BasicAuth;
 use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
 
-fn create_user_id(user: UserIdentity, roles: Roles) -> UserId {
+fn create_user_id(user: UserIdentity, roles: Roles) -> Result<UserId, IAMError> {
     let data = user.into_data();
-    UserId::new(data.core.id, data.core.name, roles)
+    let user_name = data
+        .core
+        .name
+        .to_raw()
+        .map_err(|err| IAMError::Internal(format!("Name decript error: {}", err)))?;
+    Ok(UserId::new(data.core.id, user_name, roles))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,7 +44,7 @@ pub async fn register_user(
         .register_user(&name, email.as_deref(), &password, &fingerprint)
         .await?;
 
-    create_user_id(identity, roles).to_session(&identity_session)?;
+    create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
 
     Ok(HttpResponse::Ok().finish())
@@ -59,7 +64,7 @@ pub async fn login_basic_auth(
 
     let (identity, roles, session) = state.iam().login_name_email(&user_id, password, &fingerprint).await?;
 
-    create_user_id(identity, roles).to_session(&identity_session)?;
+    create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
 
     Ok(HttpResponse::Ok().finish())
@@ -81,7 +86,7 @@ pub async fn refresh_session_by_key(
     match state.iam().refresh_session_by_key(&key_params.key, &fingerprint).await {
         Ok((identity, roles, session)) => {
             IdentityCookie::clear(&identity_session);
-            create_user_id(identity, roles).to_session(&identity_session)?;
+            create_user_id(identity, roles)?.to_session(&identity_session)?;
             SessionKey::from(session).to_session(&identity_session)?;
             Ok(HttpResponse::Ok().finish())
         }
@@ -111,7 +116,7 @@ pub async fn validate_session(
         .await
     {
         Ok((identity, roles)) => {
-            let user_id = create_user_id(identity, roles);
+            let user_id = create_user_id(identity, roles)?;
             Ok(HttpResponse::Ok().json(user_id))
         }
         Err(e) => Err(e.into()),
@@ -134,7 +139,7 @@ pub async fn refresh_session(
     {
         Ok((identity, roles, session)) => {
             IdentityCookie::clear(&identity_session);
-            create_user_id(identity, roles).to_session(&identity_session)?;
+            create_user_id(identity, roles)?.to_session(&identity_session)?;
             SessionKey::from(session).to_session(&identity_session)?;
             Ok(HttpResponse::Ok().finish())
         }
@@ -172,23 +177,11 @@ pub async fn logout(
 }
 
 pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
-    use gremlin_client::{GremlinClient, Vertex};
-    let client = GremlinClient::connect("localhost").map_err(IAMError::from)?;
-
-    let results = client
-        .execute("g.V(param)", &[("param", &1)]).map_err(IAMError::from)?
-        .filter_map(Result::ok)
-        .map(|f| f.take::<Vertex>())
-        .collect::<Result<Vec<Vertex>, _>>().map_err(IAMError::from)?;
-
-    Ok(HttpResponse::Ok().body(format!("{:?}", results)))
-    /*let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     log::info!("get_roles {:?}, {:?}", user_id, session_key);
 
     //todo: check permission
-
     let roles = state.iam().get_roles().await?;
-
-    Ok(HttpResponse::Ok().json(roles))*/
+    Ok(HttpResponse::Ok().json(roles))
 }

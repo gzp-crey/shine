@@ -1,5 +1,7 @@
 use azure_sdk_storage_table::TableEntity;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use shine_core::azure_utils::{decode_safe_key, encode_safe_key};
+use std::str::Utf8Error;
 
 mod email_index;
 mod manager;
@@ -12,6 +14,48 @@ pub use self::manager::*;
 pub use self::name_index::*;
 pub use self::sequence_index::*;
 pub use self::user_identity::*;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EncodedName(String);
+
+impl EncodedName {
+    pub fn from_raw<S: ToString>(raw: S) -> EncodedName {
+        EncodedName(encode_safe_key(&raw.to_string()))
+    }
+
+    pub fn to_raw(&self) -> Result<String, Utf8Error> {
+        decode_safe_key(&self.0)
+    }
+
+    pub fn prefix(&self, len: usize) -> &str {
+        &self.0[..self.0.char_indices().nth(len).unwrap().0]
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EncodedEmail(String);
+
+impl EncodedEmail {
+    pub fn from_raw<S: ToString>(raw: S) -> EncodedEmail {
+        EncodedEmail(encode_safe_key(&raw.to_string()))
+    }
+
+    pub fn to_raw(&self) -> Result<String, Utf8Error> {
+        decode_safe_key(&self.0)
+    }
+
+    pub fn prefix(&self, len: usize) -> &str {
+        &self.0[..self.0.char_indices().nth(len).unwrap().0]
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum IdentityCategory {
@@ -29,8 +73,8 @@ pub struct IdentityCore {
     pub sequence_id: u64,
     pub salt: String,
     pub category: IdentityCategory,
-    pub name: String,
-    pub email: Option<String>,
+    pub name: EncodedName,
+    pub email: Option<EncodedEmail>,
     pub email_validated: bool,
 }
 

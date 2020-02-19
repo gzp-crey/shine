@@ -1,21 +1,19 @@
 use actix_web::http::StatusCode;
 use actix_web::ResponseError;
-use argon2::Error as Argon2Error;
 use azure_sdk_core::errors::AzureError;
-use data_encoding;
+use gremlin_client::GremlinError;
 use shine_core::{
     backoff::BackoffError, idgenerator::IdSequenceError, iplocation::IpLocationError, requestinfo::RequestInfoError,
 };
-use std::{fmt, str};
-use gremlin_client::GremlinError;
+use std::fmt;
 
 #[derive(Debug)]
 pub enum IAMError {
     /// Database related error
-    DB(String),
+    Internal(String),
     BadRequest(String),
-    InvalidName,
-    InvalidEmail,
+    InvalidName(String),
+    InvalidEmail(String),
     SequenceIdTaken,
     NameTaken,
     EmailTaken,
@@ -41,10 +39,10 @@ impl IAMError {
 impl fmt::Display for IAMError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            IAMError::DB(ref e) => write!(f, "DB, {}", e),
+            IAMError::Internal(ref e) => write!(f, "Internal error: {}", e),
             IAMError::BadRequest(ref e) => write!(f, "BadRequest, {}", e),
-            IAMError::InvalidName => write!(f, "Invalid name"),
-            IAMError::InvalidEmail => write!(f, "Invalid email"),
+            IAMError::InvalidName(ref e) => write!(f, "Invalid name: {}", e),
+            IAMError::InvalidEmail(ref e) => write!(f, "Invalid email: {}", e),
             IAMError::SequenceIdTaken => write!(f, "Sequence id already taken"),
             IAMError::NameTaken => write!(f, "Name already taken"),
             IAMError::EmailTaken => write!(f, "Email already taken"),
@@ -62,9 +60,9 @@ impl fmt::Display for IAMError {
 impl ResponseError for IAMError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            IAMError::InvalidEmail => StatusCode::BAD_REQUEST,
+            IAMError::InvalidName(_) => StatusCode::BAD_REQUEST,
+            IAMError::InvalidEmail(_) => StatusCode::BAD_REQUEST,
             IAMError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            IAMError::InvalidName => StatusCode::BAD_REQUEST,
             IAMError::SequenceIdTaken => StatusCode::CONFLICT,
             IAMError::NameTaken => StatusCode::CONFLICT,
             IAMError::EmailTaken => StatusCode::CONFLICT,
@@ -74,28 +72,28 @@ impl ResponseError for IAMError {
             IAMError::SessionRequired => StatusCode::UNAUTHORIZED,
             IAMError::SessionExpired => StatusCode::UNAUTHORIZED,
             IAMError::RoleNotFound => StatusCode::NOT_FOUND,
-            IAMError::DB(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            IAMError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
 impl From<AzureError> for IAMError {
     fn from(err: AzureError) -> IAMError {
-        IAMError::DB(format!("{:?}", err))
+        IAMError::Internal(format!("{:?}", err))
     }
 }
 
 impl From<IpLocationError> for IAMError {
     fn from(err: IpLocationError) -> IAMError {
-        IAMError::DB(format!("{:?}", err))
+        IAMError::Internal(format!("{:?}", err))
     }
 }
 
 impl From<IdSequenceError> for IAMError {
     fn from(err: IdSequenceError) -> IAMError {
         match err {
-            IdSequenceError::SequenceEnded => IAMError::DB(format!("ID sequence out of values")),
-            e => IAMError::DB(format!("Sequence error: {}", e)),
+            IdSequenceError::SequenceEnded => IAMError::Internal(format!("ID sequence out of values")),
+            e => IAMError::Internal(format!("Sequence error: {}", e)),
         }
     }
 }
@@ -106,26 +104,8 @@ impl From<RequestInfoError> for IAMError {
     }
 }
 
-impl From<Argon2Error> for IAMError {
-    fn from(err: Argon2Error) -> IAMError {
-        IAMError::BadRequest(err.to_string())
-    }
-}
-
-impl From<data_encoding::DecodeError> for IAMError {
-    fn from(err: data_encoding::DecodeError) -> IAMError {
-        IAMError::BadRequest(err.to_string())
-    }
-}
-
-impl From<str::Utf8Error> for IAMError {
-    fn from(err: str::Utf8Error) -> IAMError {
-        IAMError::BadRequest(err.to_string())
-    }
-}
-
 impl From<GremlinError> for IAMError {
     fn from(err: GremlinError) -> IAMError {
-        IAMError::DB(err.to_string())
+        IAMError::Internal(err.to_string())
     }
 }

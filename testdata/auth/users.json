@@ -10,16 +10,10 @@
     },    
     {        
         "name": "I'm a ⛄",
-        "password": "with ugly pass as ⛄",
-        
-        "fail": 400,
-        "fail_with": "Invalid user name"
+        "password": "with ugly pass as ⛄"
     },    
     {        
         "name": "/#?",
-        "password": "123",
-        
-        "fail": 400,
-        "fail_with": "Invalid user name"
+        "password": "123"
     }
 ]

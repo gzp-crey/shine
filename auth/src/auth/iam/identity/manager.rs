@@ -1,6 +1,7 @@
 use crate::auth::iam::{
     identity::{
-        EmailIndex, Identity, IdentityCategory, IdentityIndex, IdentityIndexedId, NameIndex, SequenceIndex, UserIdentity,
+        EmailIndex, EncodedEmail, EncodedName, Identity, IdentityCategory, IdentityIndex, IdentityIndexedId, NameIndex,
+        SequenceIndex, UserIdentity,
     },
     IAMConfig, IAMError,
 };
@@ -15,24 +16,31 @@ use shine_core::{
 };
 use std::{str, time::Duration};
 
-const INVALID_CHARACTER : &str = "/\\#?%";
-const VALID_CHARACTER : &str = " ._*@";
-const MIN_NAME_LEN : usize = 3;
-
 const ID_LEN: usize = 8;
 const ID_ABC: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
 const MAX_SALT_LEN: usize = 32;
 const SALT_ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-fn validate_name(name: &str) -> bool {
-    name.chars().skip(MIN_NAME_LEN).next().is_some() &&
-    name.chars().all(|c| c.is_ascii_alphanumeric() || VALID_CHARACTER.contains(c) )
+fn validate_name(name: &str) -> Result<(), String> {
+    const MIN_LEN: usize = 3;
+    const MAX_LEN: usize = 30;
+
+    if name.chars().skip(MIN_LEN - 1).next().is_none() {
+        Err(format!("Too short, required min length: {}", MIN_LEN))
+    } else if name.len() > 30 {
+        Err(format!("Too long, required max length: {}", MAX_LEN))
+    } else {
+        Ok(())
+    }
 }
 
-fn validate_email(email: &str) -> bool {
-    validator::validate_email(email) &&
-    email.chars().all(|c| c.is_ascii_alphanumeric() || VALID_CHARACTER.contains(c) )
+fn validate_email(email: &str) -> Result<(), String> {
+    if !validator::validate_email(email) {
+        Err("Invalid".to_owned())
+    } else {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -129,7 +137,9 @@ impl IdentityManager {
 
         if let Some(password) = password {
             // check password if provided
-            if !argon2::verify_encoded(&identity.data().password_hash, password.as_bytes())? {
+            if !argon2::verify_encoded(&identity.data().password_hash, password.as_bytes())
+                .map_err(|err| IAMError::Internal(format!("Argon2 password validation failed: {}", err)))?
+            {
                 return Err(IAMError::PasswordNotMatching);
             }
         }
@@ -155,7 +165,7 @@ impl IdentityManager {
     }
 
     /// Return if the given name can be used as a new identity name
-    pub async fn is_name_available(&self, name: &str) -> Result<bool, IAMError> {
+    pub async fn is_name_available(&self, name: &EncodedName) -> Result<bool, IAMError> {
         let (partition_key, row_key) = NameIndex::entity_keys(name);
         Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
     }
@@ -178,7 +188,7 @@ impl IdentityManager {
     }
 
     /// Return if the given email can be used.
-    pub async fn is_email_available(&self, cat: IdentityCategory, email: &str) -> Result<bool, IAMError> {
+    pub async fn is_email_available(&self, cat: IdentityCategory, email: &EncodedEmail) -> Result<bool, IAMError> {
         let (partition_key, row_key) = EmailIndex::entity_keys(cat, email);
         Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
     }
@@ -206,16 +216,16 @@ impl IdentityManager {
     async fn try_create_user_identity(
         &self,
         sequence_id: u64,
-        name: &str,
+        name: &EncodedName,
         password: &str,
-        email: Option<&str>,
+        email: Option<&EncodedEmail>,
     ) -> Result<UserIdentity, BackoffError<IAMError>> {
         let mut rng = rand::thread_rng();
         let salt = String::from_utf8(SALT_ABC.choose_multiple(&mut rng, MAX_SALT_LEN).cloned().collect::<Vec<_>>()).unwrap();
         let id = String::from_utf8(ID_ABC.choose_multiple(&mut rng, ID_LEN).cloned().collect::<Vec<_>>()).unwrap();
         let password_config = argon2::Config::default();
         let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &password_config)
-            .map_err(IAMError::from)
+            .map_err(|err| IAMError::Internal(format!("Argon2 password creation failed: {}", err)))
             .map_err(IAMError::into_backoff)?;
 
         log::info!("Created new user id:{}, pwh:{}", id, password_hash);
@@ -245,27 +255,31 @@ impl IdentityManager {
     }
 
     /// Creates a new user identity.
-    pub async fn create_user(&self, name: &str, email: Option<&str>, password: &str) -> Result<UserIdentity, IAMError> {
+    pub async fn create_user(&self, raw_name: &str, raw_email: Option<&str>, password: &str) -> Result<UserIdentity, IAMError> {
         // validate input
-        if !validate_name(name) {
-            log::info!("Invalid user name: {}", name);
-            return Err(IAMError::InvalidName);
+        if let Err(err) = validate_name(raw_name) {
+            log::info!("Invalid user name({}): {}", raw_name, err);
+            return Err(IAMError::InvalidName(err));
         }
-        if let Some(ref email) = email {
-            if !validate_email(email) {
-                log::info!("Invalid email: {}", email);
-                return Err(IAMError::InvalidEmail);
+        if let Some(ref email) = raw_email {
+            if let Err(err) = validate_email(email) {
+                log::info!("Invalid email({}): {}", email, err);
+                return Err(IAMError::InvalidEmail(err));
             }
         }
 
+        let name = EncodedName::from_raw(raw_name);
+        let email = raw_email.map(|e| EncodedEmail::from_raw(e));
+        let email = email.as_ref();
+
         // preliminary db checks (reduce the number of rollbacks)
-        if !self.is_name_available(name).await? {
-            log::info!("User name {} already taken", name);
+        if !self.is_name_available(&name).await? {
+            log::info!("User name {} already taken", raw_name);
             return Err(IAMError::NameTaken);
         }
         if let Some(ref email) = email {
             if !self.is_email_available(IdentityCategory::User, email).await? {
-                log::info!("Email {} already taken", email);
+                log::info!("Email {} already taken", raw_email.unwrap_or(""));
                 return Err(IAMError::EmailTaken);
             }
         }
@@ -273,7 +287,7 @@ impl IdentityManager {
         let identity = {
             let sequence_id = self.identity_id_generator.get().await?;
             backoff::Exponential::new(3, Duration::from_micros(10))
-                .async_execute(|_| self.try_create_user_identity(sequence_id, name, password, email))
+                .async_execute(|_| self.try_create_user_identity(sequence_id, &name, password, email))
                 .await?
         };
 
@@ -316,13 +330,13 @@ impl IdentityManager {
 
     /// Find a user identity by email or name.
     /// If password is given, the its validaity is also ensured
-    pub async fn find_user_by_name_email(&self, name_email: &str, password: Option<&str>) -> Result<UserIdentity, IAMError> {
+    pub async fn find_user_by_name_email(&self, raw_name_email: &str, password: Option<&str>) -> Result<UserIdentity, IAMError> {
         let query_name = {
-            let (p, r) = NameIndex::entity_keys(name_email);
+            let (p, r) = NameIndex::entity_keys(&EncodedName::from_raw(raw_name_email));
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query_email = {
-            let (p, r) = EmailIndex::entity_keys(IdentityCategory::User, name_email);
+            let (p, r) = EmailIndex::entity_keys(IdentityCategory::User, &EncodedEmail::from_raw(raw_name_email));
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query = format!("(({}) or ({}))", query_name, query_email);

@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "target/debug/shine-auth.exe",
-            "args": [],
+            "args": ["secret.config.json"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

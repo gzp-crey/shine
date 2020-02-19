@@ -87,9 +87,8 @@ impl AuthService {
         services.service(
             web::scope("auth/api")
                 .wrap(SignedCookie::new().add(IdentityCookie::write(&self.cookie_session_secret)))
-                .data(state)                
+                .data(state)
                 .service(
-                    // user authentication
                     web::scope("users")
                         .service(web::resource("login").route(web::post().to(iam_handler::login_basic_auth)))
                         .service(web::resource("register").route(web::post().to(iam_handler::register_user)))
@@ -99,12 +98,9 @@ impl AuthService {
                         .service(web::resource("logout").route(web::post().to(iam_handler::logout))),
                 )
                 .service(
-                    // role management
                     web::scope("roles")
                         .service(web::resource("").route(web::get().to(iam_handler::get_roles)))
-                        /*.service(web::resource("/{role}").route(web::put().to(iam_handler::create_role)))
-                        .service(web::resource("/{role}").route(web::post().to(iam_handler::update_role)))
-                        .service(web::resource("/{role}").route(web::post().to(iam_handler::delete_role)))*/
+                        .service(web::resource("dummy").route(web::post().to(iam_handler::get_roles))),
                 ),
         );
     }

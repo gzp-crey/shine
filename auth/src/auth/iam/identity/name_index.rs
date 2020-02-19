@@ -1,4 +1,4 @@
-use super::{Identity, IdentityIndex, IdentityIndexData, IdentityIndexedId};
+use super::{EncodedName, Identity, IdentityIndex, IdentityIndexData, IdentityIndexedId};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
@@ -21,8 +21,8 @@ impl IdentityIndexData for NameIndexData {
 pub struct NameIndex(TableEntity<NameIndexData>);
 
 impl NameIndex {
-    pub fn entity_keys(name: &str) -> (String, String) {
-        (format!("x_name-{}", name.chars().take(2).collect::<String>()), name.to_string())
+    pub fn entity_keys(name: &EncodedName) -> (String, String) {
+        (format!("x_name-{}", name.prefix(2)), name.as_str().to_owned())
     }
 
     pub fn from_identity<T>(identity: &T) -> Self
