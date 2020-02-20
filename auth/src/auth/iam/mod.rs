@@ -13,7 +13,7 @@ pub use self::error::*;
 
 use fingerprint::Fingerprint;
 use identity::{Identity, IdentityManager, UserIdentity};
-use role::{RoleManager, Roles};
+use role::{InheritedRoles, RoleManager, Roles};
 use session::{Session, SessionManager};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -144,7 +144,34 @@ impl IAM {
         }
     }
 
+    pub async fn create_role(&self, role: &str) -> Result<(), IAMError> {
+        self.role.create_role(role).await
+    }
+
     pub async fn get_roles(&self) -> Result<Roles, IAMError> {
         self.role.get_roles().await
+    }
+
+    pub async fn inherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
+        self.role.inherit_role(role, inherited_role).await
+    }
+
+    pub async fn disherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
+        self.role.disherit_role(role, inherited_role).await
+    }
+
+    pub async fn add_identity_role(&self, identity_id: &str, role: &str) -> Result<InheritedRoles, IAMError> {
+        let _ = self.identity.find_core_identity_by_id(identity_id).await?;
+        self.role.add_identity_role(identity_id, role).await
+    }
+
+    pub async fn get_identity_roles(&self, identity_id: &str, include_inherited: bool) -> Result<InheritedRoles, IAMError> {
+        let _ = self.identity.find_core_identity_by_id(identity_id).await?;
+        self.role.get_identity_roles(identity_id, include_inherited).await
+    }
+
+    pub async fn remove_identity_role(&self, identity_id: &str, role: &str) -> Result<InheritedRoles, IAMError> {
+        let _ = self.identity.find_core_identity_by_id(identity_id).await?;
+        self.role.remove_identity_role(identity_id, role).await
     }
 }

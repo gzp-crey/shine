@@ -1,4 +1,4 @@
-use super::{EncodedEmail, EncodedName, Identity, IdentityCategory, IdentityCore, IdentityData};
+use super::{CoreIdentityData, EncodedEmail, EncodedName, Identity, IdentityCategory, IdentityData, IdentityEntity};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
@@ -7,19 +7,18 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "PascalCase")]
 pub struct UserIdentityData {
     #[serde(flatten)]
-    pub core: IdentityCore,
+    pub core: CoreIdentityData,
     pub password_hash: String,
 }
 
 impl IdentityData for UserIdentityData {
-    fn core(&self) -> &IdentityCore {
+    fn core(&self) -> &CoreIdentityData {
         &self.core
     }
 }
 
 /// Identity assigned to a user
-#[derive(Debug)]
-pub struct UserIdentity(TableEntity<UserIdentityData>);
+pub type UserIdentity = IdentityEntity<UserIdentityData>;
 
 impl UserIdentity {
     pub fn new(
@@ -29,15 +28,15 @@ impl UserIdentity {
         name: EncodedName,
         email: Option<EncodedEmail>,
         password_hash: String,
-    ) -> UserIdentity {
+    ) -> Self {
         let (partition_key, row_key) = Self::entity_keys(&id);
-        UserIdentity(TableEntity {
+        Self(TableEntity {
             partition_key,
             row_key,
             etag: None,
             timestamp: None,
             payload: UserIdentityData {
-                core: IdentityCore {
+                core: CoreIdentityData {
                     id,
                     sequence_id,
                     salt,
@@ -49,33 +48,5 @@ impl UserIdentity {
                 password_hash,
             },
         })
-    }
-}
-
-impl Identity for UserIdentity {
-    type Data = UserIdentityData;
-
-    fn entity_keys(id: &str) -> (String, String) {
-        (format!("id-{}", &id[0..2]), id.to_string())
-    }
-
-    fn from_entity(entity: TableEntity<UserIdentityData>) -> Self {
-        Self(entity)
-    }
-
-    fn into_entity(self) -> TableEntity<UserIdentityData> {
-        self.0
-    }
-
-    fn into_data(self) -> UserIdentityData {
-        self.0.payload
-    }
-
-    fn data(&self) -> &UserIdentityData {
-        &self.0.payload
-    }
-
-    fn data_mut(&mut self) -> &mut UserIdentityData {
-        &mut self.0.payload
     }
 }

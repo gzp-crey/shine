@@ -1,26 +1,25 @@
-use super::{Identity, IdentityIndex, IdentityIndexData, IdentityIndexedId};
+use super::{CoreIdentityIndexedData, Identity, IdentityData, IndexIdentity, IndexIdentityData, IndexIdentityEntity};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
 /// Data associated to an identity index by the sequence id
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct SequenceIndexData {
+pub struct IndexSequenceData {
     #[serde(flatten)]
-    pub indexed_id: IdentityIndexedId,
+    pub indexed_id: CoreIdentityIndexedData,
 }
 
-impl IdentityIndexData for SequenceIndexData {
+impl IndexIdentityData for IndexSequenceData {
     fn id(&self) -> &str {
         &self.indexed_id.identity_id
     }
 }
 
 /// Index identity by the sequence id
-#[derive(Debug)]
-pub struct SequenceIndex(TableEntity<SequenceIndexData>);
+pub type IndexSequence = IndexIdentityEntity<IndexSequenceData>;
 
-impl SequenceIndex {
+impl IndexSequence {
     pub fn entity_keys(sequence_id: u64) -> (String, String) {
         (format!("x_seq-{}", sequence_id % 100), sequence_id.to_string())
     }
@@ -37,39 +36,11 @@ impl SequenceIndex {
             row_key,
             etag: None,
             timestamp: None,
-            payload: SequenceIndexData {
-                indexed_id: IdentityIndexedId {
+            payload: IndexSequenceData {
+                indexed_id: CoreIdentityIndexedData {
                     identity_id: core.id.clone(),
                 },
             },
         })
-    }
-}
-
-impl IdentityIndex for SequenceIndex {
-    type Index = SequenceIndexData;
-
-    fn from_entity(entity: TableEntity<SequenceIndexData>) -> Self {
-        Self(entity)
-    }
-
-    fn into_entity(self) -> TableEntity<SequenceIndexData> {
-        self.0
-    }
-
-    fn into_data(self) -> SequenceIndexData {
-        self.0.payload
-    }
-
-    fn data(&self) -> &SequenceIndexData {
-        &self.0.payload
-    }
-
-    fn data_mut(&mut self) -> &mut SequenceIndexData {
-        &mut self.0.payload
-    }
-
-    fn index_key(&self) -> &str {
-        &self.0.row_key
     }
 }

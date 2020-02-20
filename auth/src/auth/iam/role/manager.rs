@@ -4,6 +4,13 @@ use gremlin_client::{ConnectionOptions, GremlinClient};
 pub type Role = String;
 pub type Roles = Vec<String>;
 
+/// Role with inheritance information
+pub struct InheritedRole {
+    role: String,
+    inherited_from: Option<String>,
+}
+pub type InheritedRoles = Vec<InheritedRole>;
+
 #[derive(Clone)]
 pub struct RoleManager {
     db: GremlinClient,
@@ -21,18 +28,37 @@ impl RoleManager {
         Ok(RoleManager { db: db })
     }
 
-    /// Return all the available roles
+    pub async fn create_role(&self, role: &str) -> Result<(), IAMError> {
+        unimplemented!()
+    }
+
     pub async fn get_roles(&self) -> Result<Roles, IAMError> {
         let results = self.db.execute("g.V(1).properties()", &[]);
         println!("result: {:?}", results);
         Err(IAMError::Internal("not implemented".to_owned()))
     }
 
-    pub async fn create_role(&self, role: &str, derive: Vec<String>) -> Result<Role, IAMError> {
+    pub async fn inherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
         unimplemented!()
     }
 
-    pub async fn get_roles_by_identity(&self, id: &str, include_derived: bool) -> Result<Roles, IAMError> {
+    pub async fn disherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
+        unimplemented!()
+    }
+
+    pub async fn add_identity_role(&self, identity_id: &str, role: &str) -> Result<InheritedRoles, IAMError> {
+        unimplemented!()
+    }
+
+    pub async fn get_identity_roles(&self, identity_id: &str, include_inherited: bool) -> Result<InheritedRoles, IAMError> {
+        unimplemented!()
+    }
+
+    pub async fn remove_identity_role(&self, identity_id: &str, role: &str) -> Result<InheritedRoles, IAMError> {
+        unimplemented!()
+    }
+
+    pub async fn get_roles_by_identity(&self, identity_id: &str, include_derived: bool) -> Result<Roles, IAMError> {
         unimplemented!()
     }
 }

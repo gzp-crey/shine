@@ -1,26 +1,27 @@
-use super::{EncodedName, Identity, IdentityIndex, IdentityIndexData, IdentityIndexedId};
+use super::{
+    CoreIdentityIndexedData, EncodedName, Identity, IdentityData, IndexIdentity, IndexIdentityData, IndexIdentityEntity,
+};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
 /// Data associated to an identity index by name
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct NameIndexData {
+pub struct IndexNameData {
     #[serde(flatten)]
-    pub indexed_id: IdentityIndexedId,
+    pub indexed_id: CoreIdentityIndexedData,
 }
 
-impl IdentityIndexData for NameIndexData {
+impl IndexIdentityData for IndexNameData {
     fn id(&self) -> &str {
         &self.indexed_id.identity_id
     }
 }
 
 /// Index identity by name
-#[derive(Debug)]
-pub struct NameIndex(TableEntity<NameIndexData>);
+pub type IndexName = IndexIdentityEntity<IndexNameData>;
 
-impl NameIndex {
+impl IndexName {
     pub fn entity_keys(name: &EncodedName) -> (String, String) {
         (format!("x_name-{}", name.prefix(2)), name.as_str().to_owned())
     }
@@ -37,39 +38,11 @@ impl NameIndex {
             row_key,
             etag: None,
             timestamp: None,
-            payload: NameIndexData {
-                indexed_id: IdentityIndexedId {
+            payload: IndexNameData {
+                indexed_id: CoreIdentityIndexedData {
                     identity_id: core.id.clone(),
                 },
             },
         })
-    }
-}
-
-impl IdentityIndex for NameIndex {
-    type Index = NameIndexData;
-
-    fn from_entity(entity: TableEntity<NameIndexData>) -> Self {
-        Self(entity)
-    }
-
-    fn into_entity(self) -> TableEntity<NameIndexData> {
-        self.0
-    }
-
-    fn into_data(self) -> NameIndexData {
-        self.0.payload
-    }
-
-    fn data(&self) -> &NameIndexData {
-        &self.0.payload
-    }
-
-    fn data_mut(&mut self) -> &mut NameIndexData {
-        &mut self.0.payload
-    }
-
-    fn index_key(&self) -> &str {
-        &self.0.row_key
     }
 }

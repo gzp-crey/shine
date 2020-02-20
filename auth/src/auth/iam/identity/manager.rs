@@ -1,7 +1,7 @@
 use crate::auth::iam::{
     identity::{
-        EmailIndex, EncodedEmail, EncodedName, Identity, IdentityCategory, IdentityIndex, IdentityIndexedId, NameIndex,
-        SequenceIndex, UserIdentity,
+        CoreIdentity, CoreIdentityIndexedData, EncodedEmail, EncodedName, Identity, IdentityCategory, IndexEmail, IndexIdentity,
+        IndexName, IndexSequence, UserIdentity,
     },
     IAMConfig, IAMError,
 };
@@ -100,7 +100,7 @@ impl IdentityManager {
 
     async fn remove_index<T>(&self, index: T)
     where
-        T: IdentityIndex,
+        T: IndexIdentity,
     {
         let index = index.into_entity();
         self.db
@@ -115,7 +115,7 @@ impl IdentityManager {
     {
         if let Some(indices) = self
             .db
-            .execute_query::<IdentityIndexedId>(Some(&query), &mut Continuation::start())
+            .execute_query::<CoreIdentityIndexedData>(Some(&query), &mut Continuation::start())
             .await?
         {
             match &indices[..] {
@@ -147,13 +147,13 @@ impl IdentityManager {
         Ok(identity)
     }
 
-    async fn insert_sequence_index<T>(&self, identity: &T) -> Result<SequenceIndex, IAMError>
+    async fn insert_sequence_index<T>(&self, identity: &T) -> Result<IndexSequence, IAMError>
     where
         T: Identity,
     {
-        let sequence_index = SequenceIndex::from_identity(identity);
+        let sequence_index = IndexSequence::from_identity(identity);
         match self.db.insert_entity(sequence_index.into_entity()).await {
-            Ok(sequence_index) => Ok(SequenceIndex::from_entity(sequence_index)),
+            Ok(sequence_index) => Ok(IndexSequence::from_entity(sequence_index)),
             Err(e) => {
                 if azure_utils::is_precodition_error(&e) {
                     Err(IAMError::SequenceIdTaken)
@@ -166,17 +166,17 @@ impl IdentityManager {
 
     /// Return if the given name can be used as a new identity name
     pub async fn is_name_available(&self, name: &EncodedName) -> Result<bool, IAMError> {
-        let (partition_key, row_key) = NameIndex::entity_keys(name);
+        let (partition_key, row_key) = IndexName::entity_keys(name);
         Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
     }
 
-    async fn insert_name_index<T>(&self, identity: &T) -> Result<NameIndex, IAMError>
+    async fn insert_name_index<T>(&self, identity: &T) -> Result<IndexName, IAMError>
     where
         T: Identity,
     {
-        let name_index = NameIndex::from_identity(identity);
+        let name_index = IndexName::from_identity(identity);
         match self.db.insert_entity(name_index.into_entity()).await {
-            Ok(name_index) => Ok(NameIndex::from_entity(name_index)),
+            Ok(name_index) => Ok(IndexName::from_entity(name_index)),
             Err(e) => {
                 if azure_utils::is_precodition_error(&e) {
                     Err(IAMError::NameTaken)
@@ -189,17 +189,17 @@ impl IdentityManager {
 
     /// Return if the given email can be used.
     pub async fn is_email_available(&self, cat: IdentityCategory, email: &EncodedEmail) -> Result<bool, IAMError> {
-        let (partition_key, row_key) = EmailIndex::entity_keys(cat, email);
+        let (partition_key, row_key) = IndexEmail::entity_keys(cat, email);
         Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
     }
 
-    async fn insert_email_index<T>(&self, identity: &T) -> Result<Option<EmailIndex>, IAMError>
+    async fn insert_email_index<T>(&self, identity: &T) -> Result<Option<IndexEmail>, IAMError>
     where
         T: Identity,
     {
-        if let Some(email_index) = EmailIndex::from_identity(identity) {
+        if let Some(email_index) = IndexEmail::from_identity(identity) {
             match self.db.insert_entity(email_index.into_entity()).await {
-                Ok(email_index) => Ok(Some(EmailIndex::from_entity(email_index))),
+                Ok(email_index) => Ok(Some(IndexEmail::from_entity(email_index))),
                 Err(err) => {
                     if azure_utils::is_precodition_error(&err) {
                         Err(IAMError::EmailTaken)
@@ -332,17 +332,22 @@ impl IdentityManager {
     /// If password is given, the its validaity is also ensured
     pub async fn find_user_by_name_email(&self, raw_name_email: &str, password: Option<&str>) -> Result<UserIdentity, IAMError> {
         let query_name = {
-            let (p, r) = NameIndex::entity_keys(&EncodedName::from_raw(raw_name_email));
+            let (p, r) = IndexName::entity_keys(&EncodedName::from_raw(raw_name_email));
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query_email = {
-            let (p, r) = EmailIndex::entity_keys(IdentityCategory::User, &EncodedEmail::from_raw(raw_name_email));
+            let (p, r) = IndexEmail::entity_keys(IdentityCategory::User, &EncodedEmail::from_raw(raw_name_email));
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query = format!("(({}) or ({}))", query_name, query_email);
         let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
 
         self.find_user_by_index(&query, password).await
+    }
+
+    /// Find a core identity by the id
+    pub async fn find_core_identity_by_id(&self, id: &str) -> Result<CoreIdentity, IAMError> {
+        self.find_identity_by_id::<CoreIdentity>(id).await
     }
 
     /// Find a user identity by the id
