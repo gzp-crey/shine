@@ -1,8 +1,6 @@
 use super::{EncodedEmail, EncodedName};
 use azure_sdk_storage_table::TableEntity;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use shine_core::azure_utils::{decode_safe_key, encode_safe_key};
-use std::str::Utf8Error;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum IdentityCategory {
@@ -68,12 +66,14 @@ pub trait Identity {
 }
 
 #[derive(Debug)]
-pub struct IdentityEntity<D: IdentityData>(TableEntity<D>);
+pub struct IdentityEntity<D: IdentityData>(pub(crate) TableEntity<D>);
 
 impl<D> Identity for IdentityEntity<D>
 where
     D: IdentityData,
 {
+    type Data = D;
+
     fn entity_keys(id: &str) -> (String, String) {
         (format!("id-{}", &id[0..2]), id.to_string())
     }

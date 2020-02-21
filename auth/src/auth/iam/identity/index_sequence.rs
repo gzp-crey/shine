@@ -1,4 +1,4 @@
-use super::{CoreIdentityIndexedData, Identity, IdentityData, IndexIdentity, IndexIdentityData, IndexIdentityEntity};
+use super::{CoreIdentityIndexedData, Identity, IndexIdentityData, IndexIdentityEntity};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 

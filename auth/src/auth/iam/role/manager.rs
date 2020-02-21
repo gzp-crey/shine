@@ -28,7 +28,7 @@ impl RoleManager {
         Ok(RoleManager { db: db })
     }
 
-    pub async fn create_role(&self, role: &str) -> Result<(), IAMError> {
+    pub async fn create_role(&self, _role: &str) -> Result<(), IAMError> {
         unimplemented!()
     }
 
@@ -38,27 +38,27 @@ impl RoleManager {
         Err(IAMError::Internal("not implemented".to_owned()))
     }
 
-    pub async fn inherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
+    pub async fn inherit_role(&self, _role: &str, _inherited_role: &str) -> Result<(), IAMError> {
         unimplemented!()
     }
 
-    pub async fn disherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
+    pub async fn disherit_role(&self, _role: &str, _inherited_role: &str) -> Result<(), IAMError> {
         unimplemented!()
     }
 
-    pub async fn add_identity_role(&self, identity_id: &str, role: &str) -> Result<InheritedRoles, IAMError> {
+    pub async fn add_identity_role(&self, _identity_id: &str, _role: &str) -> Result<InheritedRoles, IAMError> {
         unimplemented!()
     }
 
-    pub async fn get_identity_roles(&self, identity_id: &str, include_inherited: bool) -> Result<InheritedRoles, IAMError> {
+    pub async fn get_identity_roles(&self, _identity_id: &str, _include_inherited: bool) -> Result<InheritedRoles, IAMError> {
         unimplemented!()
     }
 
-    pub async fn remove_identity_role(&self, identity_id: &str, role: &str) -> Result<InheritedRoles, IAMError> {
+    pub async fn remove_identity_role(&self, _identity_id: &str, _role: &str) -> Result<InheritedRoles, IAMError> {
         unimplemented!()
     }
 
-    pub async fn get_roles_by_identity(&self, identity_id: &str, include_derived: bool) -> Result<Roles, IAMError> {
+    pub async fn get_roles_by_identity(&self, _identity_id: &str, _include_derived: bool) -> Result<Roles, IAMError> {
         unimplemented!()
     }
 }

@@ -185,3 +185,17 @@ pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State
     let roles = state.iam().get_roles().await?;
     Ok(HttpResponse::Ok().json(roles))
 }
+
+pub async fn create_role(
+    identity_session: IdentitySession,
+    state: web::Data<State>,
+    role: String,
+) -> Result<HttpResponse, ActixError> {
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    log::info!("create_role {:?}, {:?}, {}", user_id, session_key, role);
+
+    //todo: check permission
+    let roles = state.iam().create_role(&role).await?;
+    Ok(HttpResponse::Ok().json(roles))
+}

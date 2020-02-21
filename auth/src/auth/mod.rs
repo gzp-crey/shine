@@ -96,11 +96,12 @@ impl AuthService {
                         .service(web::resource("validate").route(web::post().to(iam_handler::validate_session)))
                         .service(web::resource("refresh_key").route(web::post().to(iam_handler::refresh_session_by_key)))
                         .service(web::resource("logout").route(web::post().to(iam_handler::logout))),
+                    //.service(web::resource("roles").route(web::post().to(iam_handler::get_))),
                 )
                 .service(
                     web::scope("roles")
                         .service(web::resource("").route(web::get().to(iam_handler::get_roles)))
-                        .service(web::resource("dummy").route(web::post().to(iam_handler::get_roles))),
+                        .service(web::resource("/{role}").route(web::post().to(iam_handler::create_role))),
                 ),
         );
     }

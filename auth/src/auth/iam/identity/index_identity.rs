@@ -1,7 +1,5 @@
 use azure_sdk_storage_table::TableEntity;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use shine_core::azure_utils::{decode_safe_key, encode_safe_key};
-use std::str::Utf8Error;
 
 /// Data associated to each identity
 pub trait IndexIdentityData: Serialize + DeserializeOwned {
@@ -53,7 +51,7 @@ pub trait IndexIdentity {
 }
 
 #[derive(Debug)]
-pub struct IndexIdentityEntity<D: IndexIdentityData>(TableEntity<D>);
+pub struct IndexIdentityEntity<D: IndexIdentityData>(pub(crate) TableEntity<D>);
 
 impl<D> IndexIdentity for IndexIdentityEntity<D>
 where
