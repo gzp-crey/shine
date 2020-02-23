@@ -101,7 +101,16 @@ impl AuthService {
                 .service(
                     web::scope("roles")
                         .service(web::resource("").route(web::get().to(iam_handler::get_roles)))
-                        .service(web::resource("/{role}").route(web::post().to(iam_handler::create_role))),
+                        .service(
+                            web::resource("/{role}")
+                                .route(web::post().to(iam_handler::create_role))
+                                .route(web::delete().to(iam_handler::delete_role)),
+                        )
+                        .service(
+                            web::resource("/{role}/inherit/{inherited_role}")
+                                .route(web::post().to(iam_handler::inherit_role))
+                                .route(web::delete().to(iam_handler::disherit_role)),
+                        ),
                 ),
         );
     }

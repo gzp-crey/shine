@@ -32,6 +32,7 @@ actix-web = "2.0"
 azure_sdk_core = "0.40"
 azure_sdk_storage_core = "0.40"
 azure_sdk_storage_table = "0.40"
-gremlin-client = "0.3"
+gremlin-client = { version = "0.3.0", features = ["async_std"] }
+#gremlin-client = "0.3"
 
 shine-core = {path = "../core", version = "0.1.0"}

@@ -176,6 +176,11 @@ pub async fn logout(
     Ok(HttpResponse::Ok().finish())
 }
 
+#[derive(Serialize)]
+struct RolesResponse {
+    roles: Vec<String>,
+}
+
 pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
@@ -183,19 +188,61 @@ pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State
 
     //todo: check permission
     let roles = state.iam().get_roles().await?;
-    Ok(HttpResponse::Ok().json(roles))
+    Ok(HttpResponse::Ok().json(RolesResponse { roles }))
 }
 
 pub async fn create_role(
     identity_session: IdentitySession,
     state: web::Data<State>,
-    role: String,
+    role: web::Path<String>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     log::info!("create_role {:?}, {:?}, {}", user_id, session_key, role);
 
     //todo: check permission
-    let roles = state.iam().create_role(&role).await?;
-    Ok(HttpResponse::Ok().json(roles))
+    state.iam().create_role(&role).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+pub async fn delete_role(
+    identity_session: IdentitySession,
+    state: web::Data<State>,
+    role: web::Path<String>,
+) -> Result<HttpResponse, ActixError> {
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    log::info!("delete_role {:?}, {:?}, {}", user_id, session_key, role);
+
+    //todo: check permission
+    state.iam().delete_role(&role).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+pub async fn inherit_role(
+    identity_session: IdentitySession,
+    state: web::Data<State>,
+    roles: web::Path<(String, String)>,
+) -> Result<HttpResponse, ActixError> {
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    log::info!("inherit_role {:?}, {:?}, {:?}", user_id, session_key, roles);
+
+    //todo: check permission
+    state.iam().inherit_role(&roles.0, &roles.1).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+pub async fn disherit_role(
+    identity_session: IdentitySession,
+    state: web::Data<State>,
+    roles: web::Path<(String, String)>,
+) -> Result<HttpResponse, ActixError> {
+    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
+    log::info!("disherit_role {:?}, {:?}, {:?}", user_id, session_key, roles);
+
+    //todo: check permission
+    state.iam().disherit_role(&roles.0, &roles.1).await?;
+    Ok(HttpResponse::Ok().finish())
 }

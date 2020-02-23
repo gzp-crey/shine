@@ -23,6 +23,8 @@ pub struct IAMConfig {
     pub storage_account_key: String,
     pub graph_db_host: String,
     pub graph_db_port: u16,
+    pub graph_db_user: String,
+    pub graph_db_password: String,
     pub ipdataco_key: String,
     pub session_time_to_live_h: u16,
 }
@@ -74,9 +76,9 @@ impl IAM {
     ) -> Result<(UserIdentity, Roles, Session), IAMError> {
         let identity = self.identity.create_user(name, email, password).await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
-        let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
+        //let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
 
-        Ok((identity, roles, session))
+        Ok((identity, Default::default() /*roles*/, session))
     }
 
     pub async fn login_name_email(
@@ -87,9 +89,9 @@ impl IAM {
     ) -> Result<(UserIdentity, Roles, Session), IAMError> {
         let identity = self.identity.find_user_by_name_email(name_email, Some(&password)).await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
-        let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
+        //let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
 
-        Ok((identity, roles, session))
+        Ok((identity, Default::default() /*roles*/, session))
     }
 
     pub async fn validate_session(
@@ -150,6 +152,10 @@ impl IAM {
 
     pub async fn get_roles(&self) -> Result<Roles, IAMError> {
         self.role.get_roles().await
+    }
+
+    pub async fn delete_role(&self, role: &str) -> Result<(), IAMError> {
+        self.role.delete_role(role).await
     }
 
     pub async fn inherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
