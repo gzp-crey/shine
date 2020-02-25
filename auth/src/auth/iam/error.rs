@@ -18,6 +18,7 @@ pub enum IAMError {
     NameTaken,
     EmailTaken,
     RoleNotFound,
+    RoleTaken,
     IdentityNotFound,
     PasswordNotMatching,
     IdentityIdConflict,
@@ -49,6 +50,7 @@ impl fmt::Display for IAMError {
             IAMError::IdentityIdConflict => write!(f, "Identity id already in use"),
             IAMError::SessionKeyConflict => write!(f, "Session key already in use"),
             IAMError::RoleNotFound => write!(f, "Role not found"),
+            IAMError::RoleTaken => write!(f, "Role already taken"),
             IAMError::IdentityNotFound => write!(f, "Identity not found"),
             IAMError::PasswordNotMatching => write!(f, "Invalid user or password"),
             IAMError::SessionRequired => write!(f, "Login required"),
@@ -72,6 +74,7 @@ impl ResponseError for IAMError {
             IAMError::SessionRequired => StatusCode::UNAUTHORIZED,
             IAMError::SessionExpired => StatusCode::UNAUTHORIZED,
             IAMError::RoleNotFound => StatusCode::NOT_FOUND,
+            IAMError::RoleTaken => StatusCode::CONFLICT,
             IAMError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

@@ -39,18 +39,33 @@ impl RoleManager {
     }
 
     pub async fn create_role(&self, role: &str) -> Result<(), IAMError> {
-        let _ = self
+        let mut result_stream = self
             .db
             .execute(
                 r#"g.v().has('role','name',role).fold()
                     .coalesce(
-                        unfold(),
-                        addV('role')
-                    .property('name',role))"#,
+                        // if role already present return 'conflict'
+                        unfold().map(constant('conflict')),
+
+                        // create new role, return 'done'
+                        addV('role').property('name',role)
+                            .map(constant('done'))
+                    )
+                "#,
                 &[("role", &role)],
             )
             .await?;
-        Ok(())
+
+        let result = result_stream
+            .next()
+            .await
+            .ok_or(IAMError::Internal("Missing query result".to_owned()))??;
+
+        match result.take::<String>()?.as_str() {
+            "conflict" => Err(IAMError::RoleTaken),
+            "done" => Ok(()),
+            r => Err(IAMError::Internal(format!("Unexpected query response: {}", r))),
+        }
     }
 
     pub async fn get_roles(&self) -> Result<Roles, IAMError> {
@@ -67,24 +82,41 @@ impl RoleManager {
     pub async fn delete_role(&self, role: &str) -> Result<(), IAMError> {
         let _ = self
             .db
-            .execute(r#"g.V().has('role', 'name', role).drop();"#, &[("role", &role)])
+            .execute(r#"g.V().has('role','name',role).drop();"#, &[("role", &role)])
             .await?;
         Ok(())
     }
 
     pub async fn inherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
-        let _ = self
+        let result: Vec<String> = self
             .db
             .execute(
-                r#"g.v().has('role','name',role).as('f')
-                        .coalesce(
-                            repeat(inE('has_role').outV()).emit(has('role','name',inherited_role)),
-                            v().has('role','name',inherited_role)
-                            .coalesce(inE('has_role').where(outV().as('f')),
-                                      addE('has_role').from('f')))"#,
+                r#"
+                    g.v().has('role','name',inherited_role)
+                    .coalesce(
+                        // if the new edge creates a cycle, return the path 
+                        __.repeat(out('has_role').dedup()).until(has('role','name',role))
+                            .path().by('name').limit(1).unfold(),                                           
+                            
+                        // if edge is already present, return 'conflict'
+                        __.in('has_role').has('role','name',role)
+                            .map(constant('conflict')),       
+
+                        // create the new edge, return 'ok' 
+                        __.addE('has_role').from(v().has('role','name',role))
+                            .map(constant('ok'))  
+                    )
+                "#,
                 &[("role", &role), ("inherited_role", &inherited_role)],
             )
-            .await?;
+            .await?
+            .map(|e| e.unwrap().take::<String>().unwrap())
+            .collect()
+            .await;
+        println!("res: {:?}", result);
+        /*match result.as_slice() {
+            &["conflict"] => IAMError::Role
+        }*/
         Ok(())
     }
 
@@ -93,8 +125,8 @@ impl RoleManager {
             .db
             .execute(
                 r#"g.V().has('role','name',role)
-                        .outE().hasLabel('has_role').where(inV().has('role','name',inherited_role))
-                        .drop()"#,
+                    .out('has_role').has('role','name',inherited_role)
+                    .drop()"#,
                 &[("role", &role), ("inherited_role", &inherited_role)],
             )
             .await?;
