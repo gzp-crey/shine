@@ -13,7 +13,7 @@ impl SessionKey {
         SessionKey { key }
     }
 
-    pub fn key(&self) -> &String {
+    pub fn key(&self) -> &str {
         &self.key
     }
 }

@@ -12,19 +12,26 @@ pub enum IAMError {
     /// Database related error
     Internal(String),
     BadRequest(String),
-    InvalidName(String),
-    InvalidEmail(String),
-    SequenceIdTaken,
+
+    NameInvalid(String),
     NameTaken,
+    EmailInvalid(String),
     EmailTaken,
-    RoleNotFound,
-    RoleTaken,
+
+    SequenceIdTaken,
+    IdentityIdConflict,
     IdentityNotFound,
     PasswordNotMatching,
-    IdentityIdConflict,
-    SessionKeyConflict,
     SessionRequired,
     SessionExpired,
+    SessionKeyConflict,
+
+    RoleNotFound,
+    RoleTaken,
+    HasRoleTaken,
+    HasRoleCycle(Vec<String>),
+
+    InsufficientPermission,
 }
 
 impl IAMError {
@@ -42,19 +49,26 @@ impl fmt::Display for IAMError {
         match *self {
             IAMError::Internal(ref e) => write!(f, "Internal error: {}", e),
             IAMError::BadRequest(ref e) => write!(f, "BadRequest, {}", e),
-            IAMError::InvalidName(ref e) => write!(f, "Invalid name: {}", e),
-            IAMError::InvalidEmail(ref e) => write!(f, "Invalid email: {}", e),
-            IAMError::SequenceIdTaken => write!(f, "Sequence id already taken"),
+
+            IAMError::NameInvalid(ref e) => write!(f, "Invalid name: {}", e),
             IAMError::NameTaken => write!(f, "Name already taken"),
+            IAMError::EmailInvalid(ref e) => write!(f, "Invalid email: {}", e),
             IAMError::EmailTaken => write!(f, "Email already taken"),
+
+            IAMError::SequenceIdTaken => write!(f, "Sequence id already taken"),
             IAMError::IdentityIdConflict => write!(f, "Identity id already in use"),
-            IAMError::SessionKeyConflict => write!(f, "Session key already in use"),
-            IAMError::RoleNotFound => write!(f, "Role not found"),
-            IAMError::RoleTaken => write!(f, "Role already taken"),
             IAMError::IdentityNotFound => write!(f, "Identity not found"),
             IAMError::PasswordNotMatching => write!(f, "Invalid user or password"),
             IAMError::SessionRequired => write!(f, "Login required"),
             IAMError::SessionExpired => write!(f, "Login expired"),
+            IAMError::SessionKeyConflict => write!(f, "Session key already in use"),
+
+            IAMError::RoleNotFound => write!(f, "Role not found"),
+            IAMError::RoleTaken => write!(f, "Role already taken"),
+            IAMError::HasRoleTaken => write!(f, "Role already granted"),
+            IAMError::HasRoleCycle(ref e) => write!(f, "Role cycle: [{}]", e.join(",")),
+
+            IAMError::InsufficientPermission => write!(f, "Insufficient permission to perform operation"),
         }
     }
 }
@@ -62,20 +76,28 @@ impl fmt::Display for IAMError {
 impl ResponseError for IAMError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            IAMError::InvalidName(_) => StatusCode::BAD_REQUEST,
-            IAMError::InvalidEmail(_) => StatusCode::BAD_REQUEST,
+            IAMError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             IAMError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            IAMError::SequenceIdTaken => StatusCode::CONFLICT,
+
+            IAMError::NameInvalid(_) => StatusCode::BAD_REQUEST,
             IAMError::NameTaken => StatusCode::CONFLICT,
+            IAMError::EmailInvalid(_) => StatusCode::BAD_REQUEST,
             IAMError::EmailTaken => StatusCode::CONFLICT,
+
+            IAMError::SequenceIdTaken => StatusCode::CONFLICT,
             IAMError::IdentityIdConflict => StatusCode::TOO_MANY_REQUESTS,
-            IAMError::SessionKeyConflict => StatusCode::TOO_MANY_REQUESTS,
-            IAMError::IdentityNotFound | IAMError::PasswordNotMatching => StatusCode::FORBIDDEN,
+            IAMError::IdentityNotFound => StatusCode::FORBIDDEN,
+            IAMError::PasswordNotMatching => StatusCode::FORBIDDEN,
             IAMError::SessionRequired => StatusCode::UNAUTHORIZED,
             IAMError::SessionExpired => StatusCode::UNAUTHORIZED,
+            IAMError::SessionKeyConflict => StatusCode::TOO_MANY_REQUESTS,
+
             IAMError::RoleNotFound => StatusCode::NOT_FOUND,
             IAMError::RoleTaken => StatusCode::CONFLICT,
-            IAMError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            IAMError::HasRoleTaken => StatusCode::CONFLICT,
+            IAMError::HasRoleCycle(_) => StatusCode::CONFLICT,
+
+            IAMError::InsufficientPermission => StatusCode::FORBIDDEN, /*UNAUTHORIZED?*/
         }
     }
 }

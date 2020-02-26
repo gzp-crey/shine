@@ -63,6 +63,11 @@ pub trait Identity {
     fn core(&self) -> &CoreIdentityData {
         self.data().core()
     }
+
+    /// Return the id of the identity
+    fn id(&self) -> &str {
+        &self.core().id
+    }
 }
 
 #[derive(Debug)]

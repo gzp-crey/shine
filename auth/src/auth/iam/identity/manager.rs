@@ -259,12 +259,12 @@ impl IdentityManager {
         // validate input
         if let Err(err) = validate_name(raw_name) {
             log::info!("Invalid user name({}): {}", raw_name, err);
-            return Err(IAMError::InvalidName(err));
+            return Err(IAMError::NameInvalid(err));
         }
         if let Some(ref email) = raw_email {
             if let Err(err) = validate_email(email) {
                 log::info!("Invalid email({}): {}", email, err);
-                return Err(IAMError::InvalidEmail(err));
+                return Err(IAMError::EmailInvalid(err));
             }
         }
 

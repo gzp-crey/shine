@@ -56,7 +56,7 @@ impl SessionManager {
     }
 
     async fn try_insert_session(&self, identity: &UserIdentity, fingerprint: &Fingerprint) -> Result<Session, IAMError> {
-        let id = &identity.core().id;
+        let id = identity.id();
         let key = self.genrate_session_key();
         log::info!("Created new session key [{}] for {}", key, id);
 

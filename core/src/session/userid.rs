@@ -22,11 +22,11 @@ impl UserId {
         }
     }
 
-    pub fn user_id(&self) -> &String {
+    pub fn user_id(&self) -> &str {
         &self.user_id
     }
 
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &str {
         &self.name
     }
 

@@ -7,7 +7,7 @@ use super::State;
 use actix_web::HttpRequest;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
-use shine_core::requestinfo::BasicAuth;
+use shine_core::requestinfo::{BasicAuth, TestingToken};
 use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
 
 fn create_user_id(user: UserIdentity, roles: Roles) -> Result<UserId, IAMError> {
@@ -195,12 +195,22 @@ pub async fn create_role(
     identity_session: IdentitySession,
     state: web::Data<State>,
     role: web::Path<String>,
+    testing_token: TestingToken,
 ) -> Result<HttpResponse, ActixError> {
-    let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
-    let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
-    log::info!("create_role {:?}, {:?}, {}", user_id, session_key, role);
+    let session_key = SessionKey::from_session(&identity_session)?;
+    let user_id = UserId::from_session(&identity_session)?;
+    log::info!("create_role {:?},{:?},{:?} {}", user_id, session_key, testing_token, role);
 
-    //todo: check permission
+    let _ = state
+        .iam()
+        .check_permission(
+            session_key.as_ref().map(|s| s.key()),
+            user_id.as_ref().map(|u| u.user_id()),
+            user_id.as_ref().map(|u| u.roles()),
+            testing_token.token(),
+        )
+        .await?;
+
     state.iam().create_role(&role).await?;
     Ok(HttpResponse::Ok().finish())
 }

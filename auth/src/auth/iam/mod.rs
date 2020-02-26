@@ -1,6 +1,7 @@
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use shine_core::iplocation::{IpCachedLocation, IpCachedLocationConfig, IpLocationIpDataCo, IpLocationIpDataCoConfig};
+use std::collections::HashSet;
 use std::time::Duration;
 
 mod error;
@@ -27,6 +28,8 @@ pub struct IAMConfig {
     pub graph_db_password: String,
     pub ipdataco_key: String,
     pub session_time_to_live_h: u16,
+
+    pub test_token: String,
 }
 
 #[derive(Clone)]
@@ -35,6 +38,7 @@ pub struct IAM {
     session: SessionManager,
     role: RoleManager,
     iplocation: IpCachedLocation,
+    test_token: String,
 }
 
 impl IAM {
@@ -60,6 +64,7 @@ impl IAM {
             session,
             role,
             iplocation,
+            test_token: config.test_token.clone(),
         })
     }
 
@@ -76,9 +81,11 @@ impl IAM {
     ) -> Result<(UserIdentity, Roles, Session), IAMError> {
         let identity = self.identity.create_user(name, email, password).await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
-        //let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
+        self.role.create_identity(identity.id()).await?;
+        // todo: register default user roles
+        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
 
-        Ok((identity, Default::default() /*roles*/, session))
+        Ok((identity, roles, session))
     }
 
     pub async fn login_name_email(
@@ -89,9 +96,9 @@ impl IAM {
     ) -> Result<(UserIdentity, Roles, Session), IAMError> {
         let identity = self.identity.find_user_by_name_email(name_email, Some(&password)).await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
-        //let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
+        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
 
-        Ok((identity, Default::default() /*roles*/, session))
+        Ok((identity, roles, session))
     }
 
     pub async fn validate_session(
@@ -105,7 +112,7 @@ impl IAM {
             .validate_session_with_id_key(user_id, session_key, fingerprint)
             .await?;
         let identity = self.identity.find_user_by_id(user_id).await?;
-        let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
+        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
 
         Ok((identity, roles))
     }
@@ -121,7 +128,7 @@ impl IAM {
             .refresh_session_with_id_key(user_id, session_key, fingerprint)
             .await?;
         let identity = self.identity.find_user_by_id(user_id).await?;
-        let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
+        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
 
         Ok((identity, roles, session))
     }
@@ -133,7 +140,7 @@ impl IAM {
     ) -> Result<(UserIdentity, Roles, Session), IAMError> {
         let (user_id, session) = self.session.refresh_session_with_key(session_key, fingerprint).await?;
         let identity = self.identity.find_user_by_id(&user_id).await?;
-        let roles = self.role.get_roles_by_identity(&identity.core().id, true).await?;
+        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
 
         Ok((identity, roles, session))
     }
@@ -179,5 +186,26 @@ impl IAM {
     pub async fn remove_identity_role(&self, identity_id: &str, role: &str) -> Result<InheritedRoles, IAMError> {
         let _ = self.identity.find_core_identity_by_id(identity_id).await?;
         self.role.remove_identity_role(identity_id, role).await
+    }
+
+    pub async fn check_permission(
+        &self,
+        session_key: Option<&str>,
+        identity_id: Option<&str>,
+        roles: Option<&HashSet<String>>,
+        testing_token: Option<&str>,
+    ) -> Result<(), IAMError> {
+        if let Some(tt) = testing_token {
+            if self.test_token == tt {
+                Ok(())
+            } else {
+                Err(IAMError::InsufficientPermission)
+            }
+        } else {
+            let session_key = session_key.ok_or(IAMError::SessionRequired)?;
+            let user_id = identity_id.ok_or(IAMError::SessionRequired)?;
+            //todo: check permissions, role
+            Ok(())
+        }
     }
 }

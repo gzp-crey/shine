@@ -1,6 +1,6 @@
 use crate::auth::iam::{IAMConfig, IAMError};
-use futures::stream::StreamExt;
-use gremlin_client::{aio::GremlinClient, ConnectionOptions, GraphSON};
+use gremlin_client::{aio::GremlinClient, ConnectionOptions, GraphSON, GremlinError};
+use shine_core::gremlin_utils::{query_value, query_vec};
 
 /// Basic type of a role
 pub type Role = String;
@@ -39,85 +39,94 @@ impl RoleManager {
     }
 
     pub async fn create_role(&self, role: &str) -> Result<(), IAMError> {
-        let mut result_stream = self
-            .db
-            .execute(
-                r#"g.v().has('role','name',role).fold()
-                    .coalesce(
-                        // if role already present return 'conflict'
-                        unfold().map(constant('conflict')),
+        let response = query_value::<String>(
+            &self.db,
+            r#"g.v().has('role','name',role).fold()
+                .coalesce(
+                    // if role already present return 'conflict'
+                    unfold().constant('conflict'),
 
-                        // create new role, return 'done'
-                        addV('role').property('name',role)
-                            .map(constant('done'))
-                    )
-                "#,
-                &[("role", &role)],
-            )
-            .await?;
+                    // create new role, return 'done'
+                    addV('role').property('name',role).constant('done')
+                )
+            "#,
+            &[("role", &role)],
+        )
+        .await?;
 
-        let result = result_stream
-            .next()
-            .await
-            .ok_or(IAMError::Internal("Missing query result".to_owned()))??;
-
-        match result.take::<String>()?.as_str() {
+        match response.as_str() {
             "conflict" => Err(IAMError::RoleTaken),
             "done" => Ok(()),
-            r => Err(IAMError::Internal(format!("Unexpected query response: {}", r))),
+            r => Err(GremlinError::Generic(format!("Unexpected query response: {}", r)).into()),
         }
     }
 
     pub async fn get_roles(&self) -> Result<Roles, IAMError> {
-        let result = self
-            .db
-            .execute(r#"g.v().hasLabel('role').values('name');"#, &[])
-            .await?
-            .map(|e| e.unwrap().take::<String>().unwrap())
-            .collect()
-            .await;
-        Ok(result)
+        Ok(query_vec::<String>(
+            &self.db,
+            r#"
+                g.v().hasLabel('role').values('name');
+            "#,
+            &[],
+        )
+        .await?)
     }
 
     pub async fn delete_role(&self, role: &str) -> Result<(), IAMError> {
-        let _ = self
-            .db
-            .execute(r#"g.V().has('role','name',role).drop();"#, &[("role", &role)])
-            .await?;
-        Ok(())
+        let response = query_value::<String>(
+            &self.db,
+            r#"
+                g.V().has('role','name', role)
+                    .sideEffect(drop()).fold()
+                    .coalesce(
+                        unfold().constant('done'),
+                        constant('missing')
+                    )
+            "#,
+            &[("role", &role)],
+        )
+        .await?;
+
+        match response.as_str() {
+            "missing" => Err(IAMError::RoleNotFound),
+            "done" => Ok(()),
+            r => Err(GremlinError::Generic(format!("Unexpected query response: {}", r)).into()),
+        }
     }
 
     pub async fn inherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
-        let result: Vec<String> = self
-            .db
-            .execute(
-                r#"
-                    g.v().has('role','name',inherited_role)
-                    .coalesce(
-                        // if the new edge creates a cycle, return the path 
-                        __.repeat(out('has_role').dedup()).until(has('role','name',role))
-                            .path().by('name').limit(1).unfold(),                                           
-                            
-                        // if edge is already present, return 'conflict'
-                        __.in('has_role').has('role','name',role)
-                            .map(constant('conflict')),       
+        let response = query_vec::<String>(
+            &self.db,
+            r#"
+                g.v().has('role','name',inherited_role)
+                .coalesce(
+                    // if the new edge creates a cycle, return the path 
+                    __.repeat(out('has_role').dedup()).until(has('role','name',role))
+                        .path().by('name').limit(1).unfold(),
+                        
+                    // if edge is already present, return 'conflict'
+                    __.in('has_role').has('role','name',role).constant('conflict'),
 
-                        // create the new edge, return 'ok' 
-                        __.addE('has_role').from(v().has('role','name',role))
-                            .map(constant('ok'))  
-                    )
-                "#,
-                &[("role", &role), ("inherited_role", &inherited_role)],
-            )
-            .await?
-            .map(|e| e.unwrap().take::<String>().unwrap())
-            .collect()
-            .await;
-        println!("res: {:?}", result);
-        /*match result.as_slice() {
-            &["conflict"] => IAMError::Role
-        }*/
-        Ok(())
+                    // create the new edge, return 'done' 
+                    __.addE('has_role').from(v().has('role','name',role)).constant('done')
+                )
+            "#,
+            &[("role", &role), ("inherited_role", &inherited_role)],
+        )
+        .await?;
+
+        match response.len() {
+            0 => Err(IAMError::RoleNotFound),
+            1 => {
+                let response = response.first().unwrap();
+                match response.as_str() {
+                    "conflict" => Err(IAMError::HasRoleTaken),
+                    "done" => Ok(()),
+                    r => Err(GremlinError::Generic(format!("Unexpected query response: {}", r)).into()),
+                }
+            }
+            _ => Err(IAMError::HasRoleCycle(response)),
+        }
     }
 
     pub async fn disherit_role(&self, role: &str, inherited_role: &str) -> Result<(), IAMError> {
@@ -133,6 +142,29 @@ impl RoleManager {
         Ok(())
     }
 
+    pub async fn create_identity(&self, identity: &str) -> Result<(), IAMError> {
+        let response = query_value::<String>(
+            &self.db,
+            r#"g.v().has('identity','name',identity).fold()
+                .coalesce(
+                    // if identity already present return 'conflict'
+                    unfold().constant('conflict'),
+
+                    // create new identity, return 'done'
+                    addV('identity').property('name',identity).constant('done')
+                )
+            "#,
+            &[("identity", &identity)],
+        )
+        .await?;
+
+        match response.as_str() {
+            "conflict" => Err(IAMError::Internal(format!("Identity {} already registered", identity))),
+            "done" => Ok(()),
+            r => Err(GremlinError::Generic(format!("Unexpected query response: {}", r)).into()),
+        }
+    }
+
     pub async fn add_identity_role(&self, _identity_id: &str, _role: &str) -> Result<InheritedRoles, IAMError> {
         unimplemented!()
     }
@@ -146,6 +178,6 @@ impl RoleManager {
     }
 
     pub async fn get_roles_by_identity(&self, _identity_id: &str, _include_derived: bool) -> Result<Roles, IAMError> {
-        unimplemented!()
+        Ok(Default::default())
     }
 }
