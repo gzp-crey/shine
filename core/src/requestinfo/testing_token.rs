@@ -9,7 +9,10 @@ pub struct TestingToken {
 }
 
 impl TestingToken {
-    /// Returns the ip of the client.
+    pub fn is_valid(&self) -> bool {
+        self.token.is_some()
+    }
+
     pub fn token(&self) -> Option<&str> {
         self.token.as_deref()
     }

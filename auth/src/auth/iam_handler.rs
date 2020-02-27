@@ -34,15 +34,33 @@ pub async fn register_user(
     req: HttpRequest,
     identity_session: IdentitySession,
     af_session: AntiForgerySession,
+    testing_token: TestingToken,
     registration_params: web::Json<RegistrationParams>,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    let RegistrationParams { name, password, email, af } = registration_params.into_inner();
+    let RegistrationParams {
+        name,
+        password,
+        email,
+        af,
+    } = registration_params.into_inner();
     let fingerprint = state.iam().get_fingerprint(&req).await?;
     let af_validator = AntiForgeryValidator::new(&af_session)?;
-    log::info!("register_user: {}, {}, {:?}, {:?}", name, password, email, fingerprint);
+    log::info!(
+        "register_user[{:?},{:?},{:?}]: {}, {}, {:?}",
+        af_validator.token(),
+        testing_token.token(),
+        fingerprint,
+        name,
+        password,
+        email
+    );
 
-    af_validator.validate(&af).map_err(IAMError::from)?;
+    if testing_token.is_valid() {
+        state.iam().check_permission_by_testing_token(testing_token.token()).await?;
+    } else {
+        af_validator.validate(&af).map_err(IAMError::from)?;
+    }
 
     IdentityCookie::clear(&identity_session);
 
@@ -206,16 +224,11 @@ pub async fn create_role(
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?;
     let user_id = UserId::from_session(&identity_session)?;
-    log::info!("create_role {:?},{:?},{:?} {}", user_id, session_key, testing_token, role);
+    log::info!("create_role[{:?},{:?},{:?}] {}", user_id, session_key, testing_token, role);
 
-    let _ = state
+    state
         .iam()
-        .check_permission(
-            session_key.as_ref().map(|s| s.key()),
-            user_id.as_ref().map(|u| u.user_id()),
-            user_id.as_ref().map(|u| u.roles()),
-            testing_token.token(),
-        )
+        .check_permission_by_identity(user_id.as_ref().map(|u| u.user_id()), testing_token.token())
         .await?;
 
     state.iam().create_role(&role).await?;

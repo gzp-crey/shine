@@ -1,8 +1,8 @@
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use shine_core::iplocation::{IpCachedLocation, IpCachedLocationConfig, IpLocationIpDataCo, IpLocationIpDataCoConfig};
-use shine_core::kernel::anti_forgery::{AntiForgeryIssuer, AntiForgeryValidator};
 use std::collections::HashSet;
+use std::iter::FromIterator;
 use std::time::Duration;
 
 mod error;
@@ -189,13 +189,7 @@ impl IAM {
         self.role.remove_identity_role(identity_id, role).await
     }
 
-    pub async fn check_permission(
-        &self,
-        session_key: Option<&str>,
-        identity_id: Option<&str>,
-        roles: Option<&HashSet<String>>,
-        testing_token: Option<&str>,
-    ) -> Result<(), IAMError> {
+    pub async fn check_permission_by_testing_token(&self, testing_token: Option<&str>) -> Result<(), IAMError> {
         if let Some(tt) = testing_token {
             if self.test_token == tt {
                 Ok(())
@@ -203,10 +197,30 @@ impl IAM {
                 Err(IAMError::InsufficientPermission)
             }
         } else {
-            let session_key = session_key.ok_or(IAMError::SessionRequired)?;
-            let user_id = identity_id.ok_or(IAMError::SessionRequired)?;
-            //todo: check permissions, role
             Ok(())
         }
+    }
+
+    pub async fn check_permission_by_roles(
+        &self,
+        roles: Option<&HashSet<String>>,
+        testing_token: Option<&str>,
+    ) -> Result<(), IAMError> {
+        self.check_permission_by_testing_token(testing_token).await?;
+
+        let roles = roles.ok_or(IAMError::SessionRequired)?;
+        //todo: check permissions, role
+        Ok(())
+    }
+
+    pub async fn check_permission_by_identity(
+        &self,
+        identity_id: Option<&str>,
+        testing_token: Option<&str>,
+    ) -> Result<(), IAMError> {
+        let identity_id = identity_id.ok_or(IAMError::SessionRequired)?;
+        let roles = self.role.get_roles_by_identity(&identity_id, true).await?;
+        let roles = HashSet::from_iter(roles.into_iter());
+        self.check_permission_by_roles(Some(&roles), testing_token).await
     }
 }

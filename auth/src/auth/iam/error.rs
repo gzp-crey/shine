@@ -3,8 +3,8 @@ use actix_web::ResponseError;
 use azure_sdk_core::errors::AzureError;
 use gremlin_client::GremlinError;
 use shine_core::{
-    backoff::BackoffError, idgenerator::IdSequenceError, iplocation::IpLocationError, requestinfo::RequestInfoError,
-    kernel::anti_forgery::AntiForgeryError,
+    backoff::BackoffError, idgenerator::IdSequenceError, iplocation::IpLocationError, kernel::anti_forgery::AntiForgeryError,
+    requestinfo::RequestInfoError,
 };
 use std::fmt;
 

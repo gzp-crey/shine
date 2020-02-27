@@ -132,11 +132,8 @@ where
     }
 
     /// Return the changes in cookie state, or None if session requires no update
-    pub(crate) fn into_change(self) -> Option<HashMap<String, String>> {
-        let SessionDataInner { values, status } = Rc::try_unwrap(self.inner)
-            .map_err(|_| ())
-            .unwrap()
-            .replace(Default::default());
+    pub(crate) fn into_change(&self) -> Option<HashMap<String, String>> {
+        let SessionDataInner { values, status } = self.inner.replace(Default::default());
         match status {
             SessionStatus::Unchanged => None,
             SessionStatus::Changed => Some(values),
