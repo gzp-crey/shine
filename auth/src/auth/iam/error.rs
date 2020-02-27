@@ -4,6 +4,7 @@ use azure_sdk_core::errors::AzureError;
 use gremlin_client::GremlinError;
 use shine_core::{
     backoff::BackoffError, idgenerator::IdSequenceError, iplocation::IpLocationError, requestinfo::RequestInfoError,
+    kernel::anti_forgery::AntiForgeryError,
 };
 use std::fmt;
 
@@ -120,6 +121,12 @@ impl From<IdSequenceError> for IAMError {
             IdSequenceError::SequenceEnded => IAMError::Internal(format!("ID sequence out of values")),
             e => IAMError::Internal(format!("Sequence error: {}", e)),
         }
+    }
+}
+
+impl From<AntiForgeryError> for IAMError {
+    fn from(err: AntiForgeryError) -> IAMError {
+        IAMError::BadRequest(format!("AF check failed"))
     }
 }
 

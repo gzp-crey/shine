@@ -7,8 +7,10 @@ use super::State;
 use actix_web::HttpRequest;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
+use shine_core::kernel::anti_forgery::{AntiForgerySession, AntiForgeryValidator};
+use shine_core::kernel::identity::{IdentityCookie, IdentitySession, SessionKey, UserId};
+
 use shine_core::requestinfo::{BasicAuth, TestingToken};
-use shine_core::session::{IdentityCookie, IdentitySession, SessionKey, UserId};
 
 fn create_user_id(user: UserIdentity, roles: Roles) -> Result<UserId, IAMError> {
     let data = user.into_data();
@@ -25,17 +27,22 @@ pub struct RegistrationParams {
     name: String,
     password: String,
     email: Option<String>,
+    af: String,
 }
 
 pub async fn register_user(
     req: HttpRequest,
     identity_session: IdentitySession,
+    af_session: AntiForgerySession,
     registration_params: web::Json<RegistrationParams>,
     state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
-    let RegistrationParams { name, password, email } = registration_params.into_inner();
+    let RegistrationParams { name, password, email, af } = registration_params.into_inner();
     let fingerprint = state.iam().get_fingerprint(&req).await?;
+    let af_validator = AntiForgeryValidator::new(&af_session)?;
     log::info!("register_user: {}, {}, {:?}, {:?}", name, password, email, fingerprint);
+
+    af_validator.validate(&af).map_err(IAMError::from)?;
 
     IdentityCookie::clear(&identity_session);
 

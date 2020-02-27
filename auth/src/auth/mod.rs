@@ -4,16 +4,25 @@ mod iam_handler;
 use self::iam::{IAMConfig, IAMError, IAM};
 use actix_rt::SystemRunner;
 use actix_web::web;
+use chrono::Duration as ChronoDuration;
 use data_encoding::{DecodeError, BASE64};
 use serde::{Deserialize, Serialize};
-use shine_core::{session::IdentityCookie, signed_cookie::SignedCookie};
+use shine_core::{
+    kernel::{
+        anti_forgery::{AntiForgeryConfig, AntiForgeryCookie},
+        identity::IdentityCookie,
+    },
+    signed_cookie::SignedCookie,
+};
 use std::{fmt, rc::Rc};
 use tera::{Error as TeraError, Tera};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub iam: IAMConfig,
-    pub cookie_session_secret: String,
+    pub identity_session_secret: String,
+    pub af_session_secret: String,
+    pub af_time_to_live_m: i16,
 }
 
 #[derive(Debug)]
@@ -43,7 +52,7 @@ pub struct State(Rc<Inner>);
 
 impl State {
     pub fn new(tera: Tera, iam: IAM) -> Self {
-        Self(Rc::new(Inner { tera: tera, iam: iam }))
+        Self(Rc::new(Inner { tera, iam }))
     }
 
     pub fn tera(&self) -> &Tera {
@@ -59,7 +68,9 @@ impl State {
 pub struct AuthService {
     tera: Tera,
     iam: IAM,
-    cookie_session_secret: Vec<u8>,
+    identity_session_secret: Vec<u8>,
+    af_session_secret: Vec<u8>,
+    af_time_to_live: ChronoDuration,
 }
 
 impl AuthService {
@@ -70,14 +81,19 @@ impl AuthService {
         let iam = sys
             .block_on(IAM::new(iam_config))
             .map_err(|err| AuthCreateError::ConfigureIAM(err.into()))?;
-        let cookie_session_secret = BASE64
-            .decode(config.cookie_session_secret.as_bytes())
+        let identity_session_secret = BASE64
+            .decode(config.identity_session_secret.as_bytes())
+            .map_err(|err| AuthCreateError::ConfigureDecodeSecret(err.into()))?;
+        let af_session_secret = BASE64
+            .decode(config.af_session_secret.as_bytes())
             .map_err(|err| AuthCreateError::ConfigureDecodeSecret(err.into()))?;
 
         Ok(AuthService {
             iam,
             tera,
-            cookie_session_secret,
+            identity_session_secret,
+            af_session_secret,
+            af_time_to_live: ChronoDuration::minutes(config.af_time_to_live_m as i64),
         })
     }
 
@@ -86,7 +102,13 @@ impl AuthService {
 
         services.service(
             web::scope("auth/api")
-                .wrap(SignedCookie::new().add(IdentityCookie::write(&self.cookie_session_secret)))
+                .wrap(SignedCookie::new(IdentityCookie::write(&self.identity_session_secret), ()))
+                .wrap(SignedCookie::new(
+                    AntiForgeryCookie::new(&self.af_session_secret),
+                    AntiForgeryConfig {
+                        time_to_live: self.af_time_to_live,
+                    },
+                ))
                 .data(state)
                 .service(
                     web::scope("users")

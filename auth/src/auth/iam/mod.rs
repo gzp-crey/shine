@@ -1,6 +1,7 @@
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use shine_core::iplocation::{IpCachedLocation, IpCachedLocationConfig, IpLocationIpDataCo, IpLocationIpDataCoConfig};
+use shine_core::kernel::anti_forgery::{AntiForgeryIssuer, AntiForgeryValidator};
 use std::collections::HashSet;
 use std::time::Duration;
 

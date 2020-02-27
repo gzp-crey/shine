@@ -1,9 +1,9 @@
-use super::{SignedCookieConfiguration, SignedCookieStore};
+use super::SignedCookieOptions;
 use actix_web::{dev::Payload, error::ErrorInternalServerError, Error, FromRequest, HttpRequest};
-use futures::future::{err, ready, Ready};
+use futures::future::{err, ok, Ready};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json;
-use std::{any::TypeId, cell::RefCell, collections::HashMap, marker::PhantomData, ops::Deref, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, marker::PhantomData, ops::Deref, rc::Rc};
 
 #[derive(PartialEq, Clone, Debug)]
 enum SessionStatus {
@@ -27,33 +27,60 @@ impl Default for SessionDataInner {
 }
 
 /// Data associated to a session and persisted using signed cookies.
-#[derive(Clone, Debug)]
-pub struct SessionData {
+#[derive(Debug)]
+pub struct SessionData<C>
+where
+    C: 'static,
+{
     name: String,
     inner: Rc<RefCell<SessionDataInner>>,
+    config: Rc<C>,
 }
 
-impl SessionData {
-    pub(crate) fn empty(name: String) -> Self {
+//see https://github.com/rust-lang/rust/issues/26925
+impl<C> Clone for SessionData<C>
+where
+    C: 'static,
+{
+    fn clone(&self) -> SessionData<C> {
+        SessionData {
+            name: self.name.clone(),
+            inner: self.inner.clone(),
+            config: self.config.clone(),
+        }
+    }
+}
+
+impl<C> SessionData<C>
+where
+    C: 'static,
+{
+    pub(crate) fn empty(name: String, config: Rc<C>) -> SessionData<C> {
         SessionData {
             name,
             inner: Rc::new(RefCell::new(Default::default())),
+            config,
         }
     }
 
-    pub(crate) fn new(name: String, values: HashMap<String, String>) -> SessionData {
+    pub(crate) fn new(name: String, values: HashMap<String, String>, config: Rc<C>) -> SessionData<C> {
         SessionData {
             name,
             inner: Rc::new(RefCell::new(SessionDataInner {
                 values,
                 status: SessionStatus::Unchanged,
             })),
+            config,
         }
     }
 
     /// Get the name of the cookie
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn config(&self) -> Rc<C> {
+        self.config.clone()
     }
 
     /// Get a `value` from the session.
@@ -119,22 +146,24 @@ impl SessionData {
 
 /// Extractor to access signed cookies (session) from the request handlers. The type_id of the generic C type
 /// is used to look up the sessions from the request.
-pub struct Session<C: 'static + SignedCookieConfiguration>(SessionData, PhantomData<C>);
+pub struct Session<O: SignedCookieOptions, C: 'static>(SessionData<C>, PhantomData<O>);
 
-impl<C> Deref for Session<C>
+impl<O, C> Deref for Session<O, C>
 where
-    C: 'static + SignedCookieConfiguration,
+    O: SignedCookieOptions,
+    C: 'static,
 {
-    type Target = SessionData;
+    type Target = SessionData<C>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<C> FromRequest for Session<C>
+impl<O, C> FromRequest for Session<O, C>
 where
-    C: 'static + SignedCookieConfiguration,
+    O: SignedCookieOptions,
+    C: 'static,
 {
     type Error = Error;
     type Future = Ready<Result<Self, Error>>;
@@ -143,12 +172,8 @@ where
     #[inline]
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let extensions = req.extensions();
-        if let Some(signed_cookie) = extensions.get::<SignedCookieStore>() {
-            ready(
-                signed_cookie
-                    .get_session(TypeId::of::<C>())
-                    .map(|data| Session(data, PhantomData)),
-            )
+        if let Some(data) = extensions.get::<SessionData<C>>() {
+            ok(Session(data.clone(), PhantomData))
         } else {
             err(ErrorInternalServerError(
                 "SignedCookie is not configured, to configure use App::wrap(SignCookie::new()...)",

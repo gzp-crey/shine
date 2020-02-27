@@ -2,7 +2,7 @@ use crate::auth::iam::fingerprint::Fingerprint;
 use azure_sdk_storage_table::TableEntity;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use shine_core::{serde_with, session::SessionKey};
+use shine_core::{kernel::identity::SessionKey, serde_with};
 
 /// Data associated to a session
 #[derive(Debug, Serialize, Deserialize)]

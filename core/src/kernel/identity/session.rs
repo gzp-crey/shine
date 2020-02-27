@@ -1,12 +1,6 @@
-mod sessionkey;
-mod userid;
+use crate::signed_cookie::{CookieSecurity, Key, Session, SignedCookieOptions};
 
-use crate::signed_cookie::{CookieSecurity, Key, Session, SignedCookieConfiguration};
-
-pub use self::sessionkey::*;
-pub use self::userid::*;
-
-pub type IdentitySession = Session<IdentityCookie>;
+pub type IdentitySession = Session<IdentityCookie, ()>;
 
 pub struct IdentityCookie {
     security: CookieSecurity,
@@ -35,8 +29,8 @@ impl IdentityCookie {
     }
 }
 
-impl SignedCookieConfiguration for IdentityCookie {
-    fn name() -> &'static str {
+impl SignedCookieOptions for IdentityCookie {
+    fn name(&self) -> &str {
         "su"
     }
 

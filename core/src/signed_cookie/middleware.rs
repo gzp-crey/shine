@@ -1,4 +1,4 @@
-use super::SignedCookie;
+use super::{SignedCookie, SignedCookieOptions};
 use actix_service::Service;
 use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
@@ -8,13 +8,19 @@ use futures::future::{FutureExt, LocalBoxFuture};
 use std::task::{Context, Poll};
 
 /// Signed cookie session middleware
-pub struct SignedCookieMiddleware<S> {
+pub struct SignedCookieMiddleware<O, C, S>
+where
+    O: SignedCookieOptions,
+    C: 'static,
+{
     pub(crate) service: S,
-    pub(crate) inner: SignedCookie,
+    pub(crate) inner: SignedCookie<O, C>,
 }
 
-impl<S, B: 'static> Service for SignedCookieMiddleware<S>
+impl<O, C, S, B: 'static> Service for SignedCookieMiddleware<O, C, S>
 where
+    O: SignedCookieOptions,
+    C: 'static,
     S: Service<Request = ServiceRequest, Response = ServiceResponse<B>>,
     S::Future: 'static,
     S::Error: 'static,
@@ -30,14 +36,14 @@ where
 
     fn call(&mut self, mut req: ServiceRequest) -> Self::Future {
         let inner = self.inner.clone();
-        let store = inner.load(&mut req);
-        req.extensions_mut().insert(store.clone());
+        let data = inner.load(&mut req);
+        req.extensions_mut().insert(data.clone());
 
         let fut = self.service.call(req);
 
         async move {
             fut.await.map(|mut res| {
-                inner.store(store, &mut res);
+                inner.store(data, &mut res);
                 res
             })
         }

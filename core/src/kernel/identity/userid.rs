@@ -7,6 +7,7 @@ use std::iter::FromIterator;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserId {
+    #[serde(rename = "id")]
     user_id: String,
     name: String,
     #[serde(with = "serde_with::hashset_list")]
