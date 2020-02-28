@@ -31,12 +31,12 @@ pub struct RegistrationParams {
 }
 
 pub async fn register_user(
+    state: web::Data<State>,
     req: HttpRequest,
     identity_session: IdentitySession,
     af_session: AntiForgerySession,
     testing_token: TestingToken,
     registration_params: web::Json<RegistrationParams>,
-    state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     let RegistrationParams {
         name,
@@ -75,10 +75,10 @@ pub async fn register_user(
 }
 
 pub async fn login_basic_auth(
+    state: web::Data<State>,
     req: HttpRequest,
     identity_session: IdentitySession,
     auth: BasicAuth,
-    state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     let user_id = auth.user_id();
     let password = auth.password().ok_or(IAMError::PasswordNotMatching)?;
@@ -100,10 +100,10 @@ pub struct RefreshKeyParams {
 }
 
 pub async fn refresh_session_by_key(
+    state: web::Data<State>,
     req: HttpRequest,
     identity_session: IdentitySession,
     key_params: web::Json<RefreshKeyParams>,
-    state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     let fingerprint = state.iam().get_fingerprint(&req).await?;
 
@@ -126,9 +126,9 @@ pub async fn refresh_session_by_key(
 }
 
 pub async fn validate_session(
+    state: web::Data<State>,
     req: HttpRequest,
     identity_session: IdentitySession,
-    state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
@@ -148,9 +148,9 @@ pub async fn validate_session(
 }
 
 pub async fn refresh_session(
+    state: web::Data<State>,
     req: HttpRequest,
     identity_session: IdentitySession,
-    state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
@@ -184,9 +184,9 @@ pub struct LogoutParams {
 }
 
 pub async fn logout(
+    state: web::Data<State>,
     logout_params: web::Json<LogoutParams>,
     identity_session: IdentitySession,
-    state: web::Data<State>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
@@ -205,7 +205,7 @@ struct RolesResponse {
     roles: Vec<String>,
 }
 
-pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State>) -> Result<HttpResponse, ActixError> {
+pub async fn get_roles(state: web::Data<State>, identity_session: IdentitySession) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     log::info!("get_roles {:?}, {:?}", user_id, session_key);
@@ -216,10 +216,10 @@ pub async fn get_roles(identity_session: IdentitySession, state: web::Data<State
 }
 
 pub async fn create_role(
-    identity_session: IdentitySession,
     state: web::Data<State>,
-    role: web::Path<String>,
+    identity_session: IdentitySession,
     testing_token: TestingToken,
+    role: web::Path<String>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?;
     let user_id = UserId::from_session(&identity_session)?;
@@ -235,8 +235,8 @@ pub async fn create_role(
 }
 
 pub async fn delete_role(
-    identity_session: IdentitySession,
     state: web::Data<State>,
+    identity_session: IdentitySession,
     role: web::Path<String>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
@@ -249,8 +249,8 @@ pub async fn delete_role(
 }
 
 pub async fn inherit_role(
-    identity_session: IdentitySession,
     state: web::Data<State>,
+    identity_session: IdentitySession,
     roles: web::Path<(String, String)>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
@@ -263,8 +263,8 @@ pub async fn inherit_role(
 }
 
 pub async fn disherit_role(
-    identity_session: IdentitySession,
     state: web::Data<State>,
+    identity_session: IdentitySession,
     roles: web::Path<(String, String)>,
 ) -> Result<HttpResponse, ActixError> {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
@@ -277,9 +277,9 @@ pub async fn disherit_role(
 }
 
 pub async fn create_af_token(
+    scope: web::Path<String>,
     af_session: AntiForgerySession,
     identity_session: IdentitySession,
-    scope: web::Path<String>,
 ) -> Result<HttpResponse, ActixError> {
     let user_id = UserId::from_session(&identity_session)?.map(|u| u.name().to_owned());
     log::info!("create_af_token: {:?}", scope);
@@ -293,4 +293,16 @@ pub async fn create_af_token(
     Ok(HttpResponse::Ok().json(Response {
         token: af_issuer.token().to_owned(),
     }))
+}
+
+pub async fn register_page(state: web::Data<State>, af_session: AntiForgerySession) -> Result<HttpResponse, ActixError> {
+    let af_issuer = AntiForgeryIssuer::new(&af_session, "register_user".to_owned(), None);
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("af", &af_issuer.token());
+    let tera = state.tera();
+    let body = tera
+        .render("auth/register.html", &ctx)
+        .map_err(|_| error::ErrorInternalServerError("Template error"))?;
+    Ok(HttpResponse::Ok().content_type("text/html").body(body))
 }

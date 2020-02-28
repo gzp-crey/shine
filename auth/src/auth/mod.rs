@@ -101,7 +101,8 @@ impl AuthService {
         let state = State::new(self.tera.clone(), self.iam.clone());
 
         services.service(
-            web::scope("auth/api")
+            web::scope("auth/api").app_data(data: U)
+
                 .wrap(SignedCookie::new(IdentityCookie::write(&self.identity_session_secret), ()))
                 .wrap(SignedCookie::new(
                     AntiForgeryCookie::new(&self.af_session_secret),
