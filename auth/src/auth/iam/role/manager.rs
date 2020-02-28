@@ -2,9 +2,6 @@ use crate::auth::iam::{IAMConfig, IAMError};
 use gremlin_client::{aio::GremlinClient, ConnectionOptions, GraphSON, GremlinError};
 use shine_core::gremlin_utils::{query_value, query_vec};
 
-/// Basic type of a role
-pub type Role = String;
-
 /// A vector of a roles
 pub type Roles = Vec<String>;
 

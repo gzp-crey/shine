@@ -125,7 +125,7 @@ impl From<IdSequenceError> for IAMError {
 }
 
 impl From<AntiForgeryError> for IAMError {
-    fn from(err: AntiForgeryError) -> IAMError {
+    fn from(_err: AntiForgeryError) -> IAMError {
         IAMError::BadRequest(format!("AF check failed"))
     }
 }

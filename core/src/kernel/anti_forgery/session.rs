@@ -45,8 +45,4 @@ impl SignedCookieOptions for AntiForgeryCookie {
     fn secure(&self) -> bool {
         false
     }
-
-    /*fn domain(&self) -> &str {
-        "localhost"
-    }*/
 }

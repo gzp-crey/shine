@@ -7,7 +7,7 @@ use super::State;
 use actix_web::HttpRequest;
 use actix_web::{web, Error as ActixError, HttpResponse};
 use serde::{Deserialize, Serialize};
-use shine_core::kernel::anti_forgery::{AntiForgerySession, AntiForgeryValidator};
+use shine_core::kernel::anti_forgery::{AntiForgeryIdentity, AntiForgeryIssuer, AntiForgerySession, AntiForgeryValidator};
 use shine_core::kernel::identity::{IdentityCookie, IdentitySession, SessionKey, UserId};
 
 use shine_core::requestinfo::{BasicAuth, TestingToken};
@@ -45,10 +45,8 @@ pub async fn register_user(
         af,
     } = registration_params.into_inner();
     let fingerprint = state.iam().get_fingerprint(&req).await?;
-    let af_validator = AntiForgeryValidator::new(&af_session)?;
     log::info!(
-        "register_user[{:?},{:?},{:?}]: {}, {}, {:?}",
-        af_validator.token(),
+        "register_user[{:?},{:?}]: {}, {}, {:?}",
         testing_token.token(),
         fingerprint,
         name,
@@ -56,6 +54,7 @@ pub async fn register_user(
         email
     );
 
+    let af_validator = AntiForgeryValidator::new(&af_session, "register_user".to_owned(), AntiForgeryIdentity::Ignore)?;
     if testing_token.is_valid() {
         state.iam().check_permission_by_testing_token(testing_token.token()).await?;
     } else {
@@ -275,4 +274,23 @@ pub async fn disherit_role(
     //todo: check permission
     state.iam().disherit_role(&roles.0, &roles.1).await?;
     Ok(HttpResponse::Ok().finish())
+}
+
+pub async fn create_af_token(
+    af_session: AntiForgerySession,
+    identity_session: IdentitySession,
+    scope: web::Path<String>,
+) -> Result<HttpResponse, ActixError> {
+    let user_id = UserId::from_session(&identity_session)?.map(|u| u.name().to_owned());
+    log::info!("create_af_token: {:?}", scope);
+    let af_issuer = AntiForgeryIssuer::new(&af_session, scope.to_owned(), user_id);
+
+    #[derive(Serialize)]
+    struct Response {
+        token: String,
+    };
+
+    Ok(HttpResponse::Ok().json(Response {
+        token: af_issuer.token().to_owned(),
+    }))
 }

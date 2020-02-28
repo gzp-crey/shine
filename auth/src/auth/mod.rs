@@ -110,6 +110,7 @@ impl AuthService {
                     },
                 ))
                 .data(state)
+                .service(web::resource("af/{scope}").route(web::post().to(iam_handler::create_af_token)))
                 .service(
                     web::scope("users")
                         .service(web::resource("login").route(web::post().to(iam_handler::login_basic_auth)))
