@@ -2324,6 +2324,7 @@ name = "shine-auth"
 version = "0.1.0"
 dependencies = [
  "actix-rt 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-service 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "azure_sdk_core 0.40.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "azure_sdk_storage_core 0.40.0 (registry+https://github.com/rust-lang/crates.io-index)",

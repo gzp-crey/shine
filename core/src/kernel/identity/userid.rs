@@ -3,7 +3,6 @@ use crate::serde_with;
 use actix_web::Error as ActixError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::iter::FromIterator;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserId {
@@ -15,12 +14,8 @@ pub struct UserId {
 }
 
 impl UserId {
-    pub fn new(user_id: String, name: String, roles: Vec<String>) -> Self {
-        UserId {
-            user_id,
-            name,
-            roles: HashSet::from_iter(roles.into_iter()),
-        }
+    pub fn new(user_id: String, name: String, roles: HashSet<String>) -> Self {
+        UserId { user_id, name, roles }
     }
 
     pub fn user_id(&self) -> &str {

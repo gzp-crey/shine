@@ -28,6 +28,7 @@ config ="0.10"
 tera = "1.0"
 actix-rt = "1.0"
 actix-web = "2.0"
+actix-service = "1.0"
 
 azure_sdk_core = "0.40"
 azure_sdk_storage_core = "0.40"

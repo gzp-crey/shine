@@ -79,12 +79,12 @@ impl IAM {
         email: Option<&str>,
         password: &str,
         fingerprint: &Fingerprint,
-    ) -> Result<(UserIdentity, Roles, Session), IAMError> {
+    ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
         let identity = self.identity.create_user(name, email, password).await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
         self.role.create_identity(identity.id()).await?;
         // todo: register default user roles
-        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
+        let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
         Ok((identity, roles, session))
     }
@@ -94,10 +94,10 @@ impl IAM {
         name_email: &str,
         password: &str,
         fingerprint: &Fingerprint,
-    ) -> Result<(UserIdentity, Roles, Session), IAMError> {
+    ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
         let identity = self.identity.find_user_by_name_email(name_email, Some(&password)).await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
-        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
+        let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
         Ok((identity, roles, session))
     }
@@ -107,13 +107,13 @@ impl IAM {
         user_id: &str,
         session_key: &str,
         fingerprint: &Fingerprint,
-    ) -> Result<(UserIdentity, Roles), IAMError> {
+    ) -> Result<(UserIdentity, InheritedRoles), IAMError> {
         let _session = self
             .session
             .validate_session_with_id_key(user_id, session_key, fingerprint)
             .await?;
         let identity = self.identity.find_user_by_id(user_id).await?;
-        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
+        let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
         Ok((identity, roles))
     }
@@ -123,13 +123,13 @@ impl IAM {
         user_id: &str,
         session_key: &str,
         fingerprint: &Fingerprint,
-    ) -> Result<(UserIdentity, Roles, Session), IAMError> {
+    ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
         let session = self
             .session
             .refresh_session_with_id_key(user_id, session_key, fingerprint)
             .await?;
         let identity = self.identity.find_user_by_id(user_id).await?;
-        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
+        let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
         Ok((identity, roles, session))
     }
@@ -138,10 +138,10 @@ impl IAM {
         &self,
         session_key: &str,
         fingerprint: &Fingerprint,
-    ) -> Result<(UserIdentity, Roles, Session), IAMError> {
+    ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
         let (user_id, session) = self.session.refresh_session_with_key(session_key, fingerprint).await?;
         let identity = self.identity.find_user_by_id(&user_id).await?;
-        let roles = self.role.get_roles_by_identity(&identity.id(), true).await?;
+        let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
         Ok((identity, roles, session))
     }
@@ -208,7 +208,7 @@ impl IAM {
     ) -> Result<(), IAMError> {
         self.check_permission_by_testing_token(testing_token).await?;
 
-        let roles = roles.ok_or(IAMError::SessionRequired)?;
+        let _roles = roles.ok_or(IAMError::SessionRequired)?;
         //todo: check permissions, role
         Ok(())
     }
@@ -219,8 +219,8 @@ impl IAM {
         testing_token: Option<&str>,
     ) -> Result<(), IAMError> {
         let identity_id = identity_id.ok_or(IAMError::SessionRequired)?;
-        let roles = self.role.get_roles_by_identity(&identity_id, true).await?;
-        let roles = HashSet::from_iter(roles.into_iter());
+        let roles = self.role.get_identity_roles(&identity_id, true).await?;
+        let roles = HashSet::from_iter(roles.into_iter().map(|r| r.role));
         self.check_permission_by_roles(Some(&roles), testing_token).await
     }
 }

@@ -1,12 +1,6 @@
 use crate::signed_cookie::{CookieSecurity, Key, Session, SignedCookieOptions};
-use chrono::Duration as ChronoDuration;
 
-#[derive(Clone)]
-pub struct AntiForgeryConfig {
-    pub time_to_live: ChronoDuration,
-}
-
-pub type AntiForgerySession = Session<AntiForgeryCookie, AntiForgeryConfig>;
+pub type AntiForgerySession = Session<AntiForgeryCookie, ()>;
 
 pub struct AntiForgeryCookie {
     security: CookieSecurity,

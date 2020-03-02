@@ -1,14 +1,16 @@
 use crate::auth::iam::{IAMConfig, IAMError};
 use gremlin_client::{aio::GremlinClient, ConnectionOptions, GraphSON, GremlinError};
+use serde::Serialize;
 use shine_core::gremlin_utils::{query_value, query_vec};
 
 /// A vector of a roles
 pub type Roles = Vec<String>;
 
 /// Role with inheritance information
+#[derive(Debug, Serialize)]
 pub struct InheritedRole {
-    role: String,
-    inherited_from: Option<String>,
+    pub role: String,
+    pub inherited_from: Option<String>,
 }
 
 /// A vector of roles with inheritance information
@@ -172,9 +174,5 @@ impl RoleManager {
 
     pub async fn remove_identity_role(&self, _identity_id: &str, _role: &str) -> Result<InheritedRoles, IAMError> {
         unimplemented!()
-    }
-
-    pub async fn get_roles_by_identity(&self, _identity_id: &str, _include_derived: bool) -> Result<Roles, IAMError> {
-        Ok(Default::default())
     }
 }

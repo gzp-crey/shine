@@ -104,5 +104,4 @@ where
     }
 }
 
-/// Identity when no category dependent data is required
 pub type CoreIdentity = IdentityEntity<CoreIdentityData>;

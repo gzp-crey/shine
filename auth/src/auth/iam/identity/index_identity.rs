@@ -84,4 +84,4 @@ where
     }
 }
 
-pub type CoreIdentityIndexed = IndexIdentityEntity<CoreIdentityIndexedData>;
+//pub type CoreIdentityIndexed = IndexIdentityEntity<CoreIdentityIndexedData>;
