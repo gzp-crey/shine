@@ -194,7 +194,8 @@ where
             if !self.options.read_only() {
                 if changes.is_empty() {
                     log::debug!("Purge cookie {}", self.options.name());
-                    Self::purge_cookie(res, &*self.options).unwrap_or_else(|err| log::warn!("Failed to purge cookie: {:?}", err));
+                    Self::purge_cookie(res, &*self.options)
+                        .unwrap_or_else(|err| log::warn!("Failed to purge cookie: {:?}", err));
                 } else {
                     log::debug!("Set cookie {}", self.options.name());
                     Self::set_cookie(res, &*self.options, changes)

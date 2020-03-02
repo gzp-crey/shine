@@ -29,12 +29,19 @@ impl SessionData {
     pub fn check(&self, fingerprint: &Fingerprint) -> bool {
         // check agent
         if self.agent != fingerprint.agent() {
-            log::debug!("fingerprint: agent has changed: {} -> {}", self.agent, fingerprint.agent());
+            log::debug!(
+                "fingerprint: agent has changed: {} -> {}",
+                self.agent,
+                fingerprint.agent()
+            );
             return false;
         }
 
         // check ip
-        let ip = fingerprint.remote().map(|ip| ip.to_string()).unwrap_or("unknown".to_string());
+        let ip = fingerprint
+            .remote()
+            .map(|ip| ip.to_string())
+            .unwrap_or("unknown".to_string());
         let country = fingerprint
             .location()
             .map(|l| l.country.to_owned())
@@ -47,7 +54,11 @@ impl SessionData {
 
         // check location
         if self.remote_country != country {
-            log::debug!("fingerprint: country has changed: {} -> {}", self.remote_country, country);
+            log::debug!(
+                "fingerprint: country has changed: {} -> {}",
+                self.remote_country,
+                country
+            );
             return false;
         }
 
@@ -91,7 +102,10 @@ impl Session {
             timestamp: None,
             payload: SessionData {
                 agent: fingerprint.agent().to_string(),
-                remote_ip: fingerprint.remote().map(|ip| ip.to_string()).unwrap_or("unknown".to_string()),
+                remote_ip: fingerprint
+                    .remote()
+                    .map(|ip| ip.to_string())
+                    .unwrap_or("unknown".to_string()),
                 remote_continent: fingerprint
                     .location()
                     .map(|l| l.continent.to_owned())

@@ -1,6 +1,9 @@
+use super::IAMError;
 use serde::{Deserialize, Serialize};
 use shine_core::azure_utils::{decode_safe_key, encode_safe_key};
 use std::str::Utf8Error;
+use unicode_security::GeneralSecurityProfile;
+use validator::validate_email;
 
 mod identity_data;
 mod index_email;
@@ -22,8 +25,24 @@ pub use self::user_identity::*;
 pub struct EncodedName(String);
 
 impl EncodedName {
-    pub fn from_raw<S: ToString>(raw: S) -> EncodedName {
-        EncodedName(encode_safe_key(&raw.to_string()))
+    pub fn from_raw(raw: &str) -> Result<EncodedName, IAMError> {
+        const MIN_LEN: usize = 3;
+        const MAX_LEN: usize = 30;
+        if !raw.chars().all(GeneralSecurityProfile::identifier_allowed) {
+            Err(IAMError::NameInvalid(format!("Contains disallowed characters")))
+        } else if raw.chars().skip(MIN_LEN - 1).next().is_none() {
+            Err(IAMError::NameInvalid(format!(
+                "Too short, required min length: {}",
+                MIN_LEN
+            )))
+        } else if raw.chars().skip(MAX_LEN).next().is_some() {
+            Err(IAMError::NameInvalid(format!(
+                "Too long, required max length: {}",
+                MAX_LEN
+            )))
+        } else {
+            Ok(EncodedName(encode_safe_key(raw)))
+        }
     }
 
     pub fn to_raw(&self) -> Result<String, Utf8Error> {
@@ -43,8 +62,12 @@ impl EncodedName {
 pub struct EncodedEmail(String);
 
 impl EncodedEmail {
-    pub fn from_raw<S: ToString>(raw: S) -> EncodedEmail {
-        EncodedEmail(encode_safe_key(&raw.to_string()))
+    pub fn from_raw(raw: &str) -> Result<EncodedEmail, IAMError> {
+        if !validate_email(raw) {
+            Err(IAMError::EmailInvalid(format!("Invalid email")))
+        } else {
+            Ok(EncodedEmail(encode_safe_key(&raw.to_string())))
+        }
     }
 
     pub fn to_raw(&self) -> Result<String, Utf8Error> {

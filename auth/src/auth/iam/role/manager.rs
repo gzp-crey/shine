@@ -168,7 +168,11 @@ impl RoleManager {
         unimplemented!()
     }
 
-    pub async fn get_identity_roles(&self, _identity_id: &str, _include_inherited: bool) -> Result<InheritedRoles, IAMError> {
+    pub async fn get_identity_roles(
+        &self,
+        _identity_id: &str,
+        _include_inherited: bool,
+    ) -> Result<InheritedRoles, IAMError> {
         unimplemented!()
     }
 

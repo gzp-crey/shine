@@ -1,5 +1,3 @@
-use actix_web::http::StatusCode;
-use actix_web::ResponseError;
 use azure_sdk_core::errors::AzureError;
 use std::error::Error;
 use std::fmt;
@@ -29,14 +27,5 @@ impl Error for IdSequenceError {}
 impl From<AzureError> for IdSequenceError {
     fn from(err: AzureError) -> IdSequenceError {
         IdSequenceError::DB(format!("{:?}", err))
-    }
-}
-
-impl ResponseError for IdSequenceError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            IdSequenceError::DB(_) | IdSequenceError::SequenceEnded => StatusCode::INTERNAL_SERVER_ERROR,
-            IdSequenceError::Conflit => StatusCode::TOO_MANY_REQUESTS,
-        }
     }
 }

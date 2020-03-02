@@ -9,7 +9,10 @@ use std::pin::Pin;
 pub struct IpNoLocation;
 
 impl IpLocationProvider for IpNoLocation {
-    fn get_location<'s>(&'s self, _ip: &IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
+    fn get_location<'s>(
+        &'s self,
+        _ip: &IpAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
         Box::pin(ready(Err(IpLocationError::Unknown)))
     }
 }

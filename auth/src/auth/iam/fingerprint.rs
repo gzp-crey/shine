@@ -1,5 +1,4 @@
 use super::IAMError;
-use actix_web::HttpRequest;
 use shine_core::{
     iplocation::{IpLocation, IpLocationProvider},
     requestinfo::RemoteInfo,
@@ -18,8 +17,7 @@ pub struct Fingerprint {
 }
 
 impl Fingerprint {
-    pub async fn new<P: IpLocationProvider>(req: &HttpRequest, iplocation: &P) -> Result<Self, IAMError> {
-        let remote = RemoteInfo::parse_request(req)?;
+    pub async fn new<P: IpLocationProvider>(remote: &RemoteInfo, iplocation: &P) -> Result<Self, IAMError> {
         log::info!("remote: {:?}", remote);
 
         let location = if let Some(ip) = remote.remote() {

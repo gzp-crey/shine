@@ -22,7 +22,9 @@ pub fn is_precodition_error(err: &AzureError) -> bool {
 }
 
 pub fn encode_safe_key(input: &str) -> String {
-    utf8_percent_encode(input, NON_ALPHANUMERIC).to_string().replace("%", "@")
+    utf8_percent_encode(input, NON_ALPHANUMERIC)
+        .to_string()
+        .replace("%", "@")
 }
 
 pub fn decode_safe_key(input: &str) -> Result<String, Utf8Error> {

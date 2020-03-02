@@ -1,7 +1,7 @@
 use crate::auth::iam::{
     identity::{
-        CoreIdentity, CoreIdentityIndexedData, EncodedEmail, EncodedName, Identity, IdentityCategory, IndexEmail, IndexIdentity,
-        IndexName, IndexSequence, UserIdentity,
+        CoreIdentity, CoreIdentityIndexedData, EncodedEmail, EncodedName, Identity, IdentityCategory, IndexEmail,
+        IndexIdentity, IndexName, IndexSequence, UserIdentity,
     },
     IAMConfig, IAMError,
 };
@@ -21,27 +21,6 @@ const ID_ABC: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
 const MAX_SALT_LEN: usize = 32;
 const SALT_ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-fn validate_name(name: &str) -> Result<(), String> {
-    const MIN_LEN: usize = 3;
-    const MAX_LEN: usize = 30;
-
-    if name.chars().skip(MIN_LEN - 1).next().is_none() {
-        Err(format!("Too short, required min length: {}", MIN_LEN))
-    } else if name.len() > 30 {
-        Err(format!("Too long, required max length: {}", MAX_LEN))
-    } else {
-        Ok(())
-    }
-}
-
-fn validate_email(email: &str) -> Result<(), String> {
-    if !validator::validate_email(email) {
-        Err("Invalid".to_owned())
-    } else {
-        Ok(())
-    }
-}
 
 #[derive(Clone)]
 pub struct IdentityManager {
@@ -167,7 +146,11 @@ impl IdentityManager {
     /// Return if the given name can be used as a new identity name
     pub async fn is_name_available(&self, name: &EncodedName) -> Result<bool, IAMError> {
         let (partition_key, row_key) = IndexName::entity_keys(name);
-        Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
+        Ok(self
+            .db
+            .get::<EmptyData>(&partition_key, &row_key, None)
+            .await?
+            .is_none())
     }
 
     async fn insert_name_index<T>(&self, identity: &T) -> Result<IndexName, IAMError>
@@ -190,7 +173,11 @@ impl IdentityManager {
     /// Return if the given email can be used.
     pub async fn is_email_available(&self, cat: IdentityCategory, email: &EncodedEmail) -> Result<bool, IAMError> {
         let (partition_key, row_key) = IndexEmail::entity_keys(cat, email);
-        Ok(self.db.get::<EmptyData>(&partition_key, &row_key, None).await?.is_none())
+        Ok(self
+            .db
+            .get::<EmptyData>(&partition_key, &row_key, None)
+            .await?
+            .is_none())
     }
 
     async fn insert_email_index<T>(&self, identity: &T) -> Result<Option<IndexEmail>, IAMError>
@@ -221,7 +208,13 @@ impl IdentityManager {
         email: Option<&EncodedEmail>,
     ) -> Result<UserIdentity, BackoffError<IAMError>> {
         let mut rng = rand::thread_rng();
-        let salt = String::from_utf8(SALT_ABC.choose_multiple(&mut rng, MAX_SALT_LEN).cloned().collect::<Vec<_>>()).unwrap();
+        let salt = String::from_utf8(
+            SALT_ABC
+                .choose_multiple(&mut rng, MAX_SALT_LEN)
+                .cloned()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
         let id = String::from_utf8(ID_ABC.choose_multiple(&mut rng, ID_LEN).cloned().collect::<Vec<_>>()).unwrap();
         let password_config = argon2::Config::default();
         let password_hash = argon2::hash_encoded(password.as_bytes(), salt.as_bytes(), &password_config)
@@ -255,22 +248,18 @@ impl IdentityManager {
     }
 
     /// Creates a new user identity.
-    pub async fn create_user(&self, raw_name: &str, raw_email: Option<&str>, password: &str) -> Result<UserIdentity, IAMError> {
-        // validate input
-        if let Err(err) = validate_name(raw_name) {
-            log::info!("Invalid user name({}): {}", raw_name, err);
-            return Err(IAMError::NameInvalid(err));
-        }
-        if let Some(ref email) = raw_email {
-            if let Err(err) = validate_email(email) {
-                log::info!("Invalid email({}): {}", email, err);
-                return Err(IAMError::EmailInvalid(err));
-            }
-        }
-
-        let name = EncodedName::from_raw(raw_name);
-        let email = raw_email.map(|e| EncodedEmail::from_raw(e));
-        let email = email.as_ref();
+    pub async fn create_user(
+        &self,
+        raw_name: &str,
+        raw_email: Option<&str>,
+        password: &str,
+    ) -> Result<UserIdentity, IAMError> {
+        let name = EncodedName::from_raw(raw_name)?;
+        let email = if let Some(email) = raw_email {
+            Some(EncodedEmail::from_raw(email)?)
+        } else {
+            None
+        };
 
         // preliminary db checks (reduce the number of rollbacks)
         if !self.is_name_available(&name).await? {
@@ -287,7 +276,7 @@ impl IdentityManager {
         let identity = {
             let sequence_id = self.identity_id_generator.get().await?;
             backoff::Exponential::new(3, Duration::from_micros(10))
-                .async_execute(|_| self.try_create_user_identity(sequence_id, &name, password, email))
+                .async_execute(|_| self.try_create_user_identity(sequence_id, &name, password, email.as_ref()))
                 .await?
         };
 
@@ -330,17 +319,24 @@ impl IdentityManager {
 
     /// Find a user identity by email or name.
     /// If password is given, the its validaity is also ensured
-    pub async fn find_user_by_name_email(&self, raw_name_email: &str, password: Option<&str>) -> Result<UserIdentity, IAMError> {
+    pub async fn find_user_by_name_email(
+        &self,
+        raw_name_email: &str,
+        password: Option<&str>,
+    ) -> Result<UserIdentity, IAMError> {
         let query_name = {
-            let (p, r) = IndexName::entity_keys(&EncodedName::from_raw(raw_name_email));
+            let (p, r) = IndexName::entity_keys(&EncodedName::from_raw(raw_name_email)?);
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query_email = {
-            let (p, r) = IndexEmail::entity_keys(IdentityCategory::User, &EncodedEmail::from_raw(raw_name_email));
+            let (p, r) = IndexEmail::entity_keys(IdentityCategory::User, &EncodedEmail::from_raw(raw_name_email)?);
             format!("PartitionKey eq '{}' and RowKey eq '{}'", p, r)
         };
         let query = format!("(({}) or ({}))", query_name, query_email);
-        let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
+        let query = format!(
+            "$filter={}",
+            utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC)
+        );
 
         self.find_user_by_index(&query, password).await
     }

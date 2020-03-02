@@ -1,7 +1,11 @@
 use futures::stream::StreamExt;
 use gremlin_client::{aio::GremlinClient, FromGValue, GremlinError, ToGValue};
 
-pub async fn query_vec<R>(client: &GremlinClient, script: &str, params: &[(&str, &dyn ToGValue)]) -> Result<Vec<R>, GremlinError>
+pub async fn query_vec<R>(
+    client: &GremlinClient,
+    script: &str,
+    params: &[(&str, &dyn ToGValue)],
+) -> Result<Vec<R>, GremlinError>
 where
     R: FromGValue,
 {
@@ -14,7 +18,11 @@ where
     vec_of_results.into_iter().collect()
 }
 
-pub async fn query_value<R>(client: &GremlinClient, script: &str, params: &[(&str, &dyn ToGValue)]) -> Result<R, GremlinError>
+pub async fn query_value<R>(
+    client: &GremlinClient,
+    script: &str,
+    params: &[(&str, &dyn ToGValue)],
+) -> Result<R, GremlinError>
 where
     R: FromGValue,
 {

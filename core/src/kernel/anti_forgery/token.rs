@@ -28,7 +28,13 @@ struct AntiForgeryData {
 impl AntiForgeryData {
     fn new(identity: AntiForgeryIdentity) -> Self {
         let mut rng = rand::thread_rng();
-        let token = String::from_utf8(TOKEN_ABC.choose_multiple(&mut rng, TOKEN_LEN).cloned().collect::<Vec<_>>()).unwrap();
+        let token = String::from_utf8(
+            TOKEN_ABC
+                .choose_multiple(&mut rng, TOKEN_LEN)
+                .cloned()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
 
         AntiForgeryData { token, identity }
     }

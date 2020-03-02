@@ -1,31 +1,35 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
+
 <body>
 
-<h2>Register</h2>
+  <h2>Register</h2>
 
-<form action="register.html" method="post" enctype="application/x-www-form-urlencoded">
-  <div class="container">
-    <label for="name"><b>Username</b></label>
-    <input type="text" placeholder="Enter Username" name="name" value="{{name}}" required>
+  <form action="register.html" method="post" enctype="application/x-www-form-urlencoded">
+    <div class="container">
+      <label for="name"><b>Username</b></label>
+      <input type="text" placeholder="Enter Username" name="name" value="{{name}}" required>
 
-    <label for="email"><b>Email</b></label>
-    <input type="text" placeholder="Enter Email" name="email" value="{{email}}" required>
-    <label for="email_check"><b>Email confirmation</b></label>
-    <input type="text" placeholder="Enter Email" name="email_check" value="{{email}}" required>
+      <label for="email"><b>Email</b></label>
+      <input type="text" placeholder="Enter Email" name="email" value="{{email}}">
+      <label for="email_check"><b>Email confirmation</b></label>
+      <input type="text" placeholder="Enter Email" name="email_check" value="{{email}}">
 
-    <label for="password"><b>Password</b></label>
-    <input type="password" placeholder="Enter Password" name="password" value="{{password}}" required>
-    <label for="password_check"><b>Password confirmation</b></label>
-    <input type="password" placeholder="Enter Password" name="password_check" required>
+      <label for="password"><b>Password</b></label>
+      <input type="password" placeholder="Enter Password" name="password" value="{{password}}" required>
+      <label for="password_check"><b>Password confirmation</b></label>
+      <input type="password" placeholder="Enter Password" name="password_check" required>
 
-    <input type="hidden" name="af" value="{{af_token}}">
-        
-    <button type="submit">Register</button>
-  </div>
-</form>
+      <input type="hidden" name="af" value="{{af_token}}">
+      <div class="g-recaptcha" data-sitekey="{{recaptcha_site_key}}"></div>
+
+      <button type="submit">Register</button>
+    </div>
+  </form>
 
 </body>

@@ -1,7 +1,7 @@
 use clap::{App, Arg, SubCommand};
 use shine_core::iplocation::{
-    IpCachedLocation, IpCachedLocationConfig, IpLocation, IpLocationError, IpLocationIpDataCo, IpLocationIpDataCoConfig,
-    IpLocationProvider,
+    IpCachedLocation, IpCachedLocationConfig, IpLocation, IpLocationError, IpLocationIpDataCo,
+    IpLocationIpDataCoConfig, IpLocationProvider,
 };
 use std::net::IpAddr;
 use std::time::Duration;
@@ -60,13 +60,17 @@ fn main() {
 
     let provider: Box<dyn IpLocationProvider> = if let Some(matches) = matches.subcommand_matches("ipdataco") {
         let key = matches.value_of("key").unwrap();
-        let cfg = IpLocationIpDataCoConfig { api_key: key.to_owned() };
+        let cfg = IpLocationIpDataCoConfig {
+            api_key: key.to_owned(),
+        };
         Box::new(IpLocationIpDataCo::new(cfg))
     } else if let Some(matches) = matches.subcommand_matches("cached_ipdataco") {
         let key = matches.value_of("key").unwrap();
         let storage_account = matches.value_of("storage_account").unwrap().to_owned();
         let storage_account_secret = matches.value_of("storage_account_secret").unwrap().to_owned();
-        let cfg = IpLocationIpDataCoConfig { api_key: key.to_owned() };
+        let cfg = IpLocationIpDataCoConfig {
+            api_key: key.to_owned(),
+        };
         let provider = IpLocationIpDataCo::new(cfg);
         let cfg = IpCachedLocationConfig {
             storage_account: storage_account,

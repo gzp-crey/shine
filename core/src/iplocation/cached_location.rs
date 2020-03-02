@@ -103,7 +103,10 @@ impl IpCachedLocation {
 }
 
 impl IpLocationProvider for IpCachedLocation {
-    fn get_location<'s>(&'s self, ip: &'s IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
+    fn get_location<'s>(
+        &'s self,
+        ip: &'s IpAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
         Box::pin(self.find_location(&ip))
     }
 }

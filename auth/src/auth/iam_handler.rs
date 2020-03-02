@@ -1,13 +1,14 @@
 use super::iam::IAMError;
 use super::utils::create_user_id;
 use super::State;
-use actix_web::HttpRequest;
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
-use shine_core::kernel::anti_forgery::{AntiForgeryIdentity, AntiForgeryIssuer, AntiForgerySession, AntiForgeryValidator};
+use shine_core::kernel::anti_forgery::{
+    AntiForgeryIdentity, AntiForgeryIssuer, AntiForgerySession, AntiForgeryValidator,
+};
 use shine_core::kernel::identity::{IdentityCookie, IdentitySession, SessionKey, UserId};
 use shine_core::kernel::response::APIResult;
-use shine_core::requestinfo::{BasicAuth, TestingToken};
+use shine_core::requestinfo::{BasicAuth, RemoteInfo, TestingToken};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegistrationParams {
@@ -19,40 +20,36 @@ pub struct RegistrationParams {
 
 pub async fn register_user(
     state: web::Data<State>,
-    req: HttpRequest,
     identity_session: IdentitySession,
     af_session: AntiForgerySession,
+    remote_info: RemoteInfo,
     testing_token: TestingToken,
-    registration_params: web::Json<RegistrationParams>,
+    params: web::Json<RegistrationParams>,
 ) -> APIResult {
-    let RegistrationParams {
-        name,
-        password,
-        email,
-        af,
-    } = registration_params.into_inner();
-    let fingerprint = state.iam().get_fingerprint(&req).await?;
+    let params = params.into_inner();
+    let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
     log::info!(
-        "register_user[{:?},{:?}]: {}, {}, {:?}",
+        "register_user[{:?},{:?}]: {:?}",
         testing_token.token(),
         fingerprint,
-        name,
-        password,
-        email
+        params
     );
 
     let af_validator = AntiForgeryValidator::new(&af_session, AntiForgeryIdentity::Ignore)?;
     if testing_token.is_valid() {
-        state.iam().check_permission_by_testing_token(testing_token.token()).await?;
+        state
+            .iam()
+            .check_permission_by_testing_token(testing_token.token())
+            .await?;
     } else {
-        af_validator.validate(&af).map_err(IAMError::from)?;
+        let _ = af_validator.validate(&params.af).map_err(IAMError::from)?;
     }
 
     IdentityCookie::clear(&identity_session);
 
     let (identity, roles, session) = state
         .iam()
-        .register_user(&name, email.as_deref(), &password, &fingerprint)
+        .register_user(&params.name, params.email.as_deref(), &params.password, &fingerprint)
         .await?;
 
     create_user_id(identity, roles)?.to_session(&identity_session)?;
@@ -63,13 +60,13 @@ pub async fn register_user(
 
 pub async fn login_basic_auth(
     state: web::Data<State>,
-    req: HttpRequest,
     identity_session: IdentitySession,
+    remote_info: RemoteInfo,
     auth: BasicAuth,
 ) -> APIResult {
     let user_id = auth.user_id();
     let password = auth.password().ok_or(IAMError::PasswordNotMatching)?;
-    let fingerprint = state.iam().get_fingerprint(&req).await?;
+    let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
 
     IdentityCookie::clear(&identity_session);
 
@@ -88,11 +85,11 @@ pub struct RefreshKeyParams {
 
 pub async fn refresh_session_by_key(
     state: web::Data<State>,
-    req: HttpRequest,
+    remote_info: RemoteInfo,
     identity_session: IdentitySession,
     key_params: web::Json<RefreshKeyParams>,
 ) -> APIResult {
-    let fingerprint = state.iam().get_fingerprint(&req).await?;
+    let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
 
     match state.iam().refresh_session_by_key(&key_params.key, &fingerprint).await {
         Ok((identity, roles, session)) => {
@@ -112,10 +109,14 @@ pub async fn refresh_session_by_key(
     }
 }
 
-pub async fn validate_session(state: web::Data<State>, req: HttpRequest, identity_session: IdentitySession) -> APIResult {
+pub async fn validate_session(
+    state: web::Data<State>,
+    remote_info: RemoteInfo,
+    identity_session: IdentitySession,
+) -> APIResult {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
-    let fingerprint = state.iam().get_fingerprint(&req).await?;
+    let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
 
     match state
         .iam()
@@ -130,10 +131,14 @@ pub async fn validate_session(state: web::Data<State>, req: HttpRequest, identit
     }
 }
 
-pub async fn refresh_session(state: web::Data<State>, req: HttpRequest, identity_session: IdentitySession) -> APIResult {
+pub async fn refresh_session(
+    state: web::Data<State>,
+    remote_info: RemoteInfo,
+    identity_session: IdentitySession,
+) -> APIResult {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
-    let fingerprint = state.iam().get_fingerprint(&req).await?;
+    let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
 
     match state
         .iam()
@@ -202,7 +207,13 @@ pub async fn create_role(
 ) -> APIResult {
     let session_key = SessionKey::from_session(&identity_session)?;
     let user_id = UserId::from_session(&identity_session)?;
-    log::info!("create_role[{:?},{:?},{:?}] {}", user_id, session_key, testing_token, query);
+    log::info!(
+        "create_role[{:?},{:?},{:?}] {}",
+        user_id,
+        session_key,
+        testing_token,
+        query
+    );
 
     state
         .iam()
@@ -213,7 +224,11 @@ pub async fn create_role(
     Ok(HttpResponse::Ok().finish())
 }
 
-pub async fn delete_role(state: web::Data<State>, identity_session: IdentitySession, query: web::Path<String>) -> APIResult {
+pub async fn delete_role(
+    state: web::Data<State>,
+    identity_session: IdentitySession,
+    query: web::Path<String>,
+) -> APIResult {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     log::info!("delete_role {:?}, {:?}, {}", user_id, session_key, query);
@@ -251,7 +266,11 @@ pub async fn disherit_role(
     Ok(HttpResponse::Ok().finish())
 }
 
-pub async fn get_user_roles(state: web::Data<State>, identity_session: IdentitySession, query: web::Path<String>) -> APIResult {
+pub async fn get_user_roles(
+    state: web::Data<State>,
+    identity_session: IdentitySession,
+    query: web::Path<String>,
+) -> APIResult {
     let session_key = SessionKey::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     let user_id = UserId::from_session(&identity_session)?.ok_or(IAMError::SessionRequired)?;
     log::info!("get_user_roles {:?}, {:?}, {:?}", user_id, session_key, query);

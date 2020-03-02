@@ -24,7 +24,9 @@ pub struct IpLocationIpDataCo {
 
 impl IpLocationIpDataCo {
     pub fn new(config: IpLocationIpDataCoConfig) -> IpLocationIpDataCo {
-        IpLocationIpDataCo { api_key: config.api_key }
+        IpLocationIpDataCo {
+            api_key: config.api_key,
+        }
     }
 
     async fn location_request(&self, ip: &IpAddr) -> Result<IpLocation, IpLocationError> {
@@ -47,7 +49,10 @@ impl IpLocationIpDataCo {
 }
 
 impl IpLocationProvider for IpLocationIpDataCo {
-    fn get_location<'s>(&'s self, ip: &'s IpAddr) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
+    fn get_location<'s>(
+        &'s self,
+        ip: &'s IpAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<IpLocation, IpLocationError>> + 's>> {
         Box::pin(self.location_request(&ip))
     }
 }

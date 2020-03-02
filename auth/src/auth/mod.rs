@@ -6,11 +6,11 @@ mod utils;
 use self::iam::{IAMConfig, IAMError, IAM};
 use actix_rt::SystemRunner;
 use actix_web::web;
-use chrono::Duration as ChronoDuration;
 use data_encoding::{DecodeError, BASE64};
 use serde::{Deserialize, Serialize};
 use shine_core::{
     kernel::{anti_forgery::AntiForgeryCookie, identity::IdentityCookie},
+    recaptcha::Recaptcha,
     signed_cookie::SignedCookie,
 };
 use std::{fmt, rc::Rc};
@@ -20,9 +20,10 @@ use tera::{Error as TeraError, Tera};
 pub struct AuthConfig {
     pub iam: IAMConfig,
     pub tera_templates: String,
+    pub recaptcha_secret: String,
+    pub recaptcha_site_key: String,
     pub identity_session_secret: String,
     pub af_session_secret: String,
-    pub af_time_to_live_m: i16,
 }
 
 #[derive(Debug)]
@@ -45,14 +46,15 @@ impl fmt::Display for AuthCreateError {
 struct Inner {
     tera: Tera,
     iam: IAM,
+    recaptcha: Recaptcha,
 }
 
 #[derive(Clone)]
 pub struct State(Rc<Inner>);
 
 impl State {
-    pub fn new(tera: Tera, iam: IAM) -> Self {
-        Self(Rc::new(Inner { tera, iam }))
+    pub fn new(tera: Tera, iam: IAM, recaptcha: Recaptcha) -> Self {
+        Self(Rc::new(Inner { tera, iam, recaptcha }))
     }
 
     pub fn tera(&self) -> &Tera {
@@ -62,20 +64,26 @@ impl State {
     pub fn iam(&self) -> &IAM {
         &self.0.iam
     }
+
+    pub fn recaptcha(&self) -> &Recaptcha {
+        &self.0.recaptcha
+    }
 }
 
 #[derive(Clone)]
 pub struct AuthService {
     tera: Tera,
     iam: IAM,
+    recaptcha: Recaptcha,
     identity_session_secret: Vec<u8>,
     af_session_secret: Vec<u8>,
-    af_time_to_live: ChronoDuration,
 }
 
 impl AuthService {
     pub fn create(sys: &mut SystemRunner, config: &AuthConfig) -> Result<AuthService, AuthCreateError> {
         let tera = Tera::new(&config.tera_templates).map_err(|err| AuthCreateError::ConfigureTera(err.into()))?;
+
+        let recaptcha = Recaptcha::new(config.recaptcha_secret.clone(), config.recaptcha_site_key.clone());
 
         let iam_config = config.iam.clone();
         let iam = sys
@@ -91,18 +99,21 @@ impl AuthService {
         Ok(AuthService {
             iam,
             tera,
+            recaptcha,
             identity_session_secret,
             af_session_secret,
-            af_time_to_live: ChronoDuration::minutes(config.af_time_to_live_m as i64),
         })
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
-        let state = State::new(self.tera.clone(), self.iam.clone());
+        let state = State::new(self.tera.clone(), self.iam.clone(), self.recaptcha.clone());
 
         services.service(
             web::scope("auth")
-                .wrap(SignedCookie::new(IdentityCookie::write(&self.identity_session_secret), ()))
+                .wrap(SignedCookie::new(
+                    IdentityCookie::write(&self.identity_session_secret),
+                    (),
+                ))
                 .wrap(SignedCookie::new(AntiForgeryCookie::new(&self.af_session_secret), ()))
                 .data(state)
                 .service(
@@ -119,12 +130,21 @@ impl AuthService {
                                 .service(web::resource("register").route(web::post().to(iam_handler::register_user)))
                                 .service(web::resource("refresh").route(web::post().to(iam_handler::refresh_session)))
                                 .service(web::resource("validate").route(web::post().to(iam_handler::validate_session)))
-                                .service(web::resource("refresh_key").route(web::post().to(iam_handler::refresh_session_by_key)))
-                                .service(web::resource("logout").route(web::post().to(iam_handler::logout)))
-                                .service(web::resource("/{user}/roles").route(web::get().to(iam_handler::get_user_roles)))
-                                .service(web::resource("/{user}/roles/{role}").route(web::post().to(iam_handler::add_user_role)))
                                 .service(
-                                    web::resource("/{user}/roles/{role}").route(web::delete().to(iam_handler::remove_user_role)),
+                                    web::resource("refresh_key")
+                                        .route(web::post().to(iam_handler::refresh_session_by_key)),
+                                )
+                                .service(web::resource("logout").route(web::post().to(iam_handler::logout)))
+                                .service(
+                                    web::resource("/{user}/roles").route(web::get().to(iam_handler::get_user_roles)),
+                                )
+                                .service(
+                                    web::resource("/{user}/roles/{role}")
+                                        .route(web::post().to(iam_handler::add_user_role)),
+                                )
+                                .service(
+                                    web::resource("/{user}/roles/{role}")
+                                        .route(web::delete().to(iam_handler::remove_user_role)),
                                 ),
                         )
                         .service(

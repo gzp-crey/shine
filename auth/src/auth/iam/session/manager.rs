@@ -55,7 +55,11 @@ impl SessionManager {
             .unwrap_or_else(|e| log::error!("Failed to delete session index ([{}]/[{}]): {}", p, r, e));
     }
 
-    async fn try_insert_session(&self, identity: &UserIdentity, fingerprint: &Fingerprint) -> Result<Session, IAMError> {
+    async fn try_insert_session(
+        &self,
+        identity: &UserIdentity,
+        fingerprint: &Fingerprint,
+    ) -> Result<Session, IAMError> {
         let id = identity.id();
         let key = self.genrate_session_key();
         log::info!("Created new session key [{}] for {}", key, id);
@@ -103,7 +107,11 @@ impl SessionManager {
 
     /// Creates a new user session for the given identity.
     /// It is assumed that, the identity has been already authenticated.
-    pub async fn create_session(&self, identity: &UserIdentity, fingerprint: &Fingerprint) -> Result<Session, IAMError> {
+    pub async fn create_session(
+        &self,
+        identity: &UserIdentity,
+        fingerprint: &Fingerprint,
+    ) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
             .async_execute(|_| self.try_create_session(identity, fingerprint))
             .await
@@ -147,11 +155,19 @@ impl SessionManager {
 
     /// Refresh the session when both the id and the key is known.
     /// In case of a compromised key the session is also disabled in the database.
-    pub async fn refresh_session_with_id_key(&self, id: &str, key: &str, fingerprint: &Fingerprint) -> Result<Session, IAMError> {
+    pub async fn refresh_session_with_id_key(
+        &self,
+        id: &str,
+        key: &str,
+        fingerprint: &Fingerprint,
+    ) -> Result<Session, IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
             .async_execute(|_| {
                 async {
-                    let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
+                    let mut session = self
+                        .find_session_by_id_key(id, key)
+                        .await
+                        .map_err(IAMError::into_backoff)?;
 
                     // validate fingerprint
                     if !session.check(fingerprint, self.get_minimum_refresh_date()) {
@@ -179,7 +195,10 @@ impl SessionManager {
         backoff::Exponential::new(3, Duration::from_micros(10))
             .async_execute(|_| {
                 async {
-                    let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
+                    let mut session = self
+                        .find_session_by_id_key(id, key)
+                        .await
+                        .map_err(IAMError::into_backoff)?;
 
                     // validate fingerprint
                     if !session.check(fingerprint, self.get_minimum_refresh_date()) {
@@ -196,7 +215,11 @@ impl SessionManager {
 
     /// Refresh the session when only the key is known.
     /// In case of a compromised key the session is also removed from the database.
-    pub async fn refresh_session_with_key(&self, key: &str, fingerprint: &Fingerprint) -> Result<(String, Session), IAMError> {
+    pub async fn refresh_session_with_key(
+        &self,
+        key: &str,
+        fingerprint: &Fingerprint,
+    ) -> Result<(String, Session), IAMError> {
         backoff::Exponential::new(3, Duration::from_micros(10))
             .async_execute(|_| {
                 async {
@@ -222,12 +245,18 @@ impl SessionManager {
         backoff::Exponential::new(3, Duration::from_micros(10))
             .async_execute(|_| {
                 async {
-                    let mut session = self.find_session_by_id_key(id, key).await.map_err(IAMError::into_backoff)?;
+                    let mut session = self
+                        .find_session_by_id_key(id, key)
+                        .await
+                        .map_err(IAMError::into_backoff)?;
                     //todo: securitiy consideration, this way a user might be forced to login
                     // again knowing only the session key and hence the login handshake could be
                     // triggered and captured.
                     session.disable();
-                    self.update_session(session).await.map_err(IAMError::into_backoff).map(|_| ())
+                    self.update_session(session)
+                        .await
+                        .map_err(IAMError::into_backoff)
+                        .map(|_| ())
                 }
             })
             .await
@@ -237,7 +266,10 @@ impl SessionManager {
     pub async fn invalidate_all_session(&self, id: &str, active_key: Option<&str>) -> Result<(), IAMError> {
         // query all the active session
         let query = format!("PartitionKey eq 'id-{}' and Disabled eq ''", id);
-        let query = format!("$filter={}", utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC));
+        let query = format!(
+            "$filter={}",
+            utf8_percent_encode(&query, percent_encoding::NON_ALPHANUMERIC)
+        );
 
         let mut has_conflict = false;
         let mut stream = Box::pin(self.db.stream_query::<SessionData>(Some(&query)));

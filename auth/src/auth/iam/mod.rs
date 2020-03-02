@@ -1,6 +1,6 @@
-use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use shine_core::iplocation::{IpCachedLocation, IpCachedLocationConfig, IpLocationIpDataCo, IpLocationIpDataCoConfig};
+use shine_core::requestinfo::RemoteInfo;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
@@ -69,8 +69,8 @@ impl IAM {
         })
     }
 
-    pub async fn get_fingerprint(&self, req: &HttpRequest) -> Result<Fingerprint, IAMError> {
-        Fingerprint::new(req, &self.iplocation).await
+    pub async fn get_fingerprint(&self, remote: &RemoteInfo) -> Result<Fingerprint, IAMError> {
+        Fingerprint::new(remote, &self.iplocation).await
     }
 
     pub async fn register_user(
@@ -95,7 +95,10 @@ impl IAM {
         password: &str,
         fingerprint: &Fingerprint,
     ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
-        let identity = self.identity.find_user_by_name_email(name_email, Some(&password)).await?;
+        let identity = self
+            .identity
+            .find_user_by_name_email(name_email, Some(&password))
+            .await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
         let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
@@ -146,7 +149,12 @@ impl IAM {
         Ok((identity, roles, session))
     }
 
-    pub async fn invalidate_session(&self, user_id: &str, session_key: &str, invalidate_all: bool) -> Result<(), IAMError> {
+    pub async fn invalidate_session(
+        &self,
+        user_id: &str,
+        session_key: &str,
+        invalidate_all: bool,
+    ) -> Result<(), IAMError> {
         if invalidate_all {
             self.session.invalidate_all_session(user_id, Some(session_key)).await
         } else {
@@ -179,7 +187,11 @@ impl IAM {
         self.role.add_identity_role(identity_id, role).await
     }
 
-    pub async fn get_identity_roles(&self, identity_id: &str, include_inherited: bool) -> Result<InheritedRoles, IAMError> {
+    pub async fn get_identity_roles(
+        &self,
+        identity_id: &str,
+        include_inherited: bool,
+    ) -> Result<InheritedRoles, IAMError> {
         let _ = self.identity.find_core_identity_by_id(identity_id).await?;
         self.role.get_identity_roles(identity_id, include_inherited).await
     }
