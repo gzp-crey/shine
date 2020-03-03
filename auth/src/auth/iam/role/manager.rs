@@ -173,7 +173,8 @@ impl RoleManager {
         _identity_id: &str,
         _include_inherited: bool,
     ) -> Result<InheritedRoles, IAMError> {
-        unimplemented!()
+        //unimplemented!()
+        Ok(InheritedRoles::default())
     }
 
     pub async fn remove_identity_role(&self, _identity_id: &str, _role: &str) -> Result<InheritedRoles, IAMError> {

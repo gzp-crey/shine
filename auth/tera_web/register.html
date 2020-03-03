@@ -13,15 +13,17 @@
   <form action="register.html" method="post" enctype="application/x-www-form-urlencoded">
     <div class="container">
       <label for="name"><b>Username</b></label>
-      <input type="text" placeholder="Enter Username" name="name" value="{{name}}" required>
+      
+      <input type="text" placeholder="Enter Username" name="name" value="{{name | safe}}" required>
 
       <label for="email"><b>Email</b></label>
-      <input type="text" placeholder="Enter Email" name="email" value="{{email}}">
-      <label for="email_check"><b>Email confirmation</b></label>
-      <input type="text" placeholder="Enter Email" name="email_check" value="{{email}}">
+      
+      <input type="text" placeholder="Enter Email" name="email" value="{{email | safe}}">
+      
 
       <label for="password"><b>Password</b></label>
-      <input type="password" placeholder="Enter Password" name="password" value="{{password}}" required>
+      
+      <input type="password" placeholder="Enter Password" name="password" value="{{password | safe}}" required>
       <label for="password_check"><b>Password confirmation</b></label>
       <input type="password" placeholder="Enter Password" name="password_check" required>
 

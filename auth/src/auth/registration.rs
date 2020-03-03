@@ -26,6 +26,8 @@ pub struct RegistrationParams {
     email: String,
     password: String,
     af: String,
+    #[serde(rename = "g-recaptcha-response")]
+    recaptcha_response: String,
 }
 
 struct Keys {
@@ -62,7 +64,7 @@ pub async fn get_register_page(state: web::Data<State>, af_session: AntiForgeryS
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
 
-    gen_page(state.tera(), &keys, None, None)
+    gen_page(&*state.tera(), &keys, None, None)
 }
 
 pub async fn post_register_page(
@@ -82,7 +84,11 @@ pub async fn post_register_page(
     log::info!("post_register_user {:?} {:?}", params, fingerprint);
 
     let keys = {
-        //state.recaptcha().check("")?;
+        state
+            .recaptcha()
+            .check_response(&params.recaptcha_response)
+            .await
+            .map_err(|_| PageError::RedirectTo("register.html".to_owned()))?;
         let af_validator = AntiForgeryValidator::new(&af_session, AntiForgeryIdentity::Ignore)
             .map_err(|_| PageError::RedirectTo("register.html".to_owned()))?;
         let token = af_validator
@@ -101,10 +107,13 @@ pub async fn post_register_page(
         .register_user(&params.name, email, &params.password, &fingerprint)
         .await
     {
-        Ok(ok) => ok,
+        Ok(ok) => {
+            println!("{:?}", ok);
+            ok
+        }
         Err(IAMError::NameInvalid(err)) => {
             return gen_page(
-                state.tera(),
+                &*state.tera(),
                 &keys,
                 Some(&params),
                 Some(RegistrationError::Username(err)),
@@ -112,25 +121,30 @@ pub async fn post_register_page(
         }
         Err(IAMError::NameTaken) => {
             return gen_page(
-                state.tera(),
+                &*state.tera(),
                 &keys,
                 Some(&params),
                 Some(RegistrationError::Username("Already taken".to_owned())),
             )
         }
         Err(IAMError::EmailInvalid(err)) => {
-            return gen_page(state.tera(), &keys, Some(&params), Some(RegistrationError::Email(err)))
+            return gen_page(
+                &*state.tera(),
+                &keys,
+                Some(&params),
+                Some(RegistrationError::Email(err)),
+            )
         }
         Err(IAMError::EmailTaken) => {
             return gen_page(
-                state.tera(),
+                &*state.tera(),
                 &keys,
                 Some(&params),
                 Some(RegistrationError::Email("Already taken".to_owned())),
             )
         }
         _ => return Err(PageError::RedirectTo("register.html".to_owned())),
-    };
+    };    
 
     create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;

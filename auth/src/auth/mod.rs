@@ -1,9 +1,3 @@
-mod iam;
-mod iam_handler;
-mod registration;
-mod utils;
-
-use self::iam::{IAMConfig, IAMError, IAM};
 use actix_rt::SystemRunner;
 use actix_web::web;
 use data_encoding::{DecodeError, BASE64};
@@ -13,8 +7,21 @@ use shine_core::{
     recaptcha::Recaptcha,
     signed_cookie::SignedCookie,
 };
-use std::{fmt, rc::Rc};
+use std::{
+    cell::{Ref, RefCell},
+    fmt,
+    rc::Rc,
+};
 use tera::{Error as TeraError, Tera};
+
+mod iam;
+mod iam_handler;
+mod registration;
+mod trace_middleware;
+mod utils;
+
+use self::iam::{IAMConfig, IAMError, IAM};
+use self::trace_middleware::Trace;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
@@ -22,7 +29,7 @@ pub struct AuthConfig {
     pub tera_templates: String,
     pub recaptcha_secret: String,
     pub recaptcha_site_key: String,
-    pub identity_session_secret: String,
+    pub id_session_secret: String,
     pub af_session_secret: String,
 }
 
@@ -44,7 +51,7 @@ impl fmt::Display for AuthCreateError {
 }
 
 struct Inner {
-    tera: Tera,
+    tera: RefCell<Tera>,
     iam: IAM,
     recaptcha: Recaptcha,
 }
@@ -54,11 +61,23 @@ pub struct State(Rc<Inner>);
 
 impl State {
     pub fn new(tera: Tera, iam: IAM, recaptcha: Recaptcha) -> Self {
-        Self(Rc::new(Inner { tera, iam, recaptcha }))
+        Self(Rc::new(Inner {
+            tera: RefCell::new(tera),
+            iam,
+            recaptcha,
+        }))
     }
 
-    pub fn tera(&self) -> &Tera {
-        &self.0.tera
+    pub fn tera(&self) -> Ref<Tera> {
+        self.0.tera.borrow()
+    }
+
+    pub fn try_reload_tera(&self) -> Result<(), ()> {
+        self.0
+            .tera
+            .try_borrow_mut()
+            .map_err(|_| ())
+            .and_then(|mut tera| tera.full_reload().map_err(|_| ()))
     }
 
     pub fn iam(&self) -> &IAM {
@@ -75,7 +94,7 @@ pub struct AuthService {
     tera: Tera,
     iam: IAM,
     recaptcha: Recaptcha,
-    identity_session_secret: Vec<u8>,
+    id_session_secret: Vec<u8>,
     af_session_secret: Vec<u8>,
 }
 
@@ -89,8 +108,8 @@ impl AuthService {
         let iam = sys
             .block_on(IAM::new(iam_config))
             .map_err(|err| AuthCreateError::ConfigureIAM(err.into()))?;
-        let identity_session_secret = BASE64
-            .decode(config.identity_session_secret.as_bytes())
+        let id_session_secret = BASE64
+            .decode(config.id_session_secret.as_bytes())
             .map_err(|err| AuthCreateError::ConfigureDecodeSecret(err.into()))?;
         let af_session_secret = BASE64
             .decode(config.af_session_secret.as_bytes())
@@ -100,7 +119,7 @@ impl AuthService {
             iam,
             tera,
             recaptcha,
-            identity_session_secret,
+            id_session_secret,
             af_session_secret,
         })
     }
@@ -110,10 +129,8 @@ impl AuthService {
 
         services.service(
             web::scope("auth")
-                .wrap(SignedCookie::new(
-                    IdentityCookie::write(&self.identity_session_secret),
-                    (),
-                ))
+                .wrap(Trace)
+                .wrap(SignedCookie::new(IdentityCookie::write(&self.id_session_secret), ()))
                 .wrap(SignedCookie::new(AntiForgeryCookie::new(&self.af_session_secret), ()))
                 .data(state)
                 .service(
