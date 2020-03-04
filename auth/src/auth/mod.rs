@@ -72,12 +72,15 @@ impl State {
         self.0.tera.borrow()
     }
 
-    pub fn try_reload_tera(&self) -> Result<(), ()> {
+    pub fn try_reload_tera(&self) -> Result<(), String> {
         self.0
             .tera
             .try_borrow_mut()
-            .map_err(|_| ())
-            .and_then(|mut tera| tera.full_reload().map_err(|_| ()))
+            .map_err(|_| "Tera is already in use".to_owned())
+            .and_then(|mut tera| {
+                tera.full_reload()
+                    .map_err(|err| format!("Tera load failed with {:?}", err))
+            })
     }
 
     pub fn iam(&self) -> &IAM {
@@ -129,7 +132,7 @@ impl AuthService {
 
         services.service(
             web::scope("auth")
-                .wrap(Trace)
+                .wrap(Trace::new(state.clone()))
                 .wrap(SignedCookie::new(IdentityCookie::write(&self.id_session_secret), ()))
                 .wrap(SignedCookie::new(AntiForgeryCookie::new(&self.af_session_secret), ()))
                 .data(state)

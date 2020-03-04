@@ -9,7 +9,7 @@ use auth::AuthService;
 /// Example of a main function of a actix server supporting oauth.
 pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    env_logger::Builder::from_default_env()
+    pretty_env_logger::formatted_builder()
         .filter_level(log::LevelFilter::Info)
         //.filter_level(log::LevelFilter::Trace)
         .filter_module("shine_auth", log::LevelFilter::Trace)

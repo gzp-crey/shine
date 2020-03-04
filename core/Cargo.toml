@@ -33,6 +33,6 @@ azure_sdk_storage_table = "0.40"
 gremlin-client = { version = "0.3", features = ["async_std"] }
 
 [dev-dependencies]
-env_logger = "0.7.1"
+pretty_env_logger = "0.4"
 clap = "2.33"
 tokio = { version = "0.2", features = ["macros", "rt-threaded"] }

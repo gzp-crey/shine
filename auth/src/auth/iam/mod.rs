@@ -44,10 +44,16 @@ pub struct IAM {
 
 impl IAM {
     pub async fn new(config: IAMConfig) -> Result<Self, IAMError> {
+        log::debug!("Initialize identity");
         let identity = IdentityManager::new(&config).await?;
+
+        log::debug!("Initialize session");
         let session = SessionManager::new(&config).await?;
+
+        log::debug!("Initialize role");
         let role = RoleManager::new(&config).await?;
 
+        log::debug!("Initialize ip location");
         let cfg = IpLocationIpDataCoConfig {
             api_key: config.ipdataco_key.clone(),
         };

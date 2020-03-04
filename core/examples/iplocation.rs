@@ -16,7 +16,7 @@ async fn query(provider: Box<dyn IpLocationProvider>, ips: Vec<IpAddr>) -> Vec<R
 }
 
 fn main() {
-    env_logger::init();
+    pretty_env_logger::init();
 
     let matches = App::new("test ip location")
         .version("1.0")

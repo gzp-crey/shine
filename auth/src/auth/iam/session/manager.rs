@@ -62,7 +62,7 @@ impl SessionManager {
     ) -> Result<Session, IAMError> {
         let id = identity.id();
         let key = self.genrate_session_key();
-        log::info!("Created new session key [{}] for {}", key, id);
+        log::debug!("Created new session key [{}] for {}", key, id);
 
         // fisrt insert index, it also ensures key uniqueness.
         let session_index = {
@@ -101,7 +101,7 @@ impl SessionManager {
             .await
             .map_err(IAMError::into_backoff)?;
 
-        log::info!("New session: {:?}", session);
+        log::debug!("New session: {:?}", session);
         return Ok(session);
     }
 

@@ -1,6 +1,7 @@
 use reqwest::{Client, Error as ReqwestError};
 use serde::Deserialize;
 
+#[derive(Debug, Clone)]
 pub enum RecaptchaError {
     Internal(String),
     Rejected(String),
@@ -52,10 +53,7 @@ impl Recaptcha {
         if response.success {
             Ok(())
         } else {
-            let error = response
-                .error_codes
-                .map(|e| e.join(", "))
-                .unwrap_or("".to_owned());
+            let error = response.error_codes.map(|e| e.join(", ")).unwrap_or("".to_owned());
             log::info!("recaptcha failed: {:?}", error);
             Err(RecaptchaError::Rejected(error))
         }

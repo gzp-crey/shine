@@ -29,14 +29,14 @@ impl RemoteInfo {
             .remote()
             .and_then(|remote| remote.parse::<net::SocketAddr>().ok())
             .map(|remote| remote.ip());
-        log::info!("remote: {:?}", remote);
+        log::trace!("remote: {:?}", remote);
 
         let agent = match req.headers().get(header::USER_AGENT) {
             None => "unknown",
             Some(header) => header.to_str()?,
         }
         .to_string();
-        log::info!("agent: {:?}", agent);
+        log::trace!("agent: {:?}", agent);
 
         Ok(RemoteInfo {
             remote: remote,

@@ -93,7 +93,11 @@ where
     O: SignedCookieOptions,
     C: 'static,
 {
-    fn load_cookie(cookie: &Cookie<'static>, options: &O, config: Rc<C>) -> Result<SessionData<C>, SignedCookieError> {
+    fn load_cookie(
+        cookie: &Cookie<'static>,
+        options: &O,
+        config: Rc<C>,
+    ) -> Result<SessionData<O, C>, SignedCookieError> {
         let name = cookie.name();
         let mut jar = CookieJar::new();
         jar.add_original(cookie.clone());
@@ -173,12 +177,12 @@ where
     }
 
     /// Load cookies from request and creates the SignedCookieStore
-    pub(crate) fn load(&self, req: &mut ServiceRequest) -> SessionData<C> {
+    pub(crate) fn load(&self, req: &mut ServiceRequest) -> SessionData<O, C> {
         let name = self.options.name().to_owned();
         let config = self.config.clone();
         if let Ok(cookies) = req.cookies() {
             if let Some(cookie) = cookies.iter().find(|x| x.name() == name) {
-                log::trace!("cookie {}: {:?}", name, cookie);
+                log::debug!("Loading cookie {}: {:?}", name, cookie);
                 return Self::load_cookie(cookie, &*self.options, self.config.clone()).unwrap_or_else(|err| {
                     log::warn!("Failed to parse cookie: {:?}", err);
                     SessionData::empty(name, config)
@@ -189,20 +193,21 @@ where
     }
 
     /// Collect changes from the SignedCookieStore and updates the SetCookie header in the response
-    pub(crate) fn store<B>(&self, data: SessionData<C>, res: &mut ServiceResponse<B>) {
+    pub(crate) fn store<B>(&self, data: SessionData<O, C>, res: &mut ServiceResponse<B>) {
         if let Some(changes) = data.into_change() {
             if !self.options.read_only() {
                 if changes.is_empty() {
-                    log::debug!("Purge cookie {}", self.options.name());
+                    log::info!("Purge cookie [{}]", self.options.name());
                     Self::purge_cookie(res, &*self.options)
                         .unwrap_or_else(|err| log::warn!("Failed to purge cookie: {:?}", err));
                 } else {
-                    log::debug!("Set cookie {}", self.options.name());
+                    log::info!("Set cookie [{}]", self.options.name());
+                    log::debug!("Cookie values [{}]: {:?}", self.options.name(), changes);
                     Self::set_cookie(res, &*self.options, changes)
                         .unwrap_or_else(|err| log::warn!("Failed to set cookie: {:?}", err));
                 }
             } else {
-                log::warn!("Read only cookie {} changed", self.options.name());
+                log::warn!("Read only cookie [{}] changed", self.options.name());
             }
         }
     }

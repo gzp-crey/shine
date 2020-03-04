@@ -35,14 +35,14 @@ pub async fn register_user(
         params
     );
 
-    let af_validator = AntiForgeryValidator::new(&af_session, AntiForgeryIdentity::Ignore)?;
     if testing_token.is_valid() {
         state
             .iam()
             .check_permission_by_testing_token(testing_token.token())
             .await?;
     } else {
-        let _ = af_validator.validate(&params.af).map_err(IAMError::from)?;
+        let _ = AntiForgeryValidator::validate(&af_session, &params.af, AntiForgeryIdentity::Ignore)
+            .map_err(IAMError::from)?;
     }
 
     IdentityCookie::clear(&identity_session);
@@ -311,14 +311,12 @@ pub async fn remove_user_role(
 pub async fn create_af_token(af_session: AntiForgerySession, identity_session: IdentitySession) -> APIResult {
     let user_id = UserId::from_session(&identity_session)?.map(|u| u.name().to_owned());
     log::info!("create_af_token");
-    let af_issuer = AntiForgeryIssuer::new(&af_session, user_id);
 
     #[derive(Serialize)]
     struct Response {
         token: String,
     };
 
-    Ok(HttpResponse::Ok().json(Response {
-        token: af_issuer.token().to_owned(),
-    }))
+    let token = AntiForgeryIssuer::issue(&af_session, user_id);
+    Ok(HttpResponse::Ok().json(Response { token }))
 }

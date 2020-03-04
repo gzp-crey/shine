@@ -5,10 +5,10 @@ use std::fmt;
 pub enum PageError {
     Internal(String),
     Response(StatusCode, String),
+    RedirectOnError(String, String),
 
     Home,
     Login,
-    RedirectTo(String),
 }
 
 impl fmt::Display for PageError {
@@ -28,6 +28,10 @@ impl ResponseError for PageError {
         match self {
             PageError::Response(code, body) => HttpResponse::build(code.clone()).body(body),
             PageError::Internal(err) => {
+                log::error!("Internal server error: {}", err);
+                HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).finish()
+            }
+            PageError::RedirectOnError(err, uri) => {
                 log::error!("Internal server error: {}", err);
                 HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).finish()
             }

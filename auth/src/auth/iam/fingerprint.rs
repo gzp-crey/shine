@@ -18,7 +18,7 @@ pub struct Fingerprint {
 
 impl Fingerprint {
     pub async fn new<P: IpLocationProvider>(remote: &RemoteInfo, iplocation: &P) -> Result<Self, IAMError> {
-        log::info!("remote: {:?}", remote);
+        log::debug!("Remote info: {:?}", remote);
 
         let location = if let Some(ip) = remote.remote() {
             match iplocation.get_location(ip).await {
@@ -31,7 +31,7 @@ impl Fingerprint {
         } else {
             None
         };
-        log::info!("location: {:?}", remote);
+        log::debug!("Remote location: {:?}", location);
 
         Ok(Fingerprint {
             agent: remote.agent().to_owned(),

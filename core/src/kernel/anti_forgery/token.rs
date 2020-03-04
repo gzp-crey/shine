@@ -2,14 +2,17 @@ use super::AntiForgerySession;
 use actix_web::Error as ActixError;
 use rand::{self, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
+use std::mem;
 
 const TOKEN_LEN: usize = 8;
 const TOKEN_ABC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
+#[derive(Debug, Clone)]
 pub enum AntiForgeryError {
     Missing,
     Expired,
     InvalidToken,
+    Internal(String),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -40,6 +43,15 @@ impl AntiForgeryData {
     }
 }
 
+impl Default for AntiForgeryData {
+    fn default() -> AntiForgeryData {
+        AntiForgeryData {
+            token: Default::default(),
+            identity: AntiForgeryIdentity::None,
+        }
+    }
+}
+
 pub struct AntiForgeryIssuer<'a> {
     data: AntiForgeryData,
     session: &'a AntiForgerySession,
@@ -60,11 +72,19 @@ impl<'a> AntiForgeryIssuer<'a> {
     pub fn token(&self) -> &str {
         &self.data.token
     }
+
+    pub fn issue<'b>(session: &'b AntiForgerySession, identity: Option<String>) -> String {
+        let af = Self::new(session, identity);
+        let token = af.token().to_owned();
+        token
+    }
 }
 
 impl<'a> Drop for AntiForgeryIssuer<'a> {
     fn drop(&mut self) {
-        if let Err(err) = self.session.set("d", &self.data) {
+        log::info!("Set AF cookie: {:?}", self.data);
+        let data = mem::replace(&mut self.data, AntiForgeryData::default());
+        if let Err(err) = self.session.set("d", data) {
             log::error!("Failed to set AF cookie: {}", err);
         }
     }
@@ -89,7 +109,7 @@ impl<'a> AntiForgeryValidator<'a> {
         })
     }
 
-    pub fn validate(&self, token: &str) -> Result<&str, AntiForgeryError> {
+    pub fn validate_token(&self, token: &str) -> Result<String, AntiForgeryError> {
         if let Some(ref data) = self.data {
             if self.identity != AntiForgeryIdentity::Ignore && self.identity != data.identity {
                 // either user existance is ignored or it must match the AF cookie
@@ -99,10 +119,20 @@ impl<'a> AntiForgeryValidator<'a> {
                 log::info!("AF token missmatch: {:?}, {:?}", token, data.token);
                 Err(AntiForgeryError::InvalidToken)
             } else {
-                Ok(&data.token)
+                Ok(data.token.clone())
             }
         } else {
             Err(AntiForgeryError::Missing)
         }
+    }
+
+    pub fn validate<'b>(
+        session: &'b AntiForgerySession,
+        token: &str,
+        identity: AntiForgeryIdentity,
+    ) -> Result<String, AntiForgeryError> {
+        let af = Self::new(session, identity)
+            .map_err(|err| AntiForgeryError::Internal(format!("Actix error: {:?}", err)))?;
+        af.validate_token(token)
     }
 }

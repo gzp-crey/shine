@@ -1,13 +1,18 @@
 use super::State;
 use actix_service::{Service, Transform};
-use actix_web::{
-    dev::{ServiceRequest, ServiceResponse},
-    web, HttpMessage,
-};
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use futures::future::{ok, FutureExt, LocalBoxFuture, Ready};
 use std::task::{Context, Poll};
 
-pub struct Trace;
+pub struct Trace {
+    state: State,
+}
+
+impl Trace {
+    pub fn new(state: State) -> Trace {
+        Trace { state }
+    }
+}
 
 impl<S, B: 'static> Transform<S> for Trace
 where
@@ -23,12 +28,16 @@ where
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ok(TraceMiddleware { service })
+        ok(TraceMiddleware {
+            state: self.state.clone(),
+            service,
+        })
     }
 }
 
 /// Signed cookie session middleware
 pub struct TraceMiddleware<S> {
+    state: State,
     service: S,
 }
 
@@ -47,13 +56,11 @@ where
         self.service.poll_ready(cx)
     }
 
-    fn call(&mut self, mut req: ServiceRequest) -> Self::Future {
-        if let Some(state) = req.extensions().get::<web::Data<State>>() {
-            if let Err(_) = state.try_reload_tera() {
-                log::info!("Failed to refresh tera");
-            } else {
-                log::info!("Tera refreshed");
-            }
+    fn call(&mut self, req: ServiceRequest) -> Self::Future {
+        if let Err(err) = self.state.try_reload_tera() {
+            log::info!("Failed to refresh tera: {:?}", err);
+        } else {
+            log::info!("Tera refreshed");
         }
 
         let fut = self.service.call(req);

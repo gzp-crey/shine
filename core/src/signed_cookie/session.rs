@@ -17,53 +17,55 @@ struct SessionDataInner {
     status: SessionStatus,
 }
 
-impl Default for SessionDataInner {
-    fn default() -> SessionDataInner {
-        SessionDataInner {
-            values: HashMap::default(),
-            status: SessionStatus::Unchanged,
-        }
-    }
-}
-
 /// Data associated to a session and persisted using signed cookies.
 #[derive(Debug)]
-pub struct SessionData<C>
+pub struct SessionData<O, C>
 where
+    O: SignedCookieOptions,
     C: 'static,
 {
     name: String,
     inner: Rc<RefCell<SessionDataInner>>,
     config: Rc<C>,
+    _options: PhantomData<O>,
 }
 
 //see https://github.com/rust-lang/rust/issues/26925
-impl<C> Clone for SessionData<C>
+impl<O, C> Clone for SessionData<O, C>
 where
+    O: SignedCookieOptions,
     C: 'static,
 {
-    fn clone(&self) -> SessionData<C> {
+    fn clone(&self) -> SessionData<O, C> {
         SessionData {
             name: self.name.clone(),
             inner: self.inner.clone(),
             config: self.config.clone(),
+            _options: self._options.clone(),
         }
     }
 }
 
-impl<C> SessionData<C>
+impl<O, C> SessionData<O, C>
 where
+    O: SignedCookieOptions,
     C: 'static,
 {
-    pub(crate) fn empty(name: String, config: Rc<C>) -> SessionData<C> {
+    pub(crate) fn empty(name: String, config: Rc<C>) -> SessionData<O, C> {
+        log::debug!("Init [{}] cookie data to empty", name);
         SessionData {
             name,
-            inner: Rc::new(RefCell::new(Default::default())),
+            inner: Rc::new(RefCell::new(SessionDataInner {
+                values: HashMap::default(),
+                status: SessionStatus::Unchanged,
+            })),
             config,
+            _options: PhantomData,
         }
     }
 
-    pub(crate) fn new(name: String, values: HashMap<String, String>, config: Rc<C>) -> SessionData<C> {
+    pub(crate) fn new(name: String, values: HashMap<String, String>, config: Rc<C>) -> SessionData<O, C> {
+        log::debug!("Init [{}] cookie data with {:?}", name, values);
         SessionData {
             name,
             inner: Rc::new(RefCell::new(SessionDataInner {
@@ -71,6 +73,7 @@ where
                 status: SessionStatus::Unchanged,
             })),
             config,
+            _options: PhantomData,
         }
     }
 
@@ -97,6 +100,13 @@ where
         let mut inner = self.inner.borrow_mut();
         inner.status = SessionStatus::Changed;
         inner.values.insert(key.to_owned(), serde_json::to_string(&value)?);
+        log::debug!(
+            "Change [{}] cookie, set [{}] => {:?} ({:?})",
+            self.name,
+            key,
+            inner.status,
+            inner.values
+        );
         Ok(())
     }
 
@@ -105,6 +115,13 @@ where
         let mut inner = self.inner.borrow_mut();
         inner.status = SessionStatus::Changed;
         inner.values.remove(key);
+        log::debug!(
+            "Change [{}] cookie, remove [{}] => {:?} ({:?})",
+            self.name,
+            key,
+            inner.status,
+            inner.values
+        );
     }
 
     /// Clear the session.
@@ -112,12 +129,24 @@ where
         let mut inner = self.inner.borrow_mut();
         inner.status = SessionStatus::Changed;
         inner.values.clear();
+        log::debug!(
+            "Change [{}] cookie, clear => {:?} ({:?})",
+            self.name,
+            inner.status,
+            inner.values
+        );
     }
 
     /// Renews the session key, assigning existing session values to new key.
     pub fn renew(&self) {
         let mut inner = self.inner.borrow_mut();
         inner.status = SessionStatus::Changed;
+        log::debug!(
+            "Change [{}] cookie, renew => {:?} ({:?})",
+            self.name,
+            inner.status,
+            inner.values
+        );
     }
 
     pub fn is_changed(&self) -> bool {
@@ -133,7 +162,11 @@ where
 
     /// Return the changes in cookie state, or None if session requires no update
     pub(crate) fn into_change(&self) -> Option<HashMap<String, String>> {
-        let SessionDataInner { values, status } = self.inner.replace(Default::default());
+        let SessionDataInner { values, status } = self.inner.replace(SessionDataInner {
+            values: HashMap::default(),
+            status: SessionStatus::Unchanged,
+        });
+        log::trace!("Cookie values for {}: {:?} ({:?})", self.name, status, values);
         match status {
             SessionStatus::Unchanged => None,
             SessionStatus::Changed => Some(values),
@@ -143,14 +176,14 @@ where
 
 /// Extractor to access signed cookies (session) from the request handlers. The type_id of the generic C type
 /// is used to look up the sessions from the request.
-pub struct Session<O: SignedCookieOptions, C: 'static>(SessionData<C>, PhantomData<O>);
+pub struct Session<O: SignedCookieOptions, C: 'static>(SessionData<O, C>, PhantomData<O>);
 
 impl<O, C> Deref for Session<O, C>
 where
     O: SignedCookieOptions,
     C: 'static,
 {
-    type Target = SessionData<C>;
+    type Target = SessionData<O, C>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -169,11 +202,11 @@ where
     #[inline]
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let extensions = req.extensions();
-        if let Some(data) = extensions.get::<SessionData<C>>() {
+        if let Some(data) = extensions.get::<SessionData<O, C>>() {
             ok(Session(data.clone(), PhantomData))
         } else {
             err(ErrorInternalServerError(
-                "SignedCookie is not configured, to configure use App::wrap(SignCookie::new()...)",
+                "SignedCookie is not configured, to configure use App::wrap(SignedCookie::new(...))",
             ))
         }
     }

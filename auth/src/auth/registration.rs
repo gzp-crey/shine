@@ -13,10 +13,12 @@ use shine_core::{
 };
 use tera::Tera;
 
+#[derive(Debug)]
 pub enum RegistrationError {
     Username(String),
     Email(String),
     Password(String),
+    Recaptcha(String),
     Server(String),
 }
 
@@ -48,6 +50,17 @@ fn gen_page(
     context.insert("password", params.map(|p| p.password.as_str()).unwrap_or(""));
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
 
+    log::info!("page error: {:?}", err);
+
+    match err {
+        None => {}
+        Some(RegistrationError::Username(ref err)) => context.insert("name_error", err),
+        Some(RegistrationError::Email(ref err)) => context.insert("email_error", err),
+        Some(RegistrationError::Password(ref err)) => context.insert("password_error", err),
+        Some(RegistrationError::Server(ref err)) => context.insert("server_error", err),
+        Some(RegistrationError::Recaptcha(ref err)) => context.insert("recaptcha_error", err),
+    };
+
     let html = tera.render("register.html", &context).map_err(|err| {
         log::error!("Tera render error: {:?}", err);
         PageError::Internal(format!("Template error"))
@@ -58,12 +71,10 @@ fn gen_page(
 
 pub async fn get_register_page(state: web::Data<State>, af_session: AntiForgerySession) -> PageResult {
     log::info!("get_register_page");
-    let af_issuer = AntiForgeryIssuer::new(&af_session, None);
     let keys = Keys {
-        af: af_issuer.token().to_owned(),
+        af: AntiForgeryIssuer::issue(&af_session, None),
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
-
     gen_page(&*state.tera(), &keys, None, None)
 }
 
@@ -83,22 +94,20 @@ pub async fn post_register_page(
     let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
     log::info!("post_register_user {:?} {:?}", params, fingerprint);
 
-    let keys = {
-        state
-            .recaptcha()
-            .check_response(&params.recaptcha_response)
-            .await
-            .map_err(|_| PageError::RedirectTo("register.html".to_owned()))?;
-        let af_validator = AntiForgeryValidator::new(&af_session, AntiForgeryIdentity::Ignore)
-            .map_err(|_| PageError::RedirectTo("register.html".to_owned()))?;
-        let token = af_validator
-            .validate(&params.af)
-            .map_err(|_| PageError::RedirectTo("register.html".to_owned()))?;
-        Keys {
-            af: token.to_owned(),
-            recaptcha_site_key: state.recaptcha().site_key().to_owned(),
-        }
+    let keys = Keys {
+        af: AntiForgeryValidator::validate(&af_session, &params.af, AntiForgeryIdentity::Ignore)
+            .map_err(|err| PageError::RedirectOnError(format!("AF: {:?}", err), "register.html".to_owned()))?,
+        recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
+
+    if let Err(err) = state.recaptcha().check_response(&params.recaptcha_response).await {
+        return gen_page(
+            &*state.tera(),
+            &keys,
+            Some(&params),
+            Some(RegistrationError::Recaptcha(format!("{:?}", err))),
+        );
+    }
 
     IdentityCookie::clear(&identity_session);
 
@@ -108,43 +117,20 @@ pub async fn post_register_page(
         .await
     {
         Ok(ok) => {
-            println!("{:?}", ok);
+            log::info!("user registered: {:?}", ok);
             ok
         }
-        Err(IAMError::NameInvalid(err)) => {
-            return gen_page(
-                &*state.tera(),
-                &keys,
-                Some(&params),
-                Some(RegistrationError::Username(err)),
-            )
+        Err(err) => {
+            let error = match err {
+                IAMError::NameInvalid(err) => RegistrationError::Username(err),
+                IAMError::NameTaken => RegistrationError::Username("Already taken".to_owned()),
+                IAMError::EmailInvalid(err) => RegistrationError::Email(err),
+                IAMError::EmailTaken => RegistrationError::Email("Already taken".to_owned()),
+                err => RegistrationError::Server(format!("Server error: {:?}", err)),
+            };
+            return gen_page(&*state.tera(), &keys, Some(&params), Some(error));
         }
-        Err(IAMError::NameTaken) => {
-            return gen_page(
-                &*state.tera(),
-                &keys,
-                Some(&params),
-                Some(RegistrationError::Username("Already taken".to_owned())),
-            )
-        }
-        Err(IAMError::EmailInvalid(err)) => {
-            return gen_page(
-                &*state.tera(),
-                &keys,
-                Some(&params),
-                Some(RegistrationError::Email(err)),
-            )
-        }
-        Err(IAMError::EmailTaken) => {
-            return gen_page(
-                &*state.tera(),
-                &keys,
-                Some(&params),
-                Some(RegistrationError::Email("Already taken".to_owned())),
-            )
-        }
-        _ => return Err(PageError::RedirectTo("register.html".to_owned())),
-    };    
+    };
 
     create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;

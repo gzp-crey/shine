@@ -3,6 +3,23 @@
 
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+    integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+
+  <!-- Bootstrap scripts -->
+  <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"
+    integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
+    integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
+    crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"
+    integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
+    crossorigin="anonymous"></script>
+
+  <!-- Recaptcha -->
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 
@@ -11,27 +28,54 @@
   <h2>Register</h2>
 
   <form action="register.html" method="post" enctype="application/x-www-form-urlencoded">
-    <div class="container">
-      <label for="name"><b>Username</b></label>
-      
-      <input type="text" placeholder="Enter Username" name="name" value="{{name | safe}}" required>
+    {% if server_error %}
+    <label class="error">{{ server_error }}</label>
+    {% endif %}
 
-      <label for="email"><b>Email</b></label>
-      
-      <input type="text" placeholder="Enter Email" name="email" value="{{email | safe}}">
-      
+    <div class="form-group row">
+      <label for="name" class="col-sm-2 col-form-label">Username</label>
+      <div class="col-sm-10">
+        {% if name_error %}
+        <small id="nameHelp" class="form-text text-muted alert-danger">{{ name_error }}</small>
+        {% endif %}
 
-      <label for="password"><b>Password</b></label>
-      
-      <input type="password" placeholder="Enter Password" name="password" value="{{password | safe}}" required>
-      <label for="password_check"><b>Password confirmation</b></label>
-      <input type="password" placeholder="Enter Password" name="password_check" required>
-
-      <input type="hidden" name="af" value="{{af_token}}">
-      <div class="g-recaptcha" data-sitekey="{{recaptcha_site_key}}"></div>
-
-      <button type="submit">Register</button>
+        <input required type="text" name="name" value="{{name | safe}}" class="form-control"
+          placeholder="Enter Username" aria-describedby="nameHelp">
+      </div>
     </div>
+
+    <div class="form-group row">
+      <label for="email" class="col-sm-2 col-form-label">Email</label>
+      <div class="col-sm-10">
+        {% if email_error %}
+        <small id="emailHelp" class="form-text text-muted alert-danger">{{ email_error }}</small>
+        {% endif %}
+        <input type="text" name="email" value="{{email | safe}}" class="form-control" placeholder="Enter Email"
+          aria-describedby="emailHelp">
+      </div>
+    </div>
+
+    <div class="form-group row">
+      <label for="password" class="col-sm-2 col-form-label">Password</label>
+      <div class="col-sm-10">
+        {% if password_error %}
+        <small id="passwordHelp" class="form-text text-muted alert-danger">{{ password_error }}</small>
+        {% endif %}
+        <input required type="password" placeholder="Enter Password" name="password" value="{{password | safe}}"
+          aria-describedby="passwordHelp"> <br>
+        <input required type="password" placeholder="Confirm Password" name="password_check">
+      </div>
+    </div>
+
+    <div class="form-group">
+      {% if recaptcha_error %}
+      <label class="error">{{ recaptcha_error }}</label>
+      {% endif %}
+      <div class="g-recaptcha" data-sitekey="{{recaptcha_site_key}}"></div>
+    </div>
+
+    <input type="hidden" name="af" value="{{af_token}}">
+    <button type="submit" class="btn btn-primary">Register</button>
   </form>
 
 </body>
