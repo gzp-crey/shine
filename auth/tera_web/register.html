@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <!-- Styles -->
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.8/css/all.css">
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
     integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
 
@@ -21,61 +22,91 @@
 
   <!-- Recaptcha -->
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+  <script lang="js">
+    function remove_validation(element) {
+      var classList = element.classList;
+      classList.remove('is-invalid');
+      classList.remove('is-valid');
+    }
+
+    function validation_password() {
+      var psw = document.getElementById("password");
+      var cpsw = document.getElementById("password_check");
+      var psw_err = document.getElementById("password_error");
+      if (psw.value != cpsw.value) {
+        cpsw.classList.add('is-invalid');
+        cpsw.classList.remove('is-valid');
+      }
+      else {
+        cpsw.classList.add('is-valid');
+        cpsw.classList.remove('is-invalid');
+      }
+    }
+  </script>
 </head>
 
-<body>
+<body onload="document.FormName.reset();">
 
-  <h2>Register</h2>
+  <div class="container">
+    <div class="row">
+      <div class="col-md-12 min-vh-100 d-flex flex-column justify-content-center">
+        <div class="row">
+          <div class="col-lg-6 col-md-8 mx-auto">
+            <!-- form card login -->
+            <div class="card rounded shadow shadow-sm">
+              <div class="card-header">
+                <h3 class="text-center">Create Account</h3>
+              </div>
+              <div class="card-body">
+                <form id="registerForm" method="post" action="register.html"
+                  enctype="application/x-www-form-urlencoded">
 
-  <form action="register.html" method="post" enctype="application/x-www-form-urlencoded">
-    {% if server_error %}
-    <label class="error">{{ server_error }}</label>
-    {% endif %}
+                  <div class="form-group input-group">
+                    <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-user"></i></span>
+                    </div>
+                    <input type="text" name="name" id="name" required class="form-control {{ name_validity }}"
+                      placeholder="User name" value = "{{ name }}" onchange="remove_validation(this)">
+                    <div class="invalid-feedback">{{ name_error }}</div>
+                  </div>
 
-    <div class="form-group row">
-      <label for="name" class="col-sm-2 col-form-label">Username</label>
-      <div class="col-sm-10">
-        {% if name_error %}
-        <small id="nameHelp" class="form-text text-muted alert-danger">{{ name_error }}</small>
-        {% endif %}
+                  <div class="form-group input-group">
+                    <div class="input-group-prepend"><span class="input-group-text"><i
+                          class="fa fa-envelope"></i></span></div>
+                    <input type="text" name="email" id="email" class="form-control {{ email_validity }}"
+                      placeholder="Email" value = "{{ email }}" onchange="remove_validation(this)">
+                    <div class="invalid-feedback">{{ email_error }}</div>
+                  </div>
 
-        <input required type="text" name="name" value="{{name | safe}}" class="form-control"
-          placeholder="Enter Username" aria-describedby="nameHelp">
+                  <div class="form-group input-group">
+                    <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-unlock"></i></span></div>
+                    <input type="password" name="password" id="password" required
+                      class="form-control {{ password_validity }}" placeholder=Password" value = "{{ password }}"
+                      onchange="validation_password()" required>
+                    <div class="input-group-append"><span class="input-group-text"><i class="fa fa-eye-slash"></i></span></div>
+                    <div class="invalid-feedback" id="password_error">{{ password_error }}</div>
+                  <!-- </div>
+                  <div class="form-group input-group"> -->
+                    <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-unlock"></i></span></div>
+                    <input type="password" name="password_check" id="password_check" required class="form-control"
+                      placeholder="Confirm password" onchange="validation_password()">
+                    <div class="input-group-append"><span class="input-group-text"><i class="fa fa-eye-slash"></i></span></div>
+                    <div class="invalid-feedback" id="password_check_error">Password does not match</div>
+                  </div>
+
+                  <div class="form-group input-group">
+                    <div class="g-recaptcha" data-sitekey="{{recaptcha_site_key}}"></div>
+                  </div>
+
+                  <input type="hidden" name="af" value="{{af_token}}">
+                  <button type="submit" class="btn btn-lg btn-primary btn-block" id="btnRegister">Register</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-
-    <div class="form-group row">
-      <label for="email" class="col-sm-2 col-form-label">Email</label>
-      <div class="col-sm-10">
-        {% if email_error %}
-        <small id="emailHelp" class="form-text text-muted alert-danger">{{ email_error }}</small>
-        {% endif %}
-        <input type="text" name="email" value="{{email | safe}}" class="form-control" placeholder="Enter Email"
-          aria-describedby="emailHelp">
-      </div>
-    </div>
-
-    <div class="form-group row">
-      <label for="password" class="col-sm-2 col-form-label">Password</label>
-      <div class="col-sm-10">
-        {% if password_error %}
-        <small id="passwordHelp" class="form-text text-muted alert-danger">{{ password_error }}</small>
-        {% endif %}
-        <input required type="password" placeholder="Enter Password" name="password" value="{{password | safe}}"
-          aria-describedby="passwordHelp"> <br>
-        <input required type="password" placeholder="Confirm Password" name="password_check">
-      </div>
-    </div>
-
-    <div class="form-group">
-      {% if recaptcha_error %}
-      <label class="error">{{ recaptcha_error }}</label>
-      {% endif %}
-      <div class="g-recaptcha" data-sitekey="{{recaptcha_site_key}}"></div>
-    </div>
-
-    <input type="hidden" name="af" value="{{af_token}}">
-    <button type="submit" class="btn btn-primary">Register</button>
-  </form>
+  </div>
 
 </body>

@@ -49,14 +49,36 @@ fn gen_page(
     context.insert("email", params.map(|p| p.email.as_str()).unwrap_or(""));
     context.insert("password", params.map(|p| p.password.as_str()).unwrap_or(""));
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
+    context.insert("name_error", "");
+    context.insert("email_error", "");
+    context.insert("password_error", "");
+    context.insert("server_error", "");
+    context.insert("recaptcha_error", "");
+    if params.is_none() {
+        context.insert("name_validity", "");
+        context.insert("email_validity", "");
+        context.insert("password_validity", "");
+    } else {
+        context.insert("name_validity", "is-valid");
+        context.insert("email_validity", "is-valid");
+        context.insert("password_validity", "is-valid");
+    }
 
     log::info!("page error: {:?}", err);
-
     match err {
         None => {}
-        Some(RegistrationError::Username(ref err)) => context.insert("name_error", err),
-        Some(RegistrationError::Email(ref err)) => context.insert("email_error", err),
-        Some(RegistrationError::Password(ref err)) => context.insert("password_error", err),
+        Some(RegistrationError::Username(ref err)) => {
+            context.insert("name_validity", "is-invalid");
+            context.insert("name_error", err);
+        }
+        Some(RegistrationError::Email(ref err)) => {
+            context.insert("email_validity", "is-invalid");
+            context.insert("email_error", err);
+        }
+        Some(RegistrationError::Password(ref err)) => {
+            context.insert("password_validity", "is-invalid");
+            context.insert("password_error", err);
+        }
         Some(RegistrationError::Server(ref err)) => context.insert("server_error", err),
         Some(RegistrationError::Recaptcha(ref err)) => context.insert("recaptcha_error", err),
     };

@@ -103,6 +103,7 @@ pub struct AuthService {
 
 impl AuthService {
     pub fn create(sys: &mut SystemRunner, config: &AuthConfig) -> Result<AuthService, AuthCreateError> {
+        log::info!("Parsing tera templates");
         let tera = Tera::new(&config.tera_templates).map_err(|err| AuthCreateError::ConfigureTera(err.into()))?;
 
         let recaptcha = Recaptcha::new(config.recaptcha_secret.clone(), config.recaptcha_site_key.clone());
