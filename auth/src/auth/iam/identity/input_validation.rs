@@ -3,27 +3,27 @@ use shine_core::azure_utils::{decode_safe_key, encode_safe_key};
 use unicode_security::GeneralSecurityProfile;
 use validator::validate_email;
 
-pub struct NameValidationError(pub String);
+#[derive(Debug, Clone)]
+pub enum NameValidationError {
+    TooShort,
+    TooLong,
+    InvalidCharacter,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ValidatedName(String);
 
 impl ValidatedName {
+    pub const MIN_LEN: usize = 3;
+    pub const MAX_LEN: usize = 30;
+
     pub fn from_raw(raw: &str) -> Result<ValidatedName, NameValidationError> {
-        const MIN_LEN: usize = 3;
-        const MAX_LEN: usize = 30;
         if !raw.chars().all(GeneralSecurityProfile::identifier_allowed) {
-            Err(NameValidationError(format!("Contains disallowed characters")))
-        } else if raw.chars().skip(MIN_LEN - 1).next().is_none() {
-            Err(NameValidationError(format!(
-                "Too short, required min length: {}",
-                MIN_LEN
-            )))
-        } else if raw.chars().skip(MAX_LEN).next().is_some() {
-            Err(NameValidationError(format!(
-                "Too long, required max length: {}",
-                MAX_LEN
-            )))
+            Err(NameValidationError::InvalidCharacter)
+        } else if raw.chars().skip(Self::MIN_LEN - 1).next().is_none() {
+            Err(NameValidationError::TooShort)
+        } else if raw.chars().skip(Self::MAX_LEN).next().is_some() {
+            Err(NameValidationError::TooLong)
         } else {
             Ok(ValidatedName(encode_safe_key(raw)))
         }
@@ -43,7 +43,11 @@ impl ValidatedName {
     }
 }
 
-pub struct EmailValidationError(pub String);
+#[derive(Debug, Clone)]
+pub enum EmailValidationError {
+    InvalidFormat,
+    //UnsupportDomain(String),
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ValidatedEmail(String);
@@ -51,7 +55,7 @@ pub struct ValidatedEmail(String);
 impl ValidatedEmail {
     pub fn from_raw(raw: &str) -> Result<ValidatedEmail, EmailValidationError> {
         if !validate_email(raw) {
-            Err(EmailValidationError(format!("Invalid email")))
+            Err(EmailValidationError::InvalidFormat)
         } else {
             Ok(ValidatedEmail(encode_safe_key(&raw.to_string())))
         }
@@ -71,25 +75,25 @@ impl ValidatedEmail {
     }
 }
 
-pub struct PasswordValidationError(pub String);
+#[derive(Debug, Clone)]
+pub enum PasswordValidationError {
+    TooShort,
+    TooLong,
+    //TooWeek
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ValidatedPassword(String);
 
 impl ValidatedPassword {
+    pub const MIN_LEN: usize = 3;
+    pub const MAX_LEN: usize = 30;
+
     pub fn from_raw(raw: &str, /*, strength: PasswordStrength*/) -> Result<ValidatedPassword, PasswordValidationError> {
-        const MIN_LEN: usize = 3;
-        const MAX_LEN: usize = 30;
-        if raw.chars().skip(MIN_LEN - 1).next().is_none() {
-            Err(PasswordValidationError(format!(
-                "Too short, required min length: {}",
-                MIN_LEN
-            )))
-        } else if raw.chars().skip(MAX_LEN).next().is_some() {
-            Err(PasswordValidationError(format!(
-                "Too long, required max length: {}",
-                MAX_LEN
-            )))
+        if raw.chars().skip(Self::MIN_LEN - 1).next().is_none() {
+            Err(PasswordValidationError::TooShort)
+        } else if raw.chars().skip(Self::MAX_LEN).next().is_some() {
+            Err(PasswordValidationError::TooLong)
         } else {
             Ok(ValidatedPassword(raw.to_owned()))
         }

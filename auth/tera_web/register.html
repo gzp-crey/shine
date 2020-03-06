@@ -2,8 +2,10 @@
 <html class="h-100">
 
 <head>
-  <title>Registration</title>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Registration</title>
 
   <!-- Styles -->
   <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.8/css/all.css">
@@ -25,10 +27,34 @@
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
   <script type="application/javascript">
+    user_name_min_len = "{{ user_name_min_len }}";
+    user_name_max_len = "{{ user_name_max_len }}";
+    password_min_len = "{{ password_min_len }}";
+    password_max_len = "{{ password_max_len }}";
+
+    user_name_too_short = "Too short, required min length: {{ user_name_min_len }}";
+    user_name_too_long = "Too long, required max length: {{ user_name_max_len }}";
+    user_name_already_taken = "User name already in use";
+    email_invalid_format = "Invalid email format";
+    email_already_taken = "Email already in use";
+    password_too_short = "Too short, required min length: {{ password_min_len }}";
+    password_too_long = "Too long, required max length: {{ password_max_len }}";
+  </script>
+
+  <script type="application/javascript">
+    function set_valid(element) {
+      element.classList.remove('is-invalid');
+      element.classList.add('is-valid');
+    }
+
+    function set_invalid(element) {
+      element.classList.remove('is-valid');
+      element.classList.add('is-invalid');
+    }
+
     function remove_validation(element) {
-      var classList = element.classList;
-      classList.remove('is-invalid');
-      classList.remove('is-valid');
+      element.classList.remove('is-invalid');
+      element.classList.remove('is-valid');
     }
 
     function show_hide_password() {
@@ -44,15 +70,76 @@
       }
     }
 
-    function validateForm() {
-      if( [...user_name.value].length < 3)
-      {
-        user_name.classList.add('is-invalid');
-        user_name_error.innerHTML = "Too short, required min length: 3";
-        return false;
-      }
+    function validateEmail(email) {
+      //https://www.w3resource.com/javascript/form/email-validation.php
+      return (/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email));
     }
+
+    function validateForm(load = false) {
+      var result = true;
+
+      var user_name_len = [...user_name.value].length;
+      if ((!load && user_name_len < user_name_min_len) || (load && "{{ user_name_error }}" == "too_short")) {
+        result = false;
+        set_invalid(user_name);
+        user_name_error.innerHTML = user_name_too_short;
+      }
+      else if ((!load && user_name_len > user_name_max_len) || (load && "{{ user_name_error }}" == "too_long")) {
+        result = false;
+        set_invalid(user_name);
+        user_name_error.innerHTML = user_name_too_long;
+      }
+      else if (load && "{{ user_name_error }}" == "alread_taken") {
+        result = false;
+        set_invalid(user_name);
+        user_name_error.innerHTML = user_name_already_taken;
+      }
+      else if (!load) {
+        set_valid(user_name);
+      }
+
+      if ((email.value && !load && !validateEmail(email.value)) || (load && "{{ email_error }}" == "invalid_format")) {
+        result = false;
+        set_invalid(email);
+        email_error.innerHTML = email_invalid_format;
+      }
+      else if (load && "{{ email_error }}" == "alread_taken") {
+        result = false;
+        set_invalid(email);
+        email_error.innerHTML = email_already_taken;
+      }
+      else if (!load) {
+        set_valid(email);
+      }
+
+      var password_len = [...password.value].length;
+      if ((!load && password_len < password_min_len) || (load && "{{ password_error }}" == "too_short")) {
+        result = false;
+        set_invalid(password);
+        password_error.innerHTML = password_too_short;
+      }
+      else if ((!load && password_len > password_max_len) || (load && "{{ password_error }}" == "too_long")) {
+        result = false;
+        set_invalid(password);
+        password_error.innerHTML = password_too_long;
+      }
+      else if (!load) {
+        set_valid(password);
+      }
+
+      return result;
+    }
+
+
+    $(document).ready(function () {
+      if ("{{ accept_terms }}" == "true") {
+        accept_terms.checked = true
+      }
+
+      validateForm(true);
+    })
   </script>
+
 </head>
 
 <body class="h-100">
@@ -65,7 +152,7 @@
             <h3 class="text-center">Create Account</h3>
           </div>
           <div class="card-body">
-            <form id="registerForm" method="post" onsubmit="return validateForm()" action="register.html"
+            <form id="registerForm" method="post" onsubmit="return validateForm(false)" action="register.html"
               enctype="application/x-www-form-urlencoded">
 
               <div class="form-group input-group">
@@ -73,31 +160,36 @@
                   <span class="input-group-text"><i class="fa fa-user"></i>
                   </span>
                 </div>
-                <input type="text" name="user_name" id="user_name" required class="form-control is-pending{{ user_name_validity }}"
-                  placeholder="User name" value="{{ user_name }}" onchange="remove_validation(this)">
-                <div class="invalid-feedback">{{ user_name_error }}</div>
+                <input type="text" name="user_name" id="user_name" class="form-control" placeholder="User name"
+                  value="{{ user_name }}" onchange="remove_validation(this)" required>
+                <div class="invalid-feedback" id="user_name_error"></div>
               </div>
 
               <div class="form-group input-group">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-envelope"></i></span>
                 </div>
-                <input type="text" name="email" id="email" class="form-control {{ email_validity }}" placeholder="Email"
-                  value="{{ email }}" onchange="remove_validation(this)">
-                <div class="invalid-feedback" id="email_error">{{ email_error }}</div>
+                <input type="text" name="email" id="email" class="form-control" placeholder="Email" value="{{ email }}"
+                  onchange="remove_validation(this)">
+                <div class="invalid-feedback" id="email_error"></div>
               </div>
 
               <div class="form-group input-group">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-unlock"></i></span>
                 </div>
-                <input type="password" name="password" id="password" required
-                  class="form-control {{ password_validity }}" placeholder="Password" value="{{ password }}"
-                  onchange="remove_validation(this)">
+                <input type="password" name="password" id="password" class="form-control" placeholder="Password"
+                  value="{{ password }}" onchange="remove_validation(this)" required>
                 <div class="input-group-append" onclick="show_hide_password()">
                   <span class="input-group-text"><i id="password_eye" class="fa fa-eye-slash"></i></span>
                 </div>
-                <div class="invalid-feedback" id="password_error">{{ password_error }}</div>
+                <div class="invalid-feedback" id="password_error"></div>
+              </div>
+
+              <div class="form-check input-group">
+                <input type="checkbox" name="accept_terms" id="accept_terms" class="form-check-input" value="true"
+                  onchange="remove_validation(this)" required>
+                I accept the <a href="">Terms of Service and Privacy Policy</a>
               </div>
 
               <div class="form-group input-group">
@@ -113,3 +205,5 @@
     </div>
   </div>
 </body>
+
+</html>

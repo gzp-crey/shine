@@ -17,18 +17,18 @@ pub(crate) fn create_user_id(user: UserIdentity, roles: InheritedRoles) -> Resul
 
 impl From<NameValidationError> for APIError {
     fn from(err: NameValidationError) -> APIError {
-        APIError::BadRequest(format!("Invalid name: {}", err.0))
+        APIError::BadRequest(format!("Invalid name: {:?}", err))
     }
 }
 
 impl From<EmailValidationError> for APIError {
     fn from(err: EmailValidationError) -> APIError {
-        APIError::BadRequest(format!("Invalid email: {}", err.0))
+        APIError::BadRequest(format!("Invalid email: {:?}", err))
     }
 }
 
 impl From<PasswordValidationError> for APIError {
     fn from(err: PasswordValidationError) -> APIError {
-        APIError::BadRequest(format!("Invalid password: {}", err.0))
+        APIError::BadRequest(format!("Invalid password: {:?}", err))
     }
 }
