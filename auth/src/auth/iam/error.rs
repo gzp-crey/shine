@@ -15,11 +15,11 @@ pub enum IAMError {
     Internal(String),
     BadRequest(String),
 
-    NameInvalid(String),
     NameTaken,
-    EmailInvalid(String),
+    //NameInvalid,
     EmailTaken,
-
+    //EmailInvalid,
+    //PasswordInvalid,
     SequenceIdTaken,
     IdentityIdConflict,
     IdentityNotFound,

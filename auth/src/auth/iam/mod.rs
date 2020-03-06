@@ -14,7 +14,7 @@ pub mod session;
 pub use self::error::*;
 
 use fingerprint::Fingerprint;
-use identity::{Identity, IdentityManager, UserIdentity};
+use identity::{Identity, IdentityManager, UserIdentity, ValidatedEmail, ValidatedName, ValidatedPassword};
 use role::{InheritedRoles, RoleManager, Roles};
 use session::{Session, SessionManager};
 
@@ -81,9 +81,9 @@ impl IAM {
 
     pub async fn register_user(
         &self,
-        name: &str,
-        email: Option<&str>,
-        password: &str,
+        name: ValidatedName,
+        email: Option<ValidatedEmail>,
+        password: ValidatedPassword,
         fingerprint: &Fingerprint,
     ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
         let identity = self.identity.create_user(name, email, password).await?;
@@ -97,14 +97,18 @@ impl IAM {
 
     pub async fn login_name_email(
         &self,
-        name_email: &str,
-        password: &str,
+        raw_name_email: &str,
+        password: &ValidatedPassword,
         fingerprint: &Fingerprint,
     ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
-        let identity = self
-            .identity
-            .find_user_by_name_email(name_email, Some(&password))
-            .await?;
+        let identity = if let Ok(email) = ValidatedEmail::from_raw(&raw_name_email) {
+            self.identity.find_user_by_email(&email, Some(password)).await?
+        } else if let Ok(name) = ValidatedName::from_raw(&raw_name_email) {
+            self.identity.find_user_by_name(&name, Some(password)).await?
+        } else {
+            return Err(IAMError::IdentityNotFound);
+        };
+
         let session = self.session.create_session(&identity, fingerprint).await?;
         let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 

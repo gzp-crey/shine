@@ -1,4 +1,4 @@
-use super::{CoreIdentityIndexedData, EncodedName, Identity, IndexIdentityData, IndexIdentityEntity};
+use super::{CoreIdentityIndexedData, Identity, IndexIdentityData, IndexIdentityEntity, ValidatedName};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +20,7 @@ impl IndexIdentityData for IndexNameData {
 pub type IndexName = IndexIdentityEntity<IndexNameData>;
 
 impl IndexName {
-    pub fn entity_keys(name: &EncodedName) -> (String, String) {
+    pub fn entity_keys(name: &ValidatedName) -> (String, String) {
         (format!("x_name-{}", name.prefix(2)), name.as_str().to_owned())
     }
 

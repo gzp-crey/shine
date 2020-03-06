@@ -1,4 +1,4 @@
-use super::{EncodedEmail, EncodedName};
+use super::{ValidatedEmail, ValidatedName};
 use azure_sdk_storage_table::TableEntity;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -18,8 +18,8 @@ pub struct CoreIdentityData {
     pub sequence_id: u64,
     pub salt: String,
     pub category: IdentityCategory,
-    pub name: EncodedName,
-    pub email: Option<EncodedEmail>,
+    pub name: ValidatedName,
+    pub email: Option<ValidatedEmail>,
     pub email_validated: bool,
 }
 

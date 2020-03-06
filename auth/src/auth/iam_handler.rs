@@ -1,4 +1,7 @@
-use super::iam::IAMError;
+use super::iam::{
+    identity::{ValidatedEmail, ValidatedName, ValidatedPassword},
+    IAMError,
+};
 use super::utils::create_user_id;
 use super::State;
 use actix_web::{web, HttpResponse};
@@ -47,10 +50,11 @@ pub async fn register_user(
 
     IdentityCookie::clear(&identity_session);
 
-    let (identity, roles, session) = state
-        .iam()
-        .register_user(&params.name, params.email.as_deref(), &params.password, &fingerprint)
-        .await?;
+    let name = ValidatedName::from_raw(&params.name)?;
+    let email = params.email.map(|email| ValidatedEmail::from_raw(&email)).transpose()?;
+    let password = ValidatedPassword::from_raw(&params.password)?;
+
+    let (identity, roles, session) = state.iam().register_user(name, email, password, &fingerprint).await?;
 
     create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
@@ -66,11 +70,12 @@ pub async fn login_basic_auth(
 ) -> APIResult {
     let user_id = auth.user_id();
     let password = auth.password().ok_or(IAMError::PasswordNotMatching)?;
+    let password = ValidatedPassword::from_raw(&password)?;
     let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
 
     IdentityCookie::clear(&identity_session);
 
-    let (identity, roles, session) = state.iam().login_name_email(&user_id, password, &fingerprint).await?;
+    let (identity, roles, session) = state.iam().login_name_email(&user_id, &password, &fingerprint).await?;
 
     create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;

@@ -1,4 +1,6 @@
-use super::{CoreIdentityData, EncodedEmail, EncodedName, Identity, IdentityCategory, IdentityData, IdentityEntity};
+use super::{
+    CoreIdentityData, Identity, IdentityCategory, IdentityData, IdentityEntity, ValidatedEmail, ValidatedName,
+};
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
 
@@ -25,8 +27,8 @@ impl UserIdentity {
         id: String,
         sequence_id: u64,
         salt: String,
-        name: EncodedName,
-        email: Option<EncodedEmail>,
+        name: ValidatedName,
+        email: Option<ValidatedEmail>,
         password_hash: String,
     ) -> Self {
         let (partition_key, row_key) = Self::entity_keys(&id);

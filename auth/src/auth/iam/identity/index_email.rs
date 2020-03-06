@@ -1,5 +1,5 @@
 use super::{
-    CoreIdentityIndexedData, EncodedEmail, Identity, IdentityCategory, IndexIdentityData, IndexIdentityEntity,
+    CoreIdentityIndexedData, Identity, IdentityCategory, IndexIdentityData, IndexIdentityEntity, ValidatedEmail,
 };
 use azure_sdk_storage_table::TableEntity;
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ impl IndexIdentityData for IndexEmailData {
 pub type IndexEmail = IndexIdentityEntity<IndexEmailData>;
 
 impl IndexEmail {
-    pub fn entity_keys(cat: IdentityCategory, email: &EncodedEmail) -> (String, String) {
+    pub fn entity_keys(cat: IdentityCategory, email: &ValidatedEmail) -> (String, String) {
         match cat {
             IdentityCategory::User => (format!("x_user_email-{}", email.prefix(2)), email.as_str().to_owned()),
         }

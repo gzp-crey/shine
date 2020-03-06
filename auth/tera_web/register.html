@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html class="h-100">
 
 <head>
+  <title>Registration</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <!-- Styles -->
@@ -23,90 +24,92 @@
   <!-- Recaptcha -->
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-  <script lang="js">
+  <script type="application/javascript">
     function remove_validation(element) {
       var classList = element.classList;
       classList.remove('is-invalid');
       classList.remove('is-valid');
     }
 
-    function validation_password() {
-      var psw = document.getElementById("password");
-      var cpsw = document.getElementById("password_check");
-      var psw_err = document.getElementById("password_error");
-      if (psw.value != cpsw.value) {
-        cpsw.classList.add('is-invalid');
-        cpsw.classList.remove('is-valid');
+    function show_hide_password() {
+      console.log(password)
+      if (password.type == 'text') {
+        password.type = 'password';
+        password_eye.classList.add('fa-eye-slash');
+        password_eye.classList.remove('fa-eye');
+      } else if (password.type == 'password') {
+        password.type = 'text';
+        password_eye.classList.add('fa-eye');
+        password_eye.classList.remove('fa-eye-slash');
       }
-      else {
-        cpsw.classList.add('is-valid');
-        cpsw.classList.remove('is-invalid');
+    }
+
+    function validateForm() {
+      if( [...user_name.value].length < 3)
+      {
+        user_name.classList.add('is-invalid');
+        user_name_error.innerHTML = "Too short, required min length: 3";
+        return false;
       }
     }
   </script>
 </head>
 
-<body onload="document.FormName.reset();">
+<body class="h-100">
 
-  <div class="container">
-    <div class="row">
-      <div class="col-md-12 min-vh-100 d-flex flex-column justify-content-center">
-        <div class="row">
-          <div class="col-lg-6 col-md-8 mx-auto">
-            <!-- form card login -->
-            <div class="card rounded shadow shadow-sm">
-              <div class="card-header">
-                <h3 class="text-center">Create Account</h3>
+  <div class="container h-100">
+    <div class="row h-100 justify-content-center align-items-center">
+      <div class="col-10 col-md-8 col-lg-6">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="text-center">Create Account</h3>
+          </div>
+          <div class="card-body">
+            <form id="registerForm" method="post" onsubmit="return validateForm()" action="register.html"
+              enctype="application/x-www-form-urlencoded">
+
+              <div class="form-group input-group">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fa fa-user"></i>
+                  </span>
+                </div>
+                <input type="text" name="user_name" id="user_name" required class="form-control is-pending{{ user_name_validity }}"
+                  placeholder="User name" value="{{ user_name }}" onchange="remove_validation(this)">
+                <div class="invalid-feedback">{{ user_name_error }}</div>
               </div>
-              <div class="card-body">
-                <form id="registerForm" method="post" action="register.html"
-                  enctype="application/x-www-form-urlencoded">
 
-                  <div class="form-group input-group">
-                    <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-user"></i></span>
-                    </div>
-                    <input type="text" name="name" id="name" required class="form-control {{ name_validity }}"
-                      placeholder="User name" value = "{{ name }}" onchange="remove_validation(this)">
-                    <div class="invalid-feedback">{{ name_error }}</div>
-                  </div>
-
-                  <div class="form-group input-group">
-                    <div class="input-group-prepend"><span class="input-group-text"><i
-                          class="fa fa-envelope"></i></span></div>
-                    <input type="text" name="email" id="email" class="form-control {{ email_validity }}"
-                      placeholder="Email" value = "{{ email }}" onchange="remove_validation(this)">
-                    <div class="invalid-feedback">{{ email_error }}</div>
-                  </div>
-
-                  <div class="form-group input-group">
-                    <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-unlock"></i></span></div>
-                    <input type="password" name="password" id="password" required
-                      class="form-control {{ password_validity }}" placeholder=Password" value = "{{ password }}"
-                      onchange="validation_password()" required>
-                    <div class="input-group-append"><span class="input-group-text"><i class="fa fa-eye-slash"></i></span></div>
-                    <div class="invalid-feedback" id="password_error">{{ password_error }}</div>
-                  <!-- </div>
-                  <div class="form-group input-group"> -->
-                    <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-unlock"></i></span></div>
-                    <input type="password" name="password_check" id="password_check" required class="form-control"
-                      placeholder="Confirm password" onchange="validation_password()">
-                    <div class="input-group-append"><span class="input-group-text"><i class="fa fa-eye-slash"></i></span></div>
-                    <div class="invalid-feedback" id="password_check_error">Password does not match</div>
-                  </div>
-
-                  <div class="form-group input-group">
-                    <div class="g-recaptcha" data-sitekey="{{recaptcha_site_key}}"></div>
-                  </div>
-
-                  <input type="hidden" name="af" value="{{af_token}}">
-                  <button type="submit" class="btn btn-lg btn-primary btn-block" id="btnRegister">Register</button>
-                </form>
+              <div class="form-group input-group">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fa fa-envelope"></i></span>
+                </div>
+                <input type="text" name="email" id="email" class="form-control {{ email_validity }}" placeholder="Email"
+                  value="{{ email }}" onchange="remove_validation(this)">
+                <div class="invalid-feedback" id="email_error">{{ email_error }}</div>
               </div>
-            </div>
+
+              <div class="form-group input-group">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fa fa-unlock"></i></span>
+                </div>
+                <input type="password" name="password" id="password" required
+                  class="form-control {{ password_validity }}" placeholder="Password" value="{{ password }}"
+                  onchange="remove_validation(this)">
+                <div class="input-group-append" onclick="show_hide_password()">
+                  <span class="input-group-text"><i id="password_eye" class="fa fa-eye-slash"></i></span>
+                </div>
+                <div class="invalid-feedback" id="password_error">{{ password_error }}</div>
+              </div>
+
+              <div class="form-group input-group">
+                <div class="g-recaptcha" data-sitekey="{{recaptcha_site_key}}"></div>
+              </div>
+
+              <input type="hidden" name="af" value="{{af_token}}">
+              <button type="submit" class="btn btn-lg btn-primary btn-block" id="btnRegister">Register</button>
+            </form>
           </div>
         </div>
       </div>
     </div>
   </div>
-
 </body>
