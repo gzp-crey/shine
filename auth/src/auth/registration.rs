@@ -50,7 +50,7 @@ async fn validate_input(
     let mut errors = Vec::new();
 
     // validate input
-    let name = match ValidatedName::from_raw(&params.name) {
+    let name = match ValidatedName::from_raw(&params.user_name) {
         Err(NameValidationError(msg)) => {
             errors.push(RegistrationError::Username(msg));
             None
