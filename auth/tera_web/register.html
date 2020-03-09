@@ -25,121 +25,6 @@
 
   <!-- Recaptcha -->
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-
-  <script type="application/javascript">
-    user_name_min_len = "{{ user_name_min_len }}";
-    user_name_max_len = "{{ user_name_max_len }}";
-    password_min_len = "{{ password_min_len }}";
-    password_max_len = "{{ password_max_len }}";
-
-    user_name_too_short = "Too short, required min length: {{ user_name_min_len }}";
-    user_name_too_long = "Too long, required max length: {{ user_name_max_len }}";
-    user_name_already_taken = "User name already in use";
-    email_invalid_format = "Invalid email format";
-    email_already_taken = "Email already in use";
-    password_too_short = "Too short, required min length: {{ password_min_len }}";
-    password_too_long = "Too long, required max length: {{ password_max_len }}";
-  </script>
-
-  <script type="application/javascript">
-    function set_valid(element) {
-      element.classList.remove('is-invalid');
-      element.classList.add('is-valid');
-    }
-
-    function set_invalid(element) {
-      element.classList.remove('is-valid');
-      element.classList.add('is-invalid');
-    }
-
-    function remove_validation(element) {
-      element.classList.remove('is-invalid');
-      element.classList.remove('is-valid');
-    }
-
-    function show_hide_password() {
-      console.log(password)
-      if (password.type == 'text') {
-        password.type = 'password';
-        password_eye.classList.add('fa-eye-slash');
-        password_eye.classList.remove('fa-eye');
-      } else if (password.type == 'password') {
-        password.type = 'text';
-        password_eye.classList.add('fa-eye');
-        password_eye.classList.remove('fa-eye-slash');
-      }
-    }
-
-    function validateEmail(email) {
-      //https://www.w3resource.com/javascript/form/email-validation.php
-      return (/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email));
-    }
-
-    function validateForm(load = false) {
-      var result = true;
-
-      var user_name_len = [...user_name.value].length;
-      if ((!load && user_name_len < user_name_min_len) || (load && "{{ user_name_error }}" == "too_short")) {
-        result = false;
-        set_invalid(user_name);
-        user_name_error.innerHTML = user_name_too_short;
-      }
-      else if ((!load && user_name_len > user_name_max_len) || (load && "{{ user_name_error }}" == "too_long")) {
-        result = false;
-        set_invalid(user_name);
-        user_name_error.innerHTML = user_name_too_long;
-      }
-      else if (load && "{{ user_name_error }}" == "alread_taken") {
-        result = false;
-        set_invalid(user_name);
-        user_name_error.innerHTML = user_name_already_taken;
-      }
-      else if (!load) {
-        set_valid(user_name);
-      }
-
-      if ((email.value && !load && !validateEmail(email.value)) || (load && "{{ email_error }}" == "invalid_format")) {
-        result = false;
-        set_invalid(email);
-        email_error.innerHTML = email_invalid_format;
-      }
-      else if (load && "{{ email_error }}" == "alread_taken") {
-        result = false;
-        set_invalid(email);
-        email_error.innerHTML = email_already_taken;
-      }
-      else if (!load) {
-        set_valid(email);
-      }
-
-      var password_len = [...password.value].length;
-      if ((!load && password_len < password_min_len) || (load && "{{ password_error }}" == "too_short")) {
-        result = false;
-        set_invalid(password);
-        password_error.innerHTML = password_too_short;
-      }
-      else if ((!load && password_len > password_max_len) || (load && "{{ password_error }}" == "too_long")) {
-        result = false;
-        set_invalid(password);
-        password_error.innerHTML = password_too_long;
-      }
-      else if (!load) {
-        set_valid(password);
-      }
-
-      return result;
-    }
-
-
-    $(document).ready(function () {
-      if ("{{ accept_terms }}" == "true") {
-        accept_terms.checked = true
-      }
-
-      validateForm(true);
-    })
-  </script>
-
 </head>
 
 <body class="h-100">
@@ -152,43 +37,40 @@
             <h3 class="text-center">Create Account</h3>
           </div>
           <div class="card-body">
-            <form id="registerForm" method="post" onsubmit="return validateForm(false)" action="register.html"
-              enctype="application/x-www-form-urlencoded">
+            <form id="registerForm" method="post" action="register.html" enctype="application/x-www-form-urlencoded">
 
-              <div class="form-group input-group">
+              <div class="form-group input-group" id="user_name" oninput="validateUsername()">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-user"></i>
                   </span>
                 </div>
-                <input type="text" name="user_name" id="user_name" class="form-control" placeholder="User name"
-                  value="{{ user_name }}" onchange="remove_validation(this)" required>
-                <div class="invalid-feedback" id="user_name_error"></div>
+                <input type="text" name="user_name" class="form-control" placeholder="User name"
+                  value="{{ user_name }}">
+                <div class="invalid-feedback"></div>
               </div>
 
-              <div class="form-group input-group">
+              <div class="form-group input-group" id="email" oninput="validateEmail()">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-envelope"></i></span>
                 </div>
-                <input type="text" name="email" id="email" class="form-control" placeholder="Email" value="{{ email }}"
-                  onchange="remove_validation(this)">
-                <div class="invalid-feedback" id="email_error"></div>
+                <input type="text" name="email" class="form-control" placeholder="Email" value="{{ email }}">
+                <div class="invalid-feedback"></div>
               </div>
 
-              <div class="form-group input-group">
+              <div class="form-group input-group" id="password" oninput="validatePassword()">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-unlock"></i></span>
                 </div>
-                <input type="password" name="password" id="password" class="form-control" placeholder="Password"
-                  value="{{ password }}" onchange="remove_validation(this)" required>
+                <input type="password" name="password" class="form-control" placeholder="Password"
+                  value="{{ password }}">
                 <div class="input-group-append" onclick="show_hide_password()">
-                  <span class="input-group-text"><i id="password_eye" class="fa fa-eye-slash"></i></span>
+                  <span class="input-group-text"><i class="fa fa-eye-slash"></i></span>
                 </div>
-                <div class="invalid-feedback" id="password_error"></div>
+                <div class="invalid-feedback"></div>
               </div>
 
-              <div class="form-check input-group">
-                <input type="checkbox" name="accept_terms" id="accept_terms" class="form-check-input" value="true"
-                  onchange="remove_validation(this)" required>
+              <div class="form-check input-group" id="terms" oninput="validateTerms()">
+                <input type="checkbox" name="accept_terms" class="form-check-input" value="true">
                 I accept the <a href="">Terms of Service and Privacy Policy</a>
               </div>
 
@@ -197,13 +79,237 @@
               </div>
 
               <input type="hidden" name="af" value="{{af_token}}">
-              <button type="submit" class="btn btn-lg btn-primary btn-block" id="btnRegister">Register</button>
+              <button type="submit" class="btn btn-lg btn-primary btn-block" onsubmit="validateForm()">Register</button>
             </form>
           </div>
         </div>
       </div>
     </div>
   </div>
+
+  <script type="application/javascript">
+    user_name_min_len = "{{ user_name_min_len }}";
+    user_name_max_len = "{{ user_name_max_len }}";
+    password_min_len = "{{ password_min_len }}";
+    password_max_len = "{{ password_max_len }}";
+
+    user_name_missing = "Please provide a valid username";
+    user_name_too_short = "Too short, required min length: {{ user_name_min_len }}";
+    user_name_too_long = "Too long, required max length: {{ user_name_max_len }}";
+    user_name_already_taken = "User name already in use";
+
+    email_invalid_format = "Invalid email format";
+    email_already_taken = "Email already in use";
+
+    password_missing = "Provide password";
+    password_too_short = "Too short, required min length: {{ password_min_len }}";
+    password_too_long = "Too long, required max length: {{ password_max_len }}";
+
+    terms_missing = "Accpet terms";
+
+    function set_valid(elementId, silent) {
+      console.log('valid: ' + silent + ' ' + elementId);
+      var element = document.querySelector('#' + elementId + ' input');
+      element.classList.remove('is-invalid');
+      if (silent) {
+        element.classList.remove('is-valid');
+      }
+      else {
+        element.classList.add('is-valid');
+      }
+      element.setCustomValidity('');
+
+      var element_error = document.querySelector('#' + elementId + ' .invalid-feedback');
+      if (element_error) {
+        element_error.innerHTML = '';
+      }
+    }
+
+    function set_invalid(elementId, silent, error_msg) {
+      console.log('invalid: ' + silent + ' ' + elementId);
+      var element = document.querySelector('#' + elementId + ' input');
+      element.classList.remove('is-valid');
+      if (silent) {
+        element.classList.remove('is-invalid');
+      }
+      else {
+        element.classList.add('is-invalid');
+      }
+      element.setCustomValidity(error_msg);
+
+      var element_error = document.querySelector('#' + elementId + ' .invalid-feedback');
+      if (element_error) {
+        element_error.innerHTML = error_msg;
+      }
+    }
+
+    function show_hide_password() {
+      if (password.type == 'text') {
+        password.type = 'password';
+        password_eye.classList.add('fa-eye-slash');
+        password_eye.classList.remove('fa-eye');
+      } else if (password.type == 'password') {
+        password.type = 'text';
+        password_eye.classList.add('fa-eye');
+        password_eye.classList.remove('fa-eye-slash');
+      }
+    }
+
+    function serverValidatedUsername() {
+      var id = 'user_name';
+
+      switch ('{{ user_name_validity }}') {
+        case 'too_short': set_invalid(id, false, user_name_too_short); break;
+        case 'too_long': set_invalid(id, false, user_name_too_long); break;
+        case 'already_taken': set_invalid(id, false, user_name_already_taken); break;
+        case 'accepted': set_valid(id, false); break;
+        default: validateUsername(); break;
+      }
+    }
+
+    function validateUsername() {
+      var id = 'user_name';
+
+      var userName = document.querySelector('#' + id + ' input').value;
+      var userNameLen = [...userName].length;
+
+      if (userNameLen == 0) {
+        set_invalid(id, true, user_name_missing);
+        return false;
+      }
+
+      if (userNameLen < user_name_min_len) {
+        set_invalid(id, false, user_name_too_short);
+        return false;
+      }
+
+      if (userNameLen > user_name_max_len) {
+        set_invalid(id, false, user_name_too_long);
+        return false;
+      }
+
+      set_valid(id, true)
+      return true;
+    }
+
+    function serverValidatedEmail() {
+      var id = 'email';
+
+      switch ('{{ email_validity }}') {
+        case 'invalid_format': set_invalid(id, false, email_invalid_format); break;
+        case 'already_taken': set_invalid(id, false, email_already_taken); break;
+        case 'accepted': set_valid(id, false); break;
+        default: validateEmail(); break;
+      }
+    }
+
+    function validateEmail() {
+      var id = 'email';
+
+      var email = document.querySelector('#' + id + ' input').value;
+      var emailLen = [...email].length;
+
+      if (email == email.length) {
+        set_valid(id, true);
+        return false;
+      }
+
+      //https://www.w3resource.com/javascript/form/email-validation.php
+      if (!(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email))) {
+        set_invalid(id, false, email_invalid_format);
+        return false;
+      }
+
+      set_valid(id, true)
+      return true;
+    }
+
+    function serverValidatedPassword() {
+      var id = 'password';
+
+      switch ('{{ password_validity }}') {
+        case 'too_short': set_invalid(id, false, password_too_short); break;
+        case 'too_long': set_invalid(id, false, password_too_long); break;
+        case 'week': set_invalid(id, false, password_too_weak); break;
+        case 'accepted': set_valid(id, false); break;
+        default: validatePassword(); break;
+      }
+    }
+
+    function validatePassword() {
+      var id = 'password';
+
+      var password = document.querySelector('#' + id + ' input').value;
+      var passwordLen = [...password].length;
+
+      if (passwordLen == 0) {
+        set_invalid(id, true, password_missing);
+        return false;
+      }
+
+      if (passwordLen < password_min_len) {
+        set_invalid(id, false, password_too_short);
+        return false;
+      }
+
+      if (passwordLen > password_max_len) {
+        set_invalid(id, false, password_too_long);
+        return false;
+      }
+
+      set_valid(id, true)
+      return true;
+    }
+
+    function serverValidatedTerms() {
+      var id = 'terms';
+      set_invalid(id, false, terms_missing);
+
+      /*
+        with this block terms don't have to be accepted after all failed post requests
+        switch ('{{ password_validity }}') {
+          case 'missing':
+            set_invalid(id, false, terms_missing);
+            break;
+          
+          case 'accepted':
+            document.querySelector('#terms input').checked = true;
+            set_valid(id, true);
+            break;
+        }
+        */
+    }
+
+    function validateTerms() {
+      var id = 'terms';
+
+      var terms = document.querySelector('#' + id + ' input');
+
+      if (!terms.checked) {
+        set_invalid(id, true, terms_missing)
+        return false;
+      }
+
+      set_valid(id, true)
+      return true;
+    }
+
+    function validateForm() {
+      result = true;
+      result = validateUsername() && result;
+      result = validateEmail() && result;
+      result = validatePassword() && result;
+      result = validateTerms() && result;
+      return result;
+    }
+
+    $(document).ready(function () {
+      serverValidatedUsername();
+      serverValidatedEmail();
+      serverValidatedPassword();
+      serverValidatedTerms();
+    })
+  </script>
 </body>
 
 </html>

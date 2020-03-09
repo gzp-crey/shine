@@ -25,6 +25,7 @@ pub enum RegistrationError {
     Email(String),
     Password(String),
     Recaptcha(String),
+    Terms(String),
     Server(String),
 }
 
@@ -33,7 +34,7 @@ pub struct RegistrationParams {
     user_name: String,
     email: String,
     password: String,
-    accept_terms: bool,
+    accept_terms: Option<bool>,
     af: String,
     #[serde(rename = "g-recaptcha-response")]
     recaptcha_response: String,
@@ -87,6 +88,10 @@ async fn validate_input(
         })
         .ok();
 
+    if !params.accept_terms.unwrap_or(false) {
+        errors.push(RegistrationError::Terms(format!("missing")));
+    }
+
     if let Err(err) = state.recaptcha().check_response(&params.recaptcha_response).await {
         errors.push(RegistrationError::Recaptcha(format!("{:?}", err)));
     }
@@ -98,46 +103,49 @@ async fn validate_input(
     }
 }
 
-fn gen_page(
-    tera: &Tera,
-    keys: &Keys,
-    params: Option<&RegistrationParams>,
-    errors: Option<Vec<RegistrationError>>,
-) -> PageResult {
-    let accept_terms = params
-        .map(|p| if p.accept_terms { "true" } else { "false" })
-        .unwrap_or("");
-
+fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<RegistrationError>)>) -> PageResult {
     let mut context = tera::Context::new();
-    context.insert("user_name", params.map(|p| p.user_name.as_str()).unwrap_or(""));
-    context.insert("email", params.map(|p| p.email.as_str()).unwrap_or(""));
-    context.insert("password", params.map(|p| p.password.as_str()).unwrap_or(""));
-    context.insert("accept_terms", accept_terms);
-    context.insert("af_token", &keys.af);
-    context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
-
     context.insert("user_name_min_len", &format!("{}", ValidatedName::MIN_LEN));
     context.insert("user_name_max_len", &format!("{}", ValidatedName::MAX_LEN));
     context.insert("password_min_len", &format!("{}", ValidatedPassword::MIN_LEN));
     context.insert("password_max_len", &format!("{}", ValidatedPassword::MAX_LEN));
-    
-    context.insert("user_name_error", "");
-    context.insert("email_error", "");
-    context.insert("password_error", "");
-    context.insert("server_error", "");
-    context.insert("recaptcha_error", "");
 
-    if let Some(errors) = errors {
+    context.insert("user_name", "");
+    context.insert("email", "");
+    context.insert("password", "");
+    context.insert("af_token", &keys.af);
+    context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
+
+    if let Some((params, errors)) = params {
+        context.insert("user_name", params.user_name.as_str());
+        context.insert("email", params.email.as_str());
+        context.insert("password", params.password.as_str());
+
+        context.insert("user_name_validity", "accepted");
+        context.insert("email_validity", "accepted");
+        context.insert("password_validity", "accepted");
+        context.insert("recaptcha_validity", "accepted");
+        context.insert("server_validity", "");
+        context.insert("terms_validity", "accepted");
+
         log::info!("page errors: {:?}", errors);
         for err in errors {
             match err {
-                RegistrationError::Username(ref err) => context.insert("user_name_error", err),
-                RegistrationError::Email(ref err) => context.insert("email_error", err),
-                RegistrationError::Password(ref err) => context.insert("password_error", err),
-                RegistrationError::Server(ref err) => context.insert("server_error", err),
-                RegistrationError::Recaptcha(ref err) => context.insert("recaptcha_error", err),
+                RegistrationError::Username(ref err) => context.insert("user_name_validity", err),
+                RegistrationError::Email(ref err) => context.insert("email_validity", err),
+                RegistrationError::Password(ref err) => context.insert("password_validity", err),
+                RegistrationError::Server(ref err) => context.insert("server_validity", err),
+                RegistrationError::Recaptcha(ref err) => context.insert("recaptcha_validity", err),
+                RegistrationError::Terms(ref err) => context.insert("terms_validity", err),
             };
         }
+    } else {
+        context.insert("user_name_validity", "");
+        context.insert("email_validity", "");
+        context.insert("password_validity", "");
+        context.insert("recaptcha_validity", "");
+        context.insert("terms_validity", "");
+        context.insert("server_validity", "");
     }
 
     let html = tera.render("register.html", &context).map_err(|err| {
@@ -154,7 +162,7 @@ pub async fn get_register_page(state: web::Data<State>, af_session: AntiForgeryS
         af: AntiForgeryIssuer::issue(&af_session, None),
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
-    gen_page(&*state.tera(), &keys, None, None)
+    gen_page(&*state.tera(), &keys, None)
 }
 
 pub async fn post_register_page(
@@ -178,7 +186,7 @@ pub async fn post_register_page(
 
     // validate input
     let (name, email, password) = match validate_input(&*state, &params).await {
-        Err(errors) => return gen_page(&*state.tera(), &keys, Some(&params), Some(errors)),
+        Err(errors) => return gen_page(&*state.tera(), &keys, Some((params, errors))),
         Ok(validated_input) => validated_input,
     };
 
@@ -191,7 +199,7 @@ pub async fn post_register_page(
                 IAMError::EmailTaken => vec![RegistrationError::Email("already_taken".to_owned())],
                 err => vec![RegistrationError::Server(format!("server_error:{:?}", err))],
             };
-            return gen_page(&*state.tera(), &keys, Some(&params), Some(errors));
+            return gen_page(&*state.tera(), &keys, Some((params, errors)));
         }
         Ok(registration) => {
             log::info!("user registered: {:?}", registration);
