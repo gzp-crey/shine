@@ -69,7 +69,7 @@ async fn validate_input(
                 use RegistrationError::*;
                 match err {
                     EmailValidationError::InvalidFormat => errors.push(Email(format!("invalid_format"))),
-                    //EmailValidationError::UnsupportedDomain => errors.push(Password(format!("invalid_domain"))),
+                    EmailValidationError::UnsupportedDomain(_) => errors.push(Email(format!("invalid_domain"))),
                 }
             })
             .ok()
@@ -83,7 +83,7 @@ async fn validate_input(
             match err {
                 PasswordValidationError::TooShort => errors.push(Password(format!("too_short"))),
                 PasswordValidationError::TooLong => errors.push(Password(format!("too_long"))),
-                //PasswordValidationError::TooWeek => errors.push(Password(format!("too_week"))),
+                PasswordValidationError::TooWeek => errors.push(Password(format!("too_week"))),
             }
         })
         .ok();

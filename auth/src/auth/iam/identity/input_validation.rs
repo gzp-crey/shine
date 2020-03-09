@@ -46,7 +46,7 @@ impl ValidatedName {
 #[derive(Debug, Clone)]
 pub enum EmailValidationError {
     InvalidFormat,
-    //UnsupportDomain(String),
+    UnsupportedDomain(String),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -79,7 +79,7 @@ impl ValidatedEmail {
 pub enum PasswordValidationError {
     TooShort,
     TooLong,
-    //TooWeek
+    TooWeek,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
