@@ -16,6 +16,7 @@ use tera::{Error as TeraError, Tera};
 
 mod iam;
 mod iam_handler;
+mod login;
 mod registration;
 mod trace_middleware;
 mod utils;
@@ -138,9 +139,17 @@ impl AuthService {
                 .wrap(SignedCookie::new(AntiForgeryCookie::new(&self.af_session_secret), ()))
                 .data(state)
                 .service(
-                    web::resource("register.html")
-                        .route(web::get().to(registration::get_register_page))
-                        .route(web::post().to(registration::post_register_page)),
+                    web::scope("")
+                        .service(
+                            web::resource("register.html")
+                                .route(web::get().to(registration::get_register_page))
+                                .route(web::post().to(registration::post_register_page)),
+                        )
+                        .service(
+                            web::resource("login.html")
+                                .route(web::get().to(login::get_login_page))
+                                .route(web::post().to(login::post_login_page)),
+                        ),
                 )
                 .service(
                     web::scope("api")

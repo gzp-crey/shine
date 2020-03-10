@@ -21,17 +21,24 @@ use tera::Tera;
 
 #[derive(Debug)]
 pub enum RegistrationError {
-    Username(String),
-    Email(String),
-    Password(String),
-    Recaptcha(String),
-    Terms(String),
+    UsernameTooShort,
+    UsernameTooLong,
+    UsernameInvalid,
+    UsernameAlreadyTaken,
+    EmailInvalid,
+    EmailInvalidDomain,
+    EmailAlreadyTaken,
+    PasswordTooShort,
+    PasswordTooLong,
+    PasswordTooWeek,
+    Recaptcha,
+    TermsMissing,
     Server(String),
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RegistrationParams {
-    user_name: String,
+    user: String,
     email: String,
     password: String,
     accept_terms: Option<bool>,
@@ -52,13 +59,13 @@ async fn validate_input(
     let mut errors = Vec::new();
 
     // validate input
-    let name = ValidatedName::from_raw(&params.user_name)
+    let name = ValidatedName::from_raw(&params.user)
         .map_err(|err| {
             use RegistrationError::*;
             match err {
-                NameValidationError::TooShort => errors.push(Username(format!("too_short"))),
-                NameValidationError::TooLong => errors.push(Username(format!("too_long"))),
-                NameValidationError::InvalidCharacter => errors.push(Username(format!("invalid_character"))),
+                NameValidationError::TooShort => errors.push(UsernameTooShort),
+                NameValidationError::TooLong => errors.push(UsernameTooLong),
+                NameValidationError::InvalidCharacter => errors.push(UsernameInvalid),
             }
         })
         .ok();
@@ -68,8 +75,8 @@ async fn validate_input(
             .map_err(|err| {
                 use RegistrationError::*;
                 match err {
-                    EmailValidationError::InvalidFormat => errors.push(Email(format!("invalid_format"))),
-                    EmailValidationError::UnsupportedDomain(_) => errors.push(Email(format!("invalid_domain"))),
+                    EmailValidationError::InvalidFormat => errors.push(EmailInvalid),
+                    EmailValidationError::UnsupportedDomain(_) => errors.push(EmailInvalidDomain),
                 }
             })
             .ok()
@@ -81,19 +88,19 @@ async fn validate_input(
         .map_err(|err| {
             use RegistrationError::*;
             match err {
-                PasswordValidationError::TooShort => errors.push(Password(format!("too_short"))),
-                PasswordValidationError::TooLong => errors.push(Password(format!("too_long"))),
-                PasswordValidationError::TooWeek => errors.push(Password(format!("too_week"))),
+                PasswordValidationError::TooShort => errors.push(PasswordTooShort),
+                PasswordValidationError::TooLong => errors.push(PasswordTooLong),
+                PasswordValidationError::TooWeek => errors.push(PasswordTooWeek),
             }
         })
         .ok();
 
     if !params.accept_terms.unwrap_or(false) {
-        errors.push(RegistrationError::Terms(format!("missing")));
+        errors.push(RegistrationError::TermsMissing);
     }
 
-    if let Err(err) = state.recaptcha().check_response(&params.recaptcha_response).await {
-        errors.push(RegistrationError::Recaptcha(format!("{:?}", err)));
+    if let Err(_err) = state.recaptcha().check_response(&params.recaptcha_response).await {
+        errors.push(RegistrationError::Recaptcha);
     }
 
     if errors.is_empty() {
@@ -105,47 +112,54 @@ async fn validate_input(
 
 fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<RegistrationError>)>) -> PageResult {
     let mut context = tera::Context::new();
-    context.insert("user_name_min_len", &format!("{}", ValidatedName::MIN_LEN));
-    context.insert("user_name_max_len", &format!("{}", ValidatedName::MAX_LEN));
+    context.insert("user_min_len", &format!("{}", ValidatedName::MIN_LEN));
+    context.insert("user_max_len", &format!("{}", ValidatedName::MAX_LEN));
     context.insert("password_min_len", &format!("{}", ValidatedPassword::MIN_LEN));
     context.insert("password_max_len", &format!("{}", ValidatedPassword::MAX_LEN));
 
-    context.insert("user_name", "");
+    context.insert("user", "");
     context.insert("email", "");
     context.insert("password", "");
     context.insert("af_token", &keys.af);
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
 
+    context.insert("server_error", "");
+
     if let Some((params, errors)) = params {
-        context.insert("user_name", params.user_name.as_str());
+        context.insert("user", params.user.as_str());
         context.insert("email", params.email.as_str());
         context.insert("password", params.password.as_str());
 
-        context.insert("user_name_validity", "accepted");
+        context.insert("user_validity", "accepted");
         context.insert("email_validity", "accepted");
         context.insert("password_validity", "accepted");
         context.insert("recaptcha_validity", "accepted");
-        context.insert("server_validity", "");
         context.insert("terms_validity", "accepted");
 
         log::info!("page errors: {:?}", errors);
         for err in errors {
             match err {
-                RegistrationError::Username(ref err) => context.insert("user_name_validity", err),
-                RegistrationError::Email(ref err) => context.insert("email_validity", err),
-                RegistrationError::Password(ref err) => context.insert("password_validity", err),
-                RegistrationError::Server(ref err) => context.insert("server_validity", err),
-                RegistrationError::Recaptcha(ref err) => context.insert("recaptcha_validity", err),
-                RegistrationError::Terms(ref err) => context.insert("terms_validity", err),
+                RegistrationError::UsernameTooLong => context.insert("user_validity", "err:too_long"),
+                RegistrationError::UsernameTooShort => context.insert("user_validity", "err:too_short"),
+                RegistrationError::UsernameInvalid => context.insert("user_validity", "err:invalid"),
+                RegistrationError::UsernameAlreadyTaken => context.insert("user_validity", "err:already_taken"),
+                RegistrationError::EmailInvalid => context.insert("email_validity", "err:invalid"),
+                RegistrationError::EmailInvalidDomain => context.insert("email_validity", "err:invalid_domain"),
+                RegistrationError::EmailAlreadyTaken => context.insert("email_validity", "err:already_taken"),
+                RegistrationError::PasswordTooLong => context.insert("password_validity", "err:too_long"),
+                RegistrationError::PasswordTooShort => context.insert("password_validity", "err:too_short"),
+                RegistrationError::PasswordTooWeek => context.insert("password_validity", "err:too_week"),
+                RegistrationError::Recaptcha => context.insert("recaptcha_validity", "err:missing"),
+                RegistrationError::TermsMissing => context.insert("terms_validity", "err:missing"),
+                RegistrationError::Server(ref err) => context.insert("server_error", err),
             };
         }
     } else {
-        context.insert("user_name_validity", "");
+        context.insert("user_validity", "");
         context.insert("email_validity", "");
         context.insert("password_validity", "");
         context.insert("recaptcha_validity", "");
         context.insert("terms_validity", "");
-        context.insert("server_validity", "");
     }
 
     let html = tera.render("register.html", &context).map_err(|err| {
@@ -195,8 +209,8 @@ pub async fn post_register_page(
         Err(err) => {
             log::info!("user registeration failed: {:?}", err);
             let errors = match err {
-                IAMError::NameTaken => vec![RegistrationError::Username("already_taken".to_owned())],
-                IAMError::EmailTaken => vec![RegistrationError::Email("already_taken".to_owned())],
+                IAMError::NameTaken => vec![RegistrationError::UsernameAlreadyTaken],
+                IAMError::EmailTaken => vec![RegistrationError::EmailAlreadyTaken],
                 err => vec![RegistrationError::Server(format!("server_error:{:?}", err))],
             };
             return gen_page(&*state.tera(), &keys, Some((params, errors)));

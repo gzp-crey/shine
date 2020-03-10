@@ -39,13 +39,12 @@
           <div class="card-body">
             <form id="registerForm" method="post" action="register.html" enctype="application/x-www-form-urlencoded">
 
-              <div class="form-group input-group" id="user_name" oninput="validateUsername()">
+              <div class="form-group input-group" id="user" oninput="validateUsername()">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-user"></i>
                   </span>
                 </div>
-                <input type="text" name="user_name" class="form-control" placeholder="User name"
-                  value="{{ user_name }}">
+                <input type="text" name="user" class="form-control" placeholder="User name" value="{{ user }}">
                 <div class="invalid-feedback"></div>
               </div>
 
@@ -90,26 +89,34 @@
   </div>
 
   <script type="application/javascript">
-    user_name_min_len = "{{ user_name_min_len }}";
-    user_name_max_len = "{{ user_name_max_len }}";
+    user_min_len = "{{ user_min_len }}";
+    user_max_len = "{{ user_max_len }}";
     password_min_len = "{{ password_min_len }}";
     password_max_len = "{{ password_max_len }}";
 
-    user_name_missing = "Please provide a valid username";
-    user_name_too_short = "Too short, required min length: {{ user_name_min_len }}";
-    user_name_too_long = "Too long, required max length: {{ user_name_max_len }}";
-    user_name_already_taken = "User name already in use";
+    user_errors = {
+      missing : "Please provide a valid username",
+      too_short : "Too short, required min length: {{ user_min_len }}",
+      too_long : "Too long, required max length: {{ user_max_len }}",
+      already_taken : "User name already in use"
+    };
 
-    email_invalid_format = "Invalid email format";
-    email_invalid_domain = "Unsupported email server";
-    email_already_taken = "Email already in use";
+    email_errors = {
+      invalid: "Invalid email format",
+      invalid_domain: "Unsupported email server",
+      already_taken: "Email already in use",
+    };
 
-    password_missing = "Provide password";
-    password_too_short = "Too short, required min length: {{ password_min_len }}";
-    password_too_long = "Too long, required max length: {{ password_max_len }}";
-    password_too_week = "Password is too week";
+    password_errors = {
+      missing: "Provide password",
+      too_short: "Too short, required min length: {{ password_min_len }}",
+      too_long: "Too long, required max length: {{ password_max_len }}",
+      too_week: "Password is too week"
+    };
 
-    terms_missing = "Accept terms";
+    terms_errors = {
+      missing: "Accept terms"
+    };
 
     function set_valid(elementId, silent) {
       //console.log('valid: ' + silent + ' ' + elementId);
@@ -148,35 +155,36 @@
     }
 
     function serverValidatedUsername() {
-      var id = 'user_name';
+      var id = 'user';
 
-      switch ('{{ user_name_validity }}') {
-        case 'too_short': set_invalid(id, false, user_name_too_short); break;
-        case 'too_long': set_invalid(id, false, user_name_too_long); break;
-        case 'already_taken': set_invalid(id, false, user_name_already_taken); break;
-        case 'accepted': set_valid(id, false); break;
-        default: validateUsername(); break;
+      if ('{{ user_validity }}' == 'accepted') {
+        set_valid(id, false);
+      } else if ('{{ user_validity }}'.startsWith('err:')) {
+        set_invalid(id, false, user_errors['{{ user_validity }}'.substring(4)]);
+      }
+      else {
+        validateUsername();
       }
     }
 
     function validateUsername() {
-      var id = 'user_name';
+      var id = 'user';
 
       var userName = document.querySelector('#' + id + ' input').value;
       var userNameLen = [...userName].length;
 
       if (userNameLen == 0) {
-        set_invalid(id, true, user_name_missing);
+        set_invalid(id, true, user_errors.missing);
         return false;
       }
 
-      if (userNameLen < user_name_min_len) {
-        set_invalid(id, false, user_name_too_short);
+      if (userNameLen < user_min_len) {
+        set_invalid(id, false, user_errors.too_short);
         return false;
       }
 
-      if (userNameLen > user_name_max_len) {
-        set_invalid(id, false, user_name_too_long);
+      if (userNameLen > user_max_len) {
+        set_invalid(id, false, user_errors.too_long);
         return false;
       }
 
@@ -187,12 +195,13 @@
     function serverValidatedEmail() {
       var id = 'email';
 
-      switch ('{{ email_validity }}') {
-        case 'invalid_format': set_invalid(id, false, email_invalid_format); break;
-        case 'already_taken': set_invalid(id, false, email_already_taken); break;
-        case 'invalid_domain': set_invalid(id, false, email_invalid_domain); break;
-        case 'accepted': set_valid(id, false); break;
-        default: validateEmail(); break;
+      if ('{{ email_validity }}' == 'accepted') {
+        set_valid(id, false);
+      } else if ('{{ email_validity }}'.startsWith('err:')) {
+        set_invalid(id, false, email_errors['{{ email_validity }}'.substring(4)]);
+      }
+      else {
+        validateEmail();
       }
     }
 
@@ -209,7 +218,7 @@
 
       //https://www.w3resource.com/javascript/form/email-validation.php
       if (!(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email))) {
-        set_invalid(id, false, email_invalid_format);
+        set_invalid(id, false, email_errors.invalid);
         return false;
       }
 
@@ -217,7 +226,7 @@
       return true;
     }
 
-    
+
     function show_hide_password(hide) {
       var id = 'password';
       var password = document.querySelector('#' + id + ' input');
@@ -241,6 +250,15 @@
     function serverValidatedPassword() {
       var id = 'password';
 
+      if ('{{ password_validity }}' == 'accepted') {
+        set_valid(id, true);
+      } else if ('{{ password_validity }}'.startsWith('err:')) {
+        set_invalid(id, false, password_errors['{{ password_validity }}'.substring(4)]);
+      }
+      else {
+        validatePassword();
+      }
+
       switch ('{{ password_validity }}') {
         case 'too_short': set_invalid(id, false, password_too_short); break;
         case 'too_long': set_invalid(id, false, password_too_long); break;
@@ -257,17 +275,17 @@
       var passwordLen = [...password].length;
 
       if (passwordLen == 0) {
-        set_invalid(id, true, password_missing);
+        set_invalid(id, true, password_errors.missing);
         return false;
       }
 
       if (passwordLen < password_min_len) {
-        set_invalid(id, false, password_too_short);
+        set_invalid(id, false, password_errors.too_short);
         return false;
       }
 
       if (passwordLen > password_max_len) {
-        set_invalid(id, false, password_too_long);
+        set_invalid(id, false, password_errors.too_long);
         return false;
       }
 
@@ -277,21 +295,18 @@
 
     function serverValidatedTerms() {
       var id = 'terms';
-      set_invalid(id, false, terms_missing);
+      set_invalid(id, false, terms_errors.missing);
 
       /*
         with this block terms don't have to be accepted after all failed post requests
-        switch ('{{ password_validity }}') {
-          case 'missing':
-            set_invalid(id, false, terms_missing);
-            break;
-          
-          case 'accepted':
-            document.querySelector('#terms input').checked = true;
-            set_valid(id, true);
-            break;
+
+        if ('{{ terms_validity }}' == 'accepted') {
+          document.querySelector('#terms input').checked = true;
+          set_valid(id, true);
+        } else if ('{{ terms_validity }}'.startsWith('err:')) {
+          set_invalid(id, false, terms_errors['{{ terms_validity }}'.substring(4)]);
         }
-        */
+      */
     }
 
     function validateTerms() {
