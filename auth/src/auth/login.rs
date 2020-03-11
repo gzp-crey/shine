@@ -1,7 +1,6 @@
 use super::iam::{
     identity::{
-        EmailValidationError, NameValidationError, PasswordValidationError, ValidatedEmail, ValidatedName,
-        ValidatedPassword,
+        ValidatedEmail, ValidatedName, ValidatedPassword,
     },
     IAMError,
 };
@@ -21,7 +20,9 @@ use tera::Tera;
 
 #[derive(Debug)]
 pub enum LoginError {
-    PasswordOrUsername,
+    Username,
+    Password,
+    Server(String),
     Recaptcha,
 }
 
@@ -61,13 +62,28 @@ async fn validate_input(
     }
 }
 
-fn gen_page(tera: &Tera, keys: &Keys, _params: Option<(LoginParams, Vec<LoginError>)>) -> PageResult {
+fn gen_page(tera: &Tera, keys: &Keys, params: Option<(LoginParams, Vec<LoginError>)>) -> PageResult {
     let mut context = tera::Context::new();
     context.insert("user", "");
     context.insert("af_token", &keys.af);
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
 
     context.insert("validity", "");
+    context.insert("server_error", "");
+
+    if let Some((params, errors)) = params {
+        context.insert("user", &params.user);
+
+        log::info!("page errors: {:?}", errors);
+        for err in errors {
+            match err {
+                LoginError::Username => context.insert("validity", "err:password_or_name"),
+                LoginError::Password => context.insert("validity", "err:password_or_name"),
+                LoginError::Recaptcha => context.insert("validity", "err:recaptche"),
+                LoginError::Server(ref err) => context.insert("server_error", err),
+            };
+        }
+    }
 
     let html = tera.render("login.html", &context).map_err(|err| {
         log::error!("Tera render error: {:?}", err);
@@ -106,13 +122,34 @@ pub async fn post_login_page(
     IdentityCookie::clear(&identity_session);
 
     // validate input
-    let (_name, _email, _password) = match validate_input(&*state, &params).await {
+    let (name, email, password) = match validate_input(&*state, &params).await {
         Err(errors) => return gen_page(&*state.tera(), &keys, Some((params, errors))),
         Ok(validated_input) => validated_input,
     };
 
-    unimplemented!()
-    //create_user_id(identity, roles)?.to_session(&identity_session)?;
-    //SessionKey::from(session).to_session(&identity_session)?;
-    //Ok(HttpResponse::Ok().finish())
+    let login_result = if let Some(name) = name {
+        state.iam().login_by_name(&name, &password, &fingerprint).await
+    } else if let Some(email) = email {
+        state.iam().login_by_email(&email, &password, &fingerprint).await
+    } else {
+        Err(IAMError::IdentityNotFound)
+    };
+
+    match login_result {
+        Ok((identity, roles, session)) => {
+            create_user_id(identity, roles)?.to_session(&identity_session)?;
+            SessionKey::from(session).to_session(&identity_session)?;
+            Ok(HttpResponse::Ok().finish())
+        }
+
+        Err(err) => {
+            log::info!("user login failed: {:?}", err);
+            let errors = match err {
+                IAMError::IdentityNotFound => vec![LoginError::Username],
+                IAMError::PasswordNotMatching => vec![LoginError::Password],
+                err => vec![LoginError::Server(format!("server_error:{:?}", err))],
+            };
+            gen_page(&*state.tera(), &keys, Some((params, errors)))
+        }
+    }
 }

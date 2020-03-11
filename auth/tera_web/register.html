@@ -98,6 +98,7 @@
       missing : "Please provide a valid username",
       too_short : "Too short, required min length: {{ user_min_len }}",
       too_long : "Too long, required max length: {{ user_max_len }}",
+      invalid_character : "User name may not contian '@'",
       already_taken : "User name already in use"
     };
 
@@ -185,6 +186,11 @@
 
       if (userNameLen > user_max_len) {
         set_invalid(id, false, user_errors.too_long);
+        return false;
+      }
+
+      if( userName.contains("@") )
+        set_invalid(id, false, user_errors.invalid_character);
         return false;
       }
 

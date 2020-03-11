@@ -75,7 +75,13 @@ pub async fn login_basic_auth(
 
     IdentityCookie::clear(&identity_session);
 
-    let (identity, roles, session) = state.iam().login_name_email(&user_id, &password, &fingerprint).await?;
+    let (identity, roles, session) = if let Ok(name) = ValidatedName::from_raw(user_id) {
+        state.iam().login_by_name(&name, &password, &fingerprint).await?
+    } else if let Ok(email) = ValidatedEmail::from_raw(user_id) {
+        state.iam().login_by_email(&email, &password, &fingerprint).await?
+    } else {
+        return Err(IAMError::IdentityNotFound.into());
+    };
 
     create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;

@@ -23,7 +23,7 @@ use tera::Tera;
 pub enum RegistrationError {
     UsernameTooShort,
     UsernameTooLong,
-    UsernameInvalid,
+    UsernameInvalid(Vec<char>),
     UsernameAlreadyTaken,
     EmailInvalid,
     EmailInvalidDomain,
@@ -65,7 +65,7 @@ async fn validate_input(
             match err {
                 NameValidationError::TooShort => errors.push(UsernameTooShort),
                 NameValidationError::TooLong => errors.push(UsernameTooLong),
-                NameValidationError::InvalidCharacter => errors.push(UsernameInvalid),
+                NameValidationError::InvalidCharacter(ref err) => errors.push(UsernameInvalid(err.clone())),
             }
         })
         .ok();
@@ -123,6 +123,12 @@ fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<Re
     context.insert("af_token", &keys.af);
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
 
+    context.insert("user_validity", "");
+    context.insert("email_validity", "");
+    context.insert("password_validity", "");
+    context.insert("recaptcha_validity", "");
+    context.insert("terms_validity", "");
+
     context.insert("server_error", "");
 
     if let Some((params, errors)) = params {
@@ -141,7 +147,7 @@ fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<Re
             match err {
                 RegistrationError::UsernameTooLong => context.insert("user_validity", "err:too_long"),
                 RegistrationError::UsernameTooShort => context.insert("user_validity", "err:too_short"),
-                RegistrationError::UsernameInvalid => context.insert("user_validity", "err:invalid"),
+                RegistrationError::UsernameInvalid(_err) => context.insert("user_validity", "err:invalid"),
                 RegistrationError::UsernameAlreadyTaken => context.insert("user_validity", "err:already_taken"),
                 RegistrationError::EmailInvalid => context.insert("email_validity", "err:invalid"),
                 RegistrationError::EmailInvalidDomain => context.insert("email_validity", "err:invalid_domain"),
@@ -154,12 +160,6 @@ fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<Re
                 RegistrationError::Server(ref err) => context.insert("server_error", err),
             };
         }
-    } else {
-        context.insert("user_validity", "");
-        context.insert("email_validity", "");
-        context.insert("password_validity", "");
-        context.insert("recaptcha_validity", "");
-        context.insert("terms_validity", "");
     }
 
     let html = tera.render("register.html", &context).map_err(|err| {

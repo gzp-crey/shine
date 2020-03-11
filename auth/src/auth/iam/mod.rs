@@ -95,20 +95,26 @@ impl IAM {
         Ok((identity, roles, session))
     }
 
-    pub async fn login_name_email(
+    pub async fn login_by_name(
         &self,
-        raw_name_email: &str,
+        name: &ValidatedName,
         password: &ValidatedPassword,
         fingerprint: &Fingerprint,
     ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
-        let identity = if let Ok(email) = ValidatedEmail::from_raw(&raw_name_email) {
-            self.identity.find_user_by_email(&email, Some(password)).await?
-        } else if let Ok(name) = ValidatedName::from_raw(&raw_name_email) {
-            self.identity.find_user_by_name(&name, Some(password)).await?
-        } else {
-            return Err(IAMError::IdentityNotFound);
-        };
+        let identity = self.identity.find_user_by_name(name, Some(password)).await?;
+        let session = self.session.create_session(&identity, fingerprint).await?;
+        let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
+        Ok((identity, roles, session))
+    }
+
+    pub async fn login_by_email(
+        &self,
+        email: &ValidatedEmail,
+        password: &ValidatedPassword,
+        fingerprint: &Fingerprint,
+    ) -> Result<(UserIdentity, InheritedRoles, Session), IAMError> {
+        let identity = self.identity.find_user_by_email(email, Some(password)).await?;
         let session = self.session.create_session(&identity, fingerprint).await?;
         let roles = self.role.get_identity_roles(&identity.id(), true).await?;
 
