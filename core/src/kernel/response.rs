@@ -1,12 +1,61 @@
-use actix_web::{http::StatusCode, Error as ActixError, HttpResponse, ResponseError};
+use actix_web::{http::header, http::StatusCode, Error as ActixError, HttpResponse, ResponseError};
 use std::fmt;
+
+/// Helper to handle redirect responses
+#[derive(Debug, Clone)]
+pub enum Redirect {
+    Permanent(String), // redirect, resource moved 301
+    Found(String),     // redirect 302
+    SeeOther(String),  // redirect and change method to get 303
+    Temporary(String), // redirect and preseve method 307
+}
+
+impl From<&Redirect> for HttpResponse {
+    fn from(value: &Redirect) -> HttpResponse {
+        match value {
+            Redirect::Permanent(uri) => {
+                log::error!("RedirectPermanent to {}", uri);
+                HttpResponse::MovedPermanently()
+                    .header(header::LOCATION, uri.as_str())
+                    .finish()
+                    .into_body()
+            }
+            Redirect::Found(uri) => {
+                log::error!("RedirectFound to {}", uri);
+                HttpResponse::Found()
+                    .header(header::LOCATION, uri.as_str())
+                    .finish()
+                    .into_body()
+            }
+            Redirect::SeeOther(uri) => {
+                log::error!("RedirectSeeOther to {}", uri);
+                HttpResponse::SeeOther()
+                    .header(header::LOCATION, uri.as_str())
+                    .finish()
+                    .into_body()
+            }
+            Redirect::Temporary(uri) => {
+                log::error!("RedirectTemporary to {}", uri);
+                HttpResponse::TemporaryRedirect()
+                    .header(header::LOCATION, uri.as_str())
+                    .finish()
+                    .into_body()
+            }
+        }
+    }
+}
+
+impl From<Redirect> for HttpResponse {
+    fn from(value: Redirect) -> HttpResponse {
+        (&value).into()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum PageError {
     Internal(String),
     Response(StatusCode, String),
-    RedirectOnError(String, String),
-
+    RedirectOnError(String, Redirect),
     Home,
     Login,
 }
@@ -31,9 +80,9 @@ impl ResponseError for PageError {
                 log::error!("Internal server error: {}", err);
                 HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).finish()
             }
-            PageError::RedirectOnError(err, uri) => {
-                log::error!("Internal server error: {}", err);
-                HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).finish()
+            PageError::RedirectOnError(err, redirect) => {
+                log::error!("Redirect on error: {}", err);
+                redirect.into()
             }
             _ => HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).body("Internal error"),
         }

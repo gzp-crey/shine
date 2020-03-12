@@ -1,4 +1,4 @@
-use crate::auth::iam::{
+use crate::iam::{
     identity::{
         CoreIdentity, CoreIdentityIndexedData, Identity, IdentityCategory, IndexEmail, IndexIdentity, IndexName,
         IndexSequence, UserIdentity, ValidatedEmail, ValidatedName, ValidatedPassword,

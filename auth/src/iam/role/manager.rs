@@ -1,4 +1,4 @@
-use crate::auth::iam::{IAMConfig, IAMError};
+use crate::iam::{IAMConfig, IAMError};
 use gremlin_client::{aio::GremlinClient, ConnectionOptions, GraphSON, GremlinError};
 use serde::Serialize;
 use shine_core::gremlin_utils::{query_value, query_vec};

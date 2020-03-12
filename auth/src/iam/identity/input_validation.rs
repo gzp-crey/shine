@@ -18,7 +18,7 @@ impl ValidatedName {
     pub const MAX_LEN: usize = 30;
 
     pub fn from_raw(raw: &str) -> Result<ValidatedName, NameValidationError> {
-        let mut invalid_character: Vec<char> = raw.chars().filter(|c| c.identifier_allowed()).collect();
+        let mut invalid_character: Vec<char> = raw.chars().filter(|c| !c.identifier_allowed()).collect();
         invalid_character.sort_by(|a, b| b.cmp(a));
         invalid_character.dedup();
 

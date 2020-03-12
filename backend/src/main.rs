@@ -1,10 +1,9 @@
 use actix_web::{middleware, App, HttpServer};
+use shine_auth::AuthService;
+use shine_web::WebService;
 use std::env;
 
-mod auth;
 mod config;
-
-use auth::AuthService;
 
 /// Example of a main function of a actix server supporting oauth.
 pub fn main() {
@@ -13,6 +12,7 @@ pub fn main() {
         .filter_level(log::LevelFilter::Info)
         //.filter_level(log::LevelFilter::Trace)
         .filter_module("shine_auth", log::LevelFilter::Trace)
+        .filter_module("shine_web", log::LevelFilter::Trace)
         .filter_module("shine_core", log::LevelFilter::Debug)
         .filter_module("mio", log::LevelFilter::Info)
         .filter_module("hyper", log::LevelFilter::Info)
@@ -26,10 +26,12 @@ pub fn main() {
     log::info!("{:#?}", service_config);
 
     let auth = AuthService::create(&mut sys, &service_config.auth).expect("Auth service creation failed");
+    let web = WebService::create(&mut sys, &service_config.web).expect("Web service creation failed");
 
     let _ = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
+            .configure(|cfg| web.configure(cfg))
             .configure(|cfg| auth.configure(cfg))
     })
     .workers(service_config.worker_count)

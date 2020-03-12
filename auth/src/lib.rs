@@ -24,6 +24,8 @@ mod utils;
 use self::iam::{IAMConfig, IAMError, IAM};
 use self::trace_middleware::Trace;
 
+pub const DEFAULT_PAGE: &str = "google.com";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub iam: IAMConfig,

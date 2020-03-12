@@ -6,14 +6,14 @@ use super::iam::{
     IAMError,
 };
 use super::utils::create_user_id;
-use super::State;
-use actix_web::{web, HttpResponse};
+use super::{State, DEFAULT_PAGE};
+use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use shine_core::{
     kernel::{
         anti_forgery::{AntiForgeryIdentity, AntiForgeryIssuer, AntiForgerySession, AntiForgeryValidator},
         identity::{IdentityCookie, IdentitySession, SessionKey},
-        response::{PageError, PageResult},
+        response::{PageError, PageResult, Redirect},
     },
     requestinfo::RemoteInfo,
 };
@@ -45,6 +45,11 @@ pub struct RegistrationParams {
     af: String,
     #[serde(rename = "g-recaptcha-response")]
     recaptcha_response: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegisterRedirect {
+    redirect: Option<String>,
 }
 
 struct Keys {
@@ -110,7 +115,12 @@ async fn validate_input(
     }
 }
 
-fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<RegistrationError>)>) -> PageResult {
+fn gen_page(
+    tera: &Tera,
+    keys: &Keys,
+    redirect: &RegisterRedirect,
+    params: Option<(RegistrationParams, Vec<RegistrationError>)>,
+) -> PageResult {
     let mut context = tera::Context::new();
     context.insert("user_min_len", &format!("{}", ValidatedName::MIN_LEN));
     context.insert("user_max_len", &format!("{}", ValidatedName::MAX_LEN));
@@ -122,6 +132,10 @@ fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<Re
     context.insert("password", "");
     context.insert("af_token", &keys.af);
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
+
+    if let Some(ref redirect) = redirect.redirect {
+        context.insert("redirect", &redirect);
+    }
 
     context.insert("user_validity", "");
     context.insert("email_validity", "");
@@ -170,20 +184,26 @@ fn gen_page(tera: &Tera, keys: &Keys, params: Option<(RegistrationParams, Vec<Re
     Ok(HttpResponse::Ok().content_type("text/html").body(html))
 }
 
-pub async fn get_register_page(state: web::Data<State>, af_session: AntiForgerySession) -> PageResult {
+pub async fn get_register_page(
+    state: web::Data<State>,
+    af_session: AntiForgerySession,
+    redirect: web::Query<RegisterRedirect>,
+) -> PageResult {
     log::info!("get_register_page");
     let keys = Keys {
         af: AntiForgeryIssuer::issue(&af_session, None),
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
-    gen_page(&*state.tera(), &keys, None)
+    gen_page(&*state.tera(), &keys, &*redirect, None)
 }
 
 pub async fn post_register_page(
     state: web::Data<State>,
+    req: HttpRequest,
     remote_info: RemoteInfo,
     identity_session: IdentitySession,
     af_session: AntiForgerySession,
+    redirect: web::Query<RegisterRedirect>,
     registration_params: web::Form<RegistrationParams>,
 ) -> PageResult {
     let params = registration_params.into_inner();
@@ -191,8 +211,10 @@ pub async fn post_register_page(
     log::info!("post_register_user {:?} {:?}", params, fingerprint);
 
     let keys = Keys {
-        af: AntiForgeryValidator::validate(&af_session, &params.af, AntiForgeryIdentity::Ignore)
-            .map_err(|err| PageError::RedirectOnError(format!("AF: {:?}", err), "register.html".to_owned()))?,
+        af: AntiForgeryValidator::validate(&af_session, &params.af, AntiForgeryIdentity::Ignore).map_err(|err| {
+            let uri = format!("register.html?{}", req.query_string());
+            PageError::RedirectOnError(format!("AF error: {:?}", err), Redirect::SeeOther(uri))
+        })?,
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
 
@@ -200,7 +222,7 @@ pub async fn post_register_page(
 
     // validate input
     let (name, email, password) = match validate_input(&*state, &params).await {
-        Err(errors) => return gen_page(&*state.tera(), &keys, Some((params, errors))),
+        Err(errors) => return gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors))),
         Ok(validated_input) => validated_input,
     };
 
@@ -213,7 +235,7 @@ pub async fn post_register_page(
                 IAMError::EmailTaken => vec![RegistrationError::EmailAlreadyTaken],
                 err => vec![RegistrationError::Server(format!("server_error:{:?}", err))],
             };
-            return gen_page(&*state.tera(), &keys, Some((params, errors)));
+            return gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors)));
         }
         Ok(registration) => {
             log::info!("user registered: {:?}", registration);
@@ -223,5 +245,6 @@ pub async fn post_register_page(
 
     create_user_id(identity, roles)?.to_session(&identity_session)?;
     SessionKey::from(session).to_session(&identity_session)?;
-    Ok(HttpResponse::Ok().finish())
+
+    Ok(Redirect::SeeOther(redirect.redirect.clone().unwrap_or(DEFAULT_PAGE.to_owned())).into())
 }

@@ -1,4 +1,4 @@
-use crate::auth::iam::{
+use crate::iam::{
     identity::{Identity, UserIdentity},
     session::{Session, SessionData, SessionIndex, SessionIndexData},
     Fingerprint, IAMConfig, IAMError,

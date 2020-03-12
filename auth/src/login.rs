@@ -1,18 +1,16 @@
 use super::iam::{
-    identity::{
-        ValidatedEmail, ValidatedName, ValidatedPassword,
-    },
+    identity::{ValidatedEmail, ValidatedName, ValidatedPassword},
     IAMError,
 };
 use super::utils::create_user_id;
-use super::State;
-use actix_web::{web, HttpResponse};
+use super::{State, DEFAULT_PAGE};
+use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use shine_core::{
     kernel::{
         anti_forgery::{AntiForgeryIdentity, AntiForgeryIssuer, AntiForgerySession, AntiForgeryValidator},
         identity::{IdentityCookie, IdentitySession, SessionKey},
-        response::{PageError, PageResult},
+        response::{PageError, PageResult, Redirect},
     },
     requestinfo::RemoteInfo,
 };
@@ -33,6 +31,11 @@ pub struct LoginParams {
     af: String,
     #[serde(rename = "g-recaptcha-response")]
     recaptcha_response: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoginRedirect {
+    redirect: Option<String>,
 }
 
 struct Keys {
@@ -62,11 +65,20 @@ async fn validate_input(
     }
 }
 
-fn gen_page(tera: &Tera, keys: &Keys, params: Option<(LoginParams, Vec<LoginError>)>) -> PageResult {
+fn gen_page(
+    tera: &Tera,
+    keys: &Keys,
+    redirect: &LoginRedirect,
+    params: Option<(LoginParams, Vec<LoginError>)>,
+) -> PageResult {
     let mut context = tera::Context::new();
     context.insert("user", "");
     context.insert("af_token", &keys.af);
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
+
+    if let Some(ref redirect) = redirect.redirect {
+        context.insert("redirect", &redirect);
+    }
 
     context.insert("validity", "");
     context.insert("server_error", "");
@@ -93,29 +105,37 @@ fn gen_page(tera: &Tera, keys: &Keys, params: Option<(LoginParams, Vec<LoginErro
     Ok(HttpResponse::Ok().content_type("text/html").body(html))
 }
 
-pub async fn get_login_page(state: web::Data<State>, af_session: AntiForgerySession) -> PageResult {
+pub async fn get_login_page(
+    state: web::Data<State>,
+    af_session: AntiForgerySession,
+    redirect: web::Query<LoginRedirect>,
+) -> PageResult {
     log::info!("get_login_page");
     let keys = Keys {
         af: AntiForgeryIssuer::issue(&af_session, None),
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
-    gen_page(&*state.tera(), &keys, None)
+    gen_page(&*state.tera(), &keys, &*redirect, None)
 }
 
 pub async fn post_login_page(
     state: web::Data<State>,
+    req: HttpRequest,
     remote_info: RemoteInfo,
     identity_session: IdentitySession,
     af_session: AntiForgerySession,
+    redirect: web::Query<LoginRedirect>,
     login_params: web::Form<LoginParams>,
 ) -> PageResult {
     let params = login_params.into_inner();
     let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
-    log::info!("post_login_page {:?} {:?}", params, fingerprint);
+    log::info!("post_login_page {:?} {:?} {:?}", redirect, params, fingerprint);
 
     let keys = Keys {
-        af: AntiForgeryValidator::validate(&af_session, &params.af, AntiForgeryIdentity::Ignore)
-            .map_err(|err| PageError::RedirectOnError(format!("AF: {:?}", err), "register.html".to_owned()))?,
+        af: AntiForgeryValidator::validate(&af_session, &params.af, AntiForgeryIdentity::Ignore).map_err(|err| {
+            let uri = format!("login.html?{}", req.query_string());
+            PageError::RedirectOnError(format!("AF error: {:?}", err), Redirect::SeeOther(uri))
+        })?,
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
 
@@ -123,7 +143,7 @@ pub async fn post_login_page(
 
     // validate input
     let (name, email, password) = match validate_input(&*state, &params).await {
-        Err(errors) => return gen_page(&*state.tera(), &keys, Some((params, errors))),
+        Err(errors) => return gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors))),
         Ok(validated_input) => validated_input,
     };
 
@@ -139,7 +159,7 @@ pub async fn post_login_page(
         Ok((identity, roles, session)) => {
             create_user_id(identity, roles)?.to_session(&identity_session)?;
             SessionKey::from(session).to_session(&identity_session)?;
-            Ok(HttpResponse::Ok().finish())
+            Ok(Redirect::SeeOther(redirect.redirect.clone().unwrap_or(DEFAULT_PAGE.to_owned())).into())
         }
 
         Err(err) => {
@@ -149,7 +169,7 @@ pub async fn post_login_page(
                 IAMError::PasswordNotMatching => vec![LoginError::Password],
                 err => vec![LoginError::Server(format!("server_error:{:?}", err))],
             };
-            gen_page(&*state.tera(), &keys, Some((params, errors)))
+            gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors)))
         }
     }
 }

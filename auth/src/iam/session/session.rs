@@ -1,4 +1,4 @@
-use crate::auth::iam::fingerprint::Fingerprint;
+use crate::iam::fingerprint::Fingerprint;
 use azure_sdk_storage_table::TableEntity;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

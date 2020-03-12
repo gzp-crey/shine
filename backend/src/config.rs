@@ -1,6 +1,7 @@
-use crate::auth::AuthConfig;
 use config::{self, ConfigError};
 use serde::{Deserialize, Serialize};
+use shine_auth::AuthConfig;
+use shine_web::WebConfig;
 use std::env;
 use std::path::Path;
 
@@ -10,6 +11,7 @@ pub struct Config {
     pub bind_port: u16,
     pub worker_count: usize,
     pub auth: AuthConfig,
+    pub web: WebConfig,
 }
 
 impl Config {

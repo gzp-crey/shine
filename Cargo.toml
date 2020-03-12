@@ -2,5 +2,7 @@
 members = [
     "core",
     "auth",
+    "web",
+    "backend",
     "testdata"
 ]
