@@ -6,11 +6,9 @@ use super::utils::create_user_id;
 use super::State;
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
-use shine_core::kernel::anti_forgery::{
-    AntiForgeryIdentity, AntiForgeryIssuer, AntiForgerySession, AntiForgeryValidator,
-};
+use shine_core::kernel::anti_forgery::{AntiForgeryIssuer, AntiForgerySession};
 use shine_core::kernel::identity::{IdentityCookie, IdentitySession, SessionKey, UserId};
-use shine_core::kernel::response::APIResult;
+use shine_core::kernel::response::{APIError, APIResult};
 use shine_core::requestinfo::{BasicAuth, RemoteInfo, TestingToken};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,7 +22,6 @@ pub struct RegistrationParams {
 pub async fn register_user(
     state: web::Data<State>,
     identity_session: IdentitySession,
-    af_session: AntiForgerySession,
     remote_info: RemoteInfo,
     testing_token: TestingToken,
     params: web::Json<RegistrationParams>,
@@ -44,8 +41,7 @@ pub async fn register_user(
             .check_permission_by_testing_token(testing_token.token())
             .await?;
     } else {
-        let _ = AntiForgeryValidator::validate(&af_session, &params.af, AntiForgeryIdentity::Ignore)
-            .map_err(IAMError::from)?;
+        return Err(APIError::FunctionNotSupported);
     }
 
     IdentityCookie::clear(&identity_session);
@@ -66,12 +62,22 @@ pub async fn login_basic_auth(
     state: web::Data<State>,
     identity_session: IdentitySession,
     remote_info: RemoteInfo,
+    testing_token: TestingToken,
     auth: BasicAuth,
 ) -> APIResult {
     let user_id = auth.user_id();
     let password = auth.password().ok_or(IAMError::PasswordNotMatching)?;
     let password = ValidatedPassword::from_raw(&password)?;
     let fingerprint = state.iam().get_fingerprint(&remote_info).await?;
+
+    if testing_token.is_valid() {
+        state
+            .iam()
+            .check_permission_by_testing_token(testing_token.token())
+            .await?;
+    } else {
+        return Err(APIError::FunctionNotSupported);
+    }
 
     IdentityCookie::clear(&identity_session);
 

@@ -11,5 +11,6 @@ serde = "1.0"
 tera = "1.1"
 actix-rt = "1.0"
 actix-web = "2.0"
+actix-files = "0.2"
 
 #shine-core = {path = "../core", version = "0.1.0"}

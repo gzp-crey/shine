@@ -1,6 +1,6 @@
 function is_valid(elementId) {
     var element = document.querySelector('#' + elementId + ' input');
-    return !element.classList.includes('is-invalid');
+    return element.validity.valid;
 }
 
 function set_valid(elementId, silent) {
@@ -24,6 +24,7 @@ function set_valid(elementId, silent) {
 function set_invalid(elementId, silent, error_msg) {
     //console.log('invalid: ' + silent + ' ' + elementId);
     var element = document.querySelector('#' + elementId + ' input');
+    element.setCustomValidity(error_msg);
     element.classList.remove('is-valid');
     if (silent) {
         element.classList.remove('is-invalid');
@@ -31,7 +32,6 @@ function set_invalid(elementId, silent, error_msg) {
     else {
         element.classList.add('is-invalid');
     }
-    element.setCustomValidity(error_msg);
 
     var element_error = document.querySelector('#' + elementId + ' .invalid-feedback');
     if (element_error) {

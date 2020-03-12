@@ -1,3 +1,4 @@
+use actix_files;
 use actix_rt::SystemRunner;
 use actix_web::web;
 use serde::{Deserialize, Serialize};
@@ -49,6 +50,7 @@ impl State {
 #[derive(Clone)]
 pub struct WebService {
     tera: Tera,
+    web_folder: String,
 }
 
 impl WebService {
@@ -56,12 +58,19 @@ impl WebService {
         log::info!("Parsing tera templates");
         let tera = Tera::new(&config.tera_templates).map_err(|err| WebCreateError::ConfigureTera(err.into()))?;
 
-        Ok(WebService { tera })
+        Ok(WebService {
+            tera,
+            web_folder: config.web_folder.clone(),
+        })
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
         let state = State::new(self.tera.clone());
 
-        services.service(web::scope("web").data(state.clone()));
+        services.service(
+            web::scope("web")
+                .data(state.clone())
+                .service(actix_files::Files::new("/static", &self.web_folder)),
+        );
     }
 }

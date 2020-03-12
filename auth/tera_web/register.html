@@ -26,7 +26,7 @@
   <!-- Recaptcha -->
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-  <script src="web/js/validation.js"></script>
+  <script src="/web/static/js/form_validation.js"></script>
 
   <script type="application/javascript">
     user_min_len = "{{ user_min_len }}";
@@ -66,6 +66,8 @@
         set_valid(id, false);
       } else if ('{{ user_validity }}'.startsWith('err:')) {
         set_invalid(id, false, user_errors['{{ user_validity }}'.substring(4)]);
+      } else {
+        validateUsername()
       }
     }
 
@@ -76,21 +78,25 @@
       var userNameLen = [...userName].length;
 
       if (userNameLen == 0) {
+        console.log(" == 0")
         set_invalid(id, true, user_errors.missing);
         return false;
       }
 
       if (userNameLen < user_min_len) {
+        console.log(" < user_min_len")
         set_invalid(id, false, user_errors.too_short);
         return false;
       }
 
       if (userNameLen > user_max_len) {
+        console.log(" > user_max_len")
         set_invalid(id, false, user_errors.too_long);
         return false;
       }
 
       if (userName.includes("@")) {
+        console.log(" @")
         set_invalid(id, false, user_errors.invalid_character);
         return false;
       }
@@ -106,6 +112,9 @@
         set_valid(id, false);
       } else if ('{{ email_validity }}'.startsWith('err:')) {
         set_invalid(id, false, email_errors['{{ email_validity }}'.substring(4)]);
+      }
+      else {
+        validateEmail()
       }
     }
 
@@ -157,6 +166,8 @@
         set_valid(id, true);
       } else if ('{{ password_validity }}'.startsWith('err:')) {
         set_invalid(id, false, password_errors['{{ password_validity }}'.substring(4)]);
+      } else {
+        validatePassword()
       }
 
     }
@@ -188,7 +199,7 @@
 
     function serverValidatedTerms() {
       var id = 'terms';
-      //set_invalid(id, false, terms_errors.missing);
+      set_invalid(id, true, terms_errors.missing);
 
       /*
         with this block terms don't have to be accepted after all failed post requests
@@ -208,7 +219,7 @@
       var terms = document.querySelector('#' + id + ' input');
 
       if (!terms.checked) {
-        set_invalid(id, true, terms_missing)
+        set_invalid(id, true, terms_errors.missing)
         return false;
       }
 
@@ -218,12 +229,13 @@
 
     function validateForm() {
       console.log('validateForm')
-      result = true;
+      /*result = true;
       result = is_valid('user') && validateUsername() && result;
       result = is_valid('email') && validateEmail() && result;
       result = is_valid('password') && validatePassword() && result;
       result = is_valid('terms') && validateTerms() && result;
-      return result;
+      return result;*/
+      return true;
     }
 
     $(document).ready(function () {

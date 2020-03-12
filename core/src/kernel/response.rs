@@ -102,6 +102,7 @@ pub enum APIError {
     RespourceNotFound(String),
     Forbidden,
     Unauthorized,
+    FunctionNotSupported,
 }
 
 impl fmt::Display for APIError {
@@ -124,12 +125,13 @@ impl ResponseError for APIError {
                 log::error!("Internal server error: {}", err);
                 HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).finish()
             }
-            APIError::BadRequest(body) => HttpResponse::build(StatusCode::BAD_REQUEST).body(body),
-            APIError::Conflict(body) => HttpResponse::build(StatusCode::CONFLICT).body(body),
-            APIError::TooManyRequests(body) => HttpResponse::build(StatusCode::TOO_MANY_REQUESTS).body(body),
-            APIError::RespourceNotFound(body) => HttpResponse::build(StatusCode::NOT_FOUND).body(body),
-            APIError::Forbidden => HttpResponse::build(StatusCode::FORBIDDEN).finish(),
-            APIError::Unauthorized => HttpResponse::build(StatusCode::UNAUTHORIZED).finish(),
+            APIError::BadRequest(body) => HttpResponse::BadRequest().body(body),
+            APIError::Conflict(body) => HttpResponse::Conflict().body(body),
+            APIError::TooManyRequests(body) => HttpResponse::TooManyRequests().body(body),
+            APIError::RespourceNotFound(body) => HttpResponse::NotFound().body(body),
+            APIError::Forbidden => HttpResponse::Forbidden().finish(),
+            APIError::Unauthorized => HttpResponse::Unauthorized().finish(),
+            APIError::FunctionNotSupported => HttpResponse::MethodNotAllowed().finish(),
         }
     }
 }

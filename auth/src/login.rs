@@ -110,7 +110,7 @@ pub async fn get_login_page(
     af_session: AntiForgerySession,
     redirect: web::Query<LoginRedirect>,
 ) -> PageResult {
-    log::info!("get_login_page");
+    log::info!("get_login_page {:?}", redirect);
     let keys = Keys {
         af: AntiForgeryIssuer::issue(&af_session, None),
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
