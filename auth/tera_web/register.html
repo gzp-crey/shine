@@ -33,33 +33,43 @@
     user_max_len = "{{ user_max_len }}";
     password_min_len = "{{ password_min_len }}";
     password_max_len = "{{ password_max_len }}";
-
-    user_errors = {
-      missing: "Please provide a valid username",
-      too_short: "Too short, required min length: {{ user_min_len }}",
-      too_long: "Too long, required max length: {{ user_max_len }}",
-      invalid_character: "User name may not contian '@'",
-      already_taken: "User name already in use"
-    };
-
-    email_errors = {
-      invalid: "Invalid email format",
-      invalid_domain: "Unsupported email server",
-      already_taken: "Email already in use",
-    };
-
-    password_errors = {
-      missing: "Provide password",
-      too_short: "Too short, required min length: {{ password_min_len }}",
-      too_long: "Too long, required max length: {{ password_max_len }}",
-      too_week: "Password is too week"
-    };
-
-    terms_errors = {
-      missing: "Accept terms"
-    };
+  </script>
 
 
+  <script type="application/javascript">
+    en = {
+      title: "Create Account",
+      errors: {
+        user: {
+          missing: "Please provide a valid username",
+          too_short: "Too short, required min length: " + user_min_len,
+          too_long: "Too long, required max length: " + user_max_len,
+          invalid_character: "User name may not contian '@'",
+          already_taken: "User name already in use"
+        },
+
+        email: {
+          invalid: "Invalid email format",
+          invalid_domain: "Unsupported email server",
+          already_taken: "Email already in use",
+        },
+
+        password: {
+          missing: "Provide password",
+          too_short: "Too short, required min length: " + password_min_len,
+          too_long: "Too long, required max length: " + password_max_len,
+          too_week: "Password is too week"
+        },
+
+        terms: {
+          missing: "Accept terms"
+        },
+      }
+    }
+  </script>
+
+
+  <script type="application/javascript">
     var user_changed = false;
     var email_changed = false;
     var password_changed = false;
@@ -69,7 +79,7 @@
       if ('{{ user_validity }}' == 'accepted') {
         form_set_valid('user', false);
       } else if ('{{ user_validity }}'.startsWith('err:')) {
-        form_set_invalid('user', false, user_errors['{{ user_validity }}'.substring(4)]);
+        form_set_invalid('user', false, en.errors.user['{{ user_validity }}'.substring(4)]);
       }
     }
 
@@ -80,22 +90,22 @@
       var userNameLen = [...userName].length;
 
       if (userNameLen == 0) {
-        form_set_invalid('user', true, user_errors.missing);
+        form_set_invalid('user', true, en.errors.user.missing);
         return false;
       }
 
       if (userNameLen < user_min_len) {
-        form_set_invalid('user', false, user_errors.too_short);
+        form_set_invalid('user', false, en.errors.user.too_short);
         return false;
       }
 
       if (userNameLen > user_max_len) {
-        form_set_invalid('user', false, user_errors.too_long);
+        form_set_invalid('user', false, en.errors.user.too_long);
         return false;
       }
 
       if (userName.includes("@")) {
-        form_set_invalid('user', false, user_errors.invalid_character);
+        form_set_invalid('user', false, en.errors.user.invalid_character);
         return false;
       }
 
@@ -107,7 +117,7 @@
       if ('{{ email_validity }}' == 'accepted') {
         form_set_valid('email', false);
       } else if ('{{ email_validity }}'.startsWith('err:')) {
-        form_set_invalid('email', false, email_errors['{{ email_validity }}'.substring(4)]);
+        form_set_invalid('email', false, en.errors.email['{{ email_validity }}'.substring(4)]);
       }
     }
 
@@ -124,7 +134,7 @@
 
       //https://www.w3resource.com/javascript/form/email-validation.php
       if (!(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email))) {
-        form_set_invalid('email', false, email_errors.invalid);
+        form_set_invalid('email', false, en.errors.email.invalid);
         return false;
       }
 
@@ -155,7 +165,7 @@
       if ('{{ password_validity }}' == 'accepted') {
         form_set_valid('password', true);
       } else if ('{{ password_validity }}'.startsWith('err:')) {
-        form_set_invalid('password', false, password_errors['{{ password_validity }}'.substring(4)]);
+        form_set_invalid('password', false, en.errors.password['{{ password_validity }}'.substring(4)]);
       }
     }
 
@@ -166,17 +176,17 @@
       var passwordLen = [...password].length;
 
       if (passwordLen == 0) {
-        form_set_invalid('password', true, password_errors.missing);
+        form_set_invalid('password', true, en.errors.password.missing);
         return false;
       }
 
       if (passwordLen < password_min_len) {
-        form_set_invalid('password', false, password_errors.too_short);
+        form_set_invalid('password', false, en.errors.password.too_short);
         return false;
       }
 
       if (passwordLen > password_max_len) {
-        form_set_invalid('password', false, password_errors.too_long);
+        form_set_invalid('password', false, en.errors.password.too_long);
         return false;
       }
 
@@ -192,7 +202,7 @@
 
       var terms = form_input('terms');
       if (!terms.checked) {
-        form_set_invalid('terms', true, terms_errors.missing)
+        form_set_invalid('terms', true, en.errors.terms.missing)
         return false;
       }
 
@@ -214,6 +224,8 @@
       serverValidatedEmail();
       serverValidatedPassword();
       serverValidatedTerms();
+
+      title.innerText = en.title;
     })
   </script>
 </head>
@@ -225,7 +237,7 @@
       <div class="col-10 col-md-8 col-lg-6">
         <div class="card">
           <div class="card-header text-center">
-            <h3>Create Account</h3>
+            <h3 id="title"></h3>
             {% if redirect %}
             <footer><small>for <em>{{ redirect }}</em></small></footer>
             {% endif %}
