@@ -59,90 +59,82 @@
       missing: "Accept terms"
     };
 
-    function serverValidatedUsername() {
-      var id = 'user';
 
+    var user_changed = false;
+    var email_changed = false;
+    var password_changed = false;
+    var terms_changed = false;
+
+    function serverValidatedUsername() {
       if ('{{ user_validity }}' == 'accepted') {
-        set_valid(id, false);
+        form_set_valid('user', false);
       } else if ('{{ user_validity }}'.startsWith('err:')) {
-        set_invalid(id, false, user_errors['{{ user_validity }}'.substring(4)]);
-      } else {
-        validateUsername()
+        form_set_invalid('user', false, user_errors['{{ user_validity }}'.substring(4)]);
       }
     }
 
     function validateUsername() {
-      var id = 'user';
+      user_changed = true;
 
-      var userName = document.querySelector('#' + id + ' input').value;
+      var userName = form_value('user');
       var userNameLen = [...userName].length;
 
       if (userNameLen == 0) {
-        console.log(" == 0")
-        set_invalid(id, true, user_errors.missing);
+        form_set_invalid('user', true, user_errors.missing);
         return false;
       }
 
       if (userNameLen < user_min_len) {
-        console.log(" < user_min_len")
-        set_invalid(id, false, user_errors.too_short);
+        form_set_invalid('user', false, user_errors.too_short);
         return false;
       }
 
       if (userNameLen > user_max_len) {
-        console.log(" > user_max_len")
-        set_invalid(id, false, user_errors.too_long);
+        form_set_invalid('user', false, user_errors.too_long);
         return false;
       }
 
       if (userName.includes("@")) {
-        console.log(" @")
-        set_invalid(id, false, user_errors.invalid_character);
+        form_set_invalid('user', false, user_errors.invalid_character);
         return false;
       }
 
-      set_valid(id, true)
+      form_set_valid('user', true)
       return true;
     }
 
     function serverValidatedEmail() {
-      var id = 'email';
-
       if ('{{ email_validity }}' == 'accepted') {
-        set_valid(id, false);
+        form_set_valid('email', false);
       } else if ('{{ email_validity }}'.startsWith('err:')) {
-        set_invalid(id, false, email_errors['{{ email_validity }}'.substring(4)]);
-      }
-      else {
-        validateEmail()
+        form_set_invalid('email', false, email_errors['{{ email_validity }}'.substring(4)]);
       }
     }
 
     function validateEmail() {
-      var id = 'email';
+      email_changed = true;
 
-      var email = document.querySelector('#' + id + ' input').value;
+      var email = form_value('email');
       var emailLen = [...email].length;
 
       if (email == email.length) {
-        set_valid(id, true);
+        form_set_valid('email', true);
         return false;
       }
 
       //https://www.w3resource.com/javascript/form/email-validation.php
       if (!(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email))) {
-        set_invalid(id, false, email_errors.invalid);
+        form_set_invalid('email', false, email_errors.invalid);
         return false;
       }
 
-      set_valid(id, true)
+      form_set_valid('email', true)
       return true;
     }
 
     function show_hide_password(hide) {
-      var id = 'password';
-      var password = document.querySelector('#' + id + ' input');
-      var password_eye = document.querySelector('#' + id + ' .input-group-append i');
+      var password = document.querySelector('#password input');
+      var password_eye = document.querySelector('#password .input-group-append i');
 
       if (password.type == 'text' || hide) {
         password.type = 'password';
@@ -160,82 +152,61 @@
     }
 
     function serverValidatedPassword() {
-      var id = 'password';
-
       if ('{{ password_validity }}' == 'accepted') {
-        set_valid(id, true);
+        form_set_valid('password', true);
       } else if ('{{ password_validity }}'.startsWith('err:')) {
-        set_invalid(id, false, password_errors['{{ password_validity }}'.substring(4)]);
-      } else {
-        validatePassword()
+        form_set_invalid('password', false, password_errors['{{ password_validity }}'.substring(4)]);
       }
-
     }
 
     function validatePassword() {
-      var id = 'password';
+      password_changed = true;
 
-      var password = document.querySelector('#' + id + ' input').value;
+      var password = form_value('password');
       var passwordLen = [...password].length;
 
       if (passwordLen == 0) {
-        set_invalid(id, true, password_errors.missing);
+        form_set_invalid('password', true, password_errors.missing);
         return false;
       }
 
       if (passwordLen < password_min_len) {
-        set_invalid(id, false, password_errors.too_short);
+        form_set_invalid('password', false, password_errors.too_short);
         return false;
       }
 
       if (passwordLen > password_max_len) {
-        set_invalid(id, false, password_errors.too_long);
+        form_set_invalid('password', false, password_errors.too_long);
         return false;
       }
 
-      set_valid(id, true)
+      form_set_valid('password', true)
       return true;
     }
 
     function serverValidatedTerms() {
-      var id = 'terms';
-      set_invalid(id, true, terms_errors.missing);
-
-      /*
-        with this block terms don't have to be accepted after all failed post requests
-
-        if ('{{ terms_validity }}' == 'accepted') {
-          document.querySelector('#terms input').checked = true;
-          set_valid(id, true);
-        } else if ('{{ terms_validity }}'.startsWith('err:')) {
-          set_invalid(id, false, terms_errors['{{ terms_validity }}'.substring(4)]);
-        }
-      */
     }
 
     function validateTerms() {
-      var id = 'terms';
+      terms_changed = true;
 
-      var terms = document.querySelector('#' + id + ' input');
-
+      var terms = form_input('terms');
       if (!terms.checked) {
-        set_invalid(id, true, terms_errors.missing)
+        form_set_invalid('terms', true, terms_errors.missing)
         return false;
       }
 
-      set_valid(id, true)
+      form_set_valid('terms', true)
       return true;
     }
 
     function validateForm() {
-      console.log('validateForm')
-      /*result = true;
-      result = is_valid('user') && validateUsername() && result;
-      result = is_valid('email') && validateEmail() && result;
-      result = is_valid('password') && validatePassword() && result;
-      result = is_valid('terms') && validateTerms() && result;
-      return result;*/
-      return true;
+      result = true;
+      result = (user_changed || validateUsername()) && result;
+      result = (email_changed || validateEmail()) && result;
+      result = (password_changed || validatePassword()) && result;
+      result = (terms_changed || validateTerms()) && result;
+      return result;
     }
 
     $(document).ready(function () {
@@ -260,7 +231,8 @@
             {% endif %}
           </div>
           <div class="card-body">
-            <form id="registerForm" method="post" enctype="application/x-www-form-urlencoded">
+            <form id="registerForm" method="post" onsubmit="return validateForm()"
+              enctype="application/x-www-form-urlencoded">
 
               <div class="form-group input-group" id="user" oninput="validateUsername()">
                 <div class="input-group-prepend">
@@ -303,8 +275,7 @@
               </div>
 
               <input type="hidden" name="af" value="{{af_token}}">
-              <button type="submit" class="btn btn-lg btn-primary btn-block"
-                onclick="validateForm()">Register</button>
+              <button type="submit" class="btn btn-lg btn-primary btn-block">Register</button>
             </form>
           </div>
         </div>

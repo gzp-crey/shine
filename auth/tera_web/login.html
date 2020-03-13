@@ -29,11 +29,20 @@
   <script src="/web/static/js/form_validation.js"></script>
 
   <script type="application/javascript">
+    errors = {
+      missing_user: "Please provide a valid username",
+      missing_password: "Please provide your password",
+    };
+
+    var user_changed = false;
+    var password_change = false;
 
     function validateUsername() {
-      var userName = document.querySelector('#user input').value;
+      user_changed = true;
+
+      var userName = form_value('user');
       if (userName.length == 0) {
-        set_invalid(id, true, user_errors.missing);
+        form_set_invalid('user', true, errors.missing_user);
         return false;
       }
 
@@ -41,9 +50,11 @@
     }
 
     function validatePassword() {
-      var password = document.querySelector('#password input').value;
+      password_change = true;
+
+      var password = form_value('password');
       if (password.length == 0) {
-        set_invalid(id, true, password_errors.missing);
+        form_set_invalid('password', true, errors.missing_password);
         return false;
       }
 
@@ -52,8 +63,8 @@
 
     function validateForm() {
       var result = true;
-      result = validateUsername() && result;
-      result = validatePassword() && result;
+      result = (user_changed || validateUsername()) && result;
+      result = (password_change || validatePassword()) && result;
       return result;
     }
   </script>
@@ -72,7 +83,8 @@
             {% endif %}
           </div>
           <div class="card-body">
-            <form id="loginForm" method="post" enctype="application/x-www-form-urlencoded">
+            <form id="loginForm" method="post" onsubmit="return validateForm()"
+              enctype="application/x-www-form-urlencoded">
 
               <div class="form-group input-group" id="user">
                 <div class="input-group-prepend">
@@ -94,7 +106,7 @@
               </div>
 
               <input type="hidden" name="af" value="{{af_token}}">
-              <button type="submit" class="btn btn-lg btn-primary btn-block" onclick="validateForm()">Login</button>
+              <button type="submit" class="btn btn-lg btn-primary btn-block">Login</button>
             </form>
           </div>
         </div>
