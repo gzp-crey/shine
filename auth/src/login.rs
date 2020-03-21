@@ -52,7 +52,9 @@ async fn validate_input(
     // validate input
     let name = ValidatedName::from_raw(&params.user).ok();
     let email = ValidatedEmail::from_raw(&params.user).ok();
-    let password = ValidatedPassword::from_raw(&params.password).ok();
+    let password = ValidatedPassword::from_raw(&params.password)
+        .map_err(|_err| errors.push(LoginError::Password))
+        .ok();
 
     if let Err(_err) = state.recaptcha().check_response(&params.recaptcha_response).await {
         errors.push(LoginError::Recaptcha);
@@ -66,12 +68,17 @@ async fn validate_input(
 }
 
 fn gen_page(
+    web_root: &str,
     tera: &Tera,
+    lang: &str,
     keys: &Keys,
     redirect: &LoginRedirect,
     params: Option<(LoginParams, Vec<LoginError>)>,
 ) -> PageResult {
     let mut context = tera::Context::new();
+    context.insert("root", &format!("/{}", web_root));
+    context.insert("lang", lang);
+
     context.insert("user", "");
     context.insert("af_token", &keys.af);
     context.insert("recaptcha_site_key", &keys.recaptcha_site_key);
@@ -80,8 +87,9 @@ fn gen_page(
         context.insert("redirect", &redirect);
     }
 
-    context.insert("validity", "");
-    context.insert("server_error", "");
+    context.insert("login_validity", "");
+    context.insert("recaptcha_validity", "");
+    context.insert("server_validity", "");
 
     if let Some((params, errors)) = params {
         context.insert("user", &params.user);
@@ -89,10 +97,10 @@ fn gen_page(
         log::info!("page errors: {:?}", errors);
         for err in errors {
             match err {
-                LoginError::Username => context.insert("validity", "err:password_or_name"),
-                LoginError::Password => context.insert("validity", "err:password_or_name"),
-                LoginError::Recaptcha => context.insert("validity", "err:recaptche"),
-                LoginError::Server(ref err) => context.insert("server_error", err),
+                LoginError::Username => context.insert("login_validity", "err:password_or_name"),
+                LoginError::Password => context.insert("login_validity", "err:password_or_name"),
+                LoginError::Recaptcha => context.insert("recaptcha_validity", "err:recaptche"),
+                LoginError::Server(ref err) => context.insert("server_validity", &format!("err:{}", err)),
             };
         }
     }
@@ -108,6 +116,7 @@ fn gen_page(
 pub async fn get_login_page(
     state: web::Data<State>,
     af_session: AntiForgerySession,
+    lang: web::Path<String>,
     redirect: web::Query<LoginRedirect>,
 ) -> PageResult {
     log::info!("get_login_page {:?}", redirect);
@@ -115,7 +124,7 @@ pub async fn get_login_page(
         af: AntiForgeryIssuer::issue(&af_session, None),
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
-    gen_page(&*state.tera(), &keys, &*redirect, None)
+    gen_page(state.web_root(), &*state.tera(), &*lang, &keys, &*redirect, None)
 }
 
 pub async fn post_login_page(
@@ -124,6 +133,7 @@ pub async fn post_login_page(
     remote_info: RemoteInfo,
     identity_session: IdentitySession,
     af_session: AntiForgerySession,
+    lang: web::Path<String>,
     redirect: web::Query<LoginRedirect>,
     login_params: web::Form<LoginParams>,
 ) -> PageResult {
@@ -143,7 +153,16 @@ pub async fn post_login_page(
 
     // validate input
     let (name, email, password) = match validate_input(&*state, &params).await {
-        Err(errors) => return gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors))),
+        Err(errors) => {
+            return gen_page(
+                state.web_root(),
+                &*state.tera(),
+                &*lang,
+                &keys,
+                &*redirect,
+                Some((params, errors)),
+            )
+        }
         Ok(validated_input) => validated_input,
     };
 
@@ -169,7 +188,14 @@ pub async fn post_login_page(
                 IAMError::PasswordNotMatching => vec![LoginError::Password],
                 err => vec![LoginError::Server(format!("server_error:{:?}", err))],
             };
-            gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors)))
+            gen_page(
+                state.web_root(),
+                &*state.tera(),
+                &*lang,
+                &keys,
+                &*redirect,
+                Some((params, errors)),
+            )
         }
     }
 }

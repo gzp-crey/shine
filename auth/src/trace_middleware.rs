@@ -57,10 +57,12 @@ where
     }
 
     fn call(&mut self, req: ServiceRequest) -> Self::Future {
-        if let Err(err) = self.state.try_reload_tera() {
-            log::info!("Failed to refresh tera: {:?}", err);
-        } else {
-            log::info!("Tera refreshed");
+        if let Some(_) = req.headers().get("x-sh-tera-reload") {
+            if let Err(err) = self.state.try_reload_tera() {
+                log::info!("Failed to refresh tera: {:?}", err);
+            } else {
+                log::info!("Tera refreshed");
+            }
         }
 
         let fut = self.service.call(req);

@@ -30,6 +30,7 @@ pub const DEFAULT_PAGE: &str = "google.com";
 pub struct AuthConfig {
     pub iam: IAMConfig,
     pub tera_templates: String,
+    pub web_folder: String,
     pub recaptcha_secret: String,
     pub recaptcha_site_key: String,
     pub id_session_secret: String,
@@ -53,22 +54,28 @@ impl fmt::Display for AuthCreateError {
     }
 }
 
-struct Inner {
+struct StateInner {
+    web_root: String,
     tera: RefCell<Tera>,
     iam: IAM,
     recaptcha: Recaptcha,
 }
 
 #[derive(Clone)]
-pub struct State(Rc<Inner>);
+pub struct State(Rc<StateInner>);
 
 impl State {
-    pub fn new(tera: Tera, iam: IAM, recaptcha: Recaptcha) -> Self {
-        Self(Rc::new(Inner {
+    pub fn new(web_root: String, tera: Tera, iam: IAM, recaptcha: Recaptcha) -> Self {
+        Self(Rc::new(StateInner {
+            web_root,
             tera: RefCell::new(tera),
             iam,
             recaptcha,
         }))
+    }
+
+    pub fn web_root(&self) -> &str {
+        &self.0.web_root
     }
 
     pub fn tera(&self) -> Ref<Tera> {
@@ -100,12 +107,14 @@ pub struct AuthService {
     tera: Tera,
     iam: IAM,
     recaptcha: Recaptcha,
+    web_folder: String,
+    web_root: String,
     id_session_secret: Vec<u8>,
     af_session_secret: Vec<u8>,
 }
 
 impl AuthService {
-    pub fn create(sys: &mut SystemRunner, config: &AuthConfig) -> Result<AuthService, AuthCreateError> {
+    pub fn create(sys: &mut SystemRunner, config: &AuthConfig, web_root: &str) -> Result<AuthService, AuthCreateError> {
         log::info!("Parsing tera templates");
         let tera = Tera::new(&config.tera_templates).map_err(|err| AuthCreateError::ConfigureTera(err.into()))?;
 
@@ -126,29 +135,37 @@ impl AuthService {
             iam,
             tera,
             recaptcha,
+            web_folder: config.web_folder.clone(),
+            web_root: web_root.to_owned(),
             id_session_secret,
             af_session_secret,
         })
     }
 
     pub fn configure(&self, services: &mut web::ServiceConfig) {
-        let state = State::new(self.tera.clone(), self.iam.clone(), self.recaptcha.clone());
+        let state = State::new(
+            self.web_root.clone(),
+            self.tera.clone(),
+            self.iam.clone(),
+            self.recaptcha.clone(),
+        );
 
         services.service(
-            web::scope("auth")
+            web::scope(&self.web_root)
                 .wrap(Trace::new(state.clone()))
                 .wrap(SignedCookie::new(IdentityCookie::write(&self.id_session_secret), ()))
                 .wrap(SignedCookie::new(AntiForgeryCookie::new(&self.af_session_secret), ()))
                 .data(state)
+                .service(actix_files::Files::new("/static", &self.web_folder))
                 .service(
                     web::scope("")
                         .service(
-                            web::resource("register.html")
+                            web::resource("{lang}/register.html")
                                 .route(web::get().to(registration::get_register_page))
                                 .route(web::post().to(registration::post_register_page)),
                         )
                         .service(
-                            web::resource("login.html")
+                            web::resource("{lang}/login.html")
                                 .route(web::get().to(login::get_login_page))
                                 .route(web::post().to(login::post_login_page)),
                         ),

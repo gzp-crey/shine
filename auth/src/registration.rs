@@ -116,12 +116,17 @@ async fn validate_input(
 }
 
 fn gen_page(
+    web_root: &str,
     tera: &Tera,
+    lang: &str,
     keys: &Keys,
     redirect: &RegisterRedirect,
     params: Option<(RegistrationParams, Vec<RegistrationError>)>,
 ) -> PageResult {
     let mut context = tera::Context::new();
+    context.insert("root", &format!("/{}", web_root));
+    context.insert("lang", lang);
+
     context.insert("user_min_len", &format!("{}", ValidatedName::MIN_LEN));
     context.insert("user_max_len", &format!("{}", ValidatedName::MAX_LEN));
     context.insert("password_min_len", &format!("{}", ValidatedPassword::MIN_LEN));
@@ -142,8 +147,7 @@ fn gen_page(
     context.insert("password_validity", "");
     context.insert("recaptcha_validity", "");
     context.insert("terms_validity", "");
-
-    context.insert("server_error", "");
+    context.insert("server_validity", "");
 
     if let Some((params, errors)) = params {
         context.insert("user", params.user.as_str());
@@ -171,7 +175,7 @@ fn gen_page(
                 RegistrationError::PasswordTooWeek => context.insert("password_validity", "err:too_week"),
                 RegistrationError::Recaptcha => context.insert("recaptcha_validity", "err:missing"),
                 RegistrationError::TermsMissing => context.insert("terms_validity", "err:missing"),
-                RegistrationError::Server(ref err) => context.insert("server_error", err),
+                RegistrationError::Server(ref err) => context.insert("server_validity", &format!("err:{}", err)),
             };
         }
     }
@@ -187,6 +191,7 @@ fn gen_page(
 pub async fn get_register_page(
     state: web::Data<State>,
     af_session: AntiForgerySession,
+    lang: web::Path<String>,
     redirect: web::Query<RegisterRedirect>,
 ) -> PageResult {
     log::info!("get_register_page");
@@ -194,7 +199,7 @@ pub async fn get_register_page(
         af: AntiForgeryIssuer::issue(&af_session, None),
         recaptcha_site_key: state.recaptcha().site_key().to_owned(),
     };
-    gen_page(&*state.tera(), &keys, &*redirect, None)
+    gen_page(state.web_root(), &*state.tera(), &*lang, &keys, &*redirect, None)
 }
 
 pub async fn post_register_page(
@@ -203,6 +208,7 @@ pub async fn post_register_page(
     remote_info: RemoteInfo,
     identity_session: IdentitySession,
     af_session: AntiForgerySession,
+    lang: web::Path<String>,
     redirect: web::Query<RegisterRedirect>,
     registration_params: web::Form<RegistrationParams>,
 ) -> PageResult {
@@ -222,7 +228,16 @@ pub async fn post_register_page(
 
     // validate input
     let (name, email, password) = match validate_input(&*state, &params).await {
-        Err(errors) => return gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors))),
+        Err(errors) => {
+            return gen_page(
+                state.web_root(),
+                &*state.tera(),
+                &*lang,
+                &keys,
+                &*redirect,
+                Some((params, errors)),
+            )
+        }
         Ok(validated_input) => validated_input,
     };
 
@@ -235,7 +250,14 @@ pub async fn post_register_page(
                 IAMError::EmailTaken => vec![RegistrationError::EmailAlreadyTaken],
                 err => vec![RegistrationError::Server(format!("server_error:{:?}", err))],
             };
-            return gen_page(&*state.tera(), &keys, &*redirect, Some((params, errors)));
+            return gen_page(
+                state.web_root(),
+                &*state.tera(),
+                &*lang,
+                &keys,
+                &*redirect,
+                Some((params, errors)),
+            );
         }
         Ok(registration) => {
             log::info!("user registered: {:?}", registration);

@@ -1,5 +1,6 @@
 use actix_web::{middleware, App, HttpServer};
 use shine_auth::AuthService;
+use shine_gamestate::GameStateService;
 use shine_web::WebService;
 use std::env;
 
@@ -13,6 +14,7 @@ pub fn main() {
         //.filter_level(log::LevelFilter::Trace)
         .filter_module("shine_auth", log::LevelFilter::Trace)
         .filter_module("shine_web", log::LevelFilter::Trace)
+        .filter_module("shine_gamestate", log::LevelFilter::Trace)
         .filter_module("shine_core", log::LevelFilter::Debug)
         .filter_module("mio", log::LevelFilter::Info)
         .filter_module("hyper", log::LevelFilter::Info)
@@ -25,14 +27,17 @@ pub fn main() {
     let service_config = config::Config::new().expect("Service configuration failed");
     log::info!("{:#?}", service_config);
 
-    let auth = AuthService::create(&mut sys, &service_config.auth).expect("Auth service creation failed");
-    let web = WebService::create(&mut sys, &service_config.web).expect("Web service creation failed");
+    let auth = AuthService::create(&mut sys, &service_config.auth, "auth").expect("Auth service creation failed");
+    let web = WebService::create(&mut sys, &service_config.web, "web").expect("Web service creation failed");
+    let gamestate = GameStateService::create(&mut sys, &service_config.gamestate, "gamestate")
+        .expect("GameState service creation failed");
 
     let _ = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
             .configure(|cfg| web.configure(cfg))
             .configure(|cfg| auth.configure(cfg))
+            .configure(|cfg| gamestate.configure(cfg))
     })
     .workers(service_config.worker_count)
     .bind(service_config.get_bind_address())

@@ -26,48 +26,22 @@
   <!-- Recaptcha -->
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-  <script src="/web/static/js/form_validation.js"></script>
 
   <script type="application/javascript">
-    user_min_len = "{{ user_min_len }}";
-    user_max_len = "{{ user_max_len }}";
-    password_min_len = "{{ password_min_len }}";
-    password_max_len = "{{ password_max_len }}";
-  </script>
-
-
-  <script type="application/javascript">
-    en = {
-      title: "Create Account",
-      errors: {
-        user: {
-          missing: "Please provide a valid username",
-          too_short: "Too short, required min length: " + user_min_len,
-          too_long: "Too long, required max length: " + user_max_len,
-          invalid_character: "User name may not contian '@'",
-          already_taken: "User name already in use"
-        },
-
-        email: {
-          invalid: "Invalid email format",
-          invalid_domain: "Unsupported email server",
-          already_taken: "Email already in use",
-        },
-
-        password: {
-          missing: "Provide password",
-          too_short: "Too short, required min length: " + password_min_len,
-          too_long: "Too long, required max length: " + password_max_len,
-          too_week: "Password is too week"
-        },
-
-        terms: {
-          missing: "Accept terms"
-        },
+    cfg = {
+      user: {
+        min_len: '{{ user_min_len }}',
+        max_len: '{{ user_max_len }}',
+      },
+      password: {
+        min_len: '{{ password_min_len }}',
+        max_len: '{{ password_max_len }}',
       }
     }
   </script>
 
+  <script src="{{ root | safe }}/static/js/form_validation.js"></script>
+  <script src="{{ root | safe }}/static/lang/register/{{ lang }}.js"></script>
 
   <script type="application/javascript">
     var user_changed = false;
@@ -75,11 +49,20 @@
     var password_changed = false;
     var terms_changed = false;
 
+    function serverValidatedServer() {
+      if ('{{ server_validity }}'.startsWith('err:')) {
+        globalError.innerText = tr.errors['{{ server_validity }}'.substring(4)];
+      }
+      if (!globalError.innerText) {
+        globalError.style.display = 'none';
+      }
+    }
+
     function serverValidatedUsername() {
       if ('{{ user_validity }}' == 'accepted') {
         form_set_valid('user', false);
       } else if ('{{ user_validity }}'.startsWith('err:')) {
-        form_set_invalid('user', false, en.errors.user['{{ user_validity }}'.substring(4)]);
+        form_set_invalid('user', false, tr.errors.user['{{ user_validity }}'.substring(4)]);
       }
     }
 
@@ -90,22 +73,22 @@
       var userNameLen = [...userName].length;
 
       if (userNameLen == 0) {
-        form_set_invalid('user', true, en.errors.user.missing);
+        form_set_invalid('user', true, tr.errors.user.missing);
         return false;
       }
 
-      if (userNameLen < user_min_len) {
-        form_set_invalid('user', false, en.errors.user.too_short);
+      if (userNameLen < cfg.user.min_len) {
+        form_set_invalid('user', false, tr.errors.user.too_short);
         return false;
       }
 
-      if (userNameLen > user_max_len) {
-        form_set_invalid('user', false, en.errors.user.too_long);
+      if (userNameLen > cfg.user.max_len) {
+        form_set_invalid('user', false, tr.errors.user.too_long);
         return false;
       }
 
-      if (userName.includes("@")) {
-        form_set_invalid('user', false, en.errors.user.invalid_character);
+      if (userName.includes('@')) {
+        form_set_invalid('user', false, tr.errors.user.invalid_character);
         return false;
       }
 
@@ -117,7 +100,7 @@
       if ('{{ email_validity }}' == 'accepted') {
         form_set_valid('email', false);
       } else if ('{{ email_validity }}'.startsWith('err:')) {
-        form_set_invalid('email', false, en.errors.email['{{ email_validity }}'.substring(4)]);
+        form_set_invalid('email', false, tr.errors.email['{{ email_validity }}'.substring(4)]);
       }
     }
 
@@ -134,7 +117,7 @@
 
       //https://www.w3resource.com/javascript/form/email-validation.php
       if (!(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email))) {
-        form_set_invalid('email', false, en.errors.email.invalid);
+        form_set_invalid('email', false, tr.errors.email.invalid);
         return false;
       }
 
@@ -165,7 +148,7 @@
       if ('{{ password_validity }}' == 'accepted') {
         form_set_valid('password', true);
       } else if ('{{ password_validity }}'.startsWith('err:')) {
-        form_set_invalid('password', false, en.errors.password['{{ password_validity }}'.substring(4)]);
+        form_set_invalid('password', false, tr.errors.password['{{ password_validity }}'.substring(4)]);
       }
     }
 
@@ -176,17 +159,17 @@
       var passwordLen = [...password].length;
 
       if (passwordLen == 0) {
-        form_set_invalid('password', true, en.errors.password.missing);
+        form_set_invalid('password', true, tr.errors.password.missing);
         return false;
       }
 
-      if (passwordLen < password_min_len) {
-        form_set_invalid('password', false, en.errors.password.too_short);
+      if (passwordLen < cfg.password.min_len) {
+        form_set_invalid('password', false, tr.errors.password.too_short);
         return false;
       }
 
-      if (passwordLen > password_max_len) {
-        form_set_invalid('password', false, en.errors.password.too_long);
+      if (passwordLen > cfg.password.max_len) {
+        form_set_invalid('password', false, tr.errors.password.too_long);
         return false;
       }
 
@@ -202,7 +185,7 @@
 
       var terms = form_input('terms');
       if (!terms.checked) {
-        form_set_invalid('terms', true, en.errors.terms.missing)
+        form_set_invalid('terms', true, tr.errors.terms.missing)
         return false;
       }
 
@@ -219,14 +202,19 @@
       return result;
     }
 
-    $(document).ready(function () {
-      serverValidatedUsername();
-      serverValidatedEmail();
-      serverValidatedPassword();
-      serverValidatedTerms();
+    if (typeof tr === 'undefined') {
+      window.location.replace('{{ root | safe }}/en/register.html');
+    } else {
+      $(document).ready(function () {
+        serverValidatedServer();
+        serverValidatedUsername();
+        serverValidatedEmail();
+        serverValidatedPassword();
+        serverValidatedTerms();
 
-      title.innerText = en.title;
-    })
+        title.innerText = tr.title;
+      })
+    }
   </script>
 </head>
 
@@ -239,10 +227,12 @@
           <div class="card-header text-center">
             <h3 id="title"></h3>
             {% if redirect %}
-            <footer><small>for <em>{{ redirect }}</em></small></footer>
+            <footer><small><em>{{ redirect | safe }}</em></small></footer>
             {% endif %}
           </div>
           <div class="card-body">
+            <div id="globalError" class="alert alert-danger" role="alert">
+            </div>
             <form id="registerForm" method="post" onsubmit="return validateForm()"
               enctype="application/x-www-form-urlencoded">
 
@@ -251,7 +241,7 @@
                   <span class="input-group-text"><i class="fa fa-user"></i>
                   </span>
                 </div>
-                <input type="text" name="user" class="form-control" placeholder="User name" value="{{ user }}">
+                <input type="text" name="user" class="form-control" placeholder="User name" value="{{ user | safe }}">
                 <div class="invalid-feedback"></div>
               </div>
 
@@ -259,7 +249,7 @@
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-envelope"></i></span>
                 </div>
-                <input type="text" name="email" class="form-control" placeholder="Email" value="{{ email }}">
+                <input type="text" name="email" class="form-control" placeholder="Email" value="{{ email | safe }}">
                 <div class="invalid-feedback"></div>
               </div>
 
@@ -268,7 +258,7 @@
                   <span class="input-group-text"><i class="fa fa-unlock"></i></span>
                 </div>
                 <input type="password" name="password" class="form-control" placeholder="Password"
-                  value="{{ password }}">
+                  value="{{ password | safe }}">
                 <div class="input-group-append" onclick="show_hide_password(false)">
                   <span class="input-group-text"><i class="fa fa-eye-slash"></i></span>
                 </div>

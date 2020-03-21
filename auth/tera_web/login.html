@@ -26,26 +26,39 @@
   <!-- Recaptcha -->
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-  <script src="/web/static/js/form_validation.js"></script>
+  <script src="{{ root | safe }}/static/js/form_validation.js"></script>
+  <script src="{{ root | safe }}/static/lang/login/{{ lang }}.js"></script>
 
   <script type="application/javascript">
-    errors = {
-      missing_user: "Please provide a valid username",
-      missing_password: "Please provide your password",
-    };
-
     var user_changed = false;
     var password_change = false;
+
+    function serverValidatedLogin() {
+      if ('{{ server_validity }}'.startsWith('err:')) {
+        globalError.innerText = tr.translate('{{ server_validity }}'.substring(4));
+      }
+      else if ('{{ login_validity }}'.startsWith('err:')) {
+        globalError.innerText = tr.errors['{{ login_validity }}'.substring(4)];
+      }
+      if (!globalError.innerText) {
+        globalError.style.display = 'none';
+      }
+    }
 
     function validateUsername() {
       user_changed = true;
 
+      console.log("validateUsername");
+
       var userName = form_value('user');
       if (userName.length == 0) {
-        form_set_invalid('user', true, errors.missing_user);
+        form_set_invalid('user', true, tr.errors.missing_user);
         return false;
       }
 
+      console.log("ok");
+
+      form_set_valid('user', true);
       return true;
     }
 
@@ -54,10 +67,11 @@
 
       var password = form_value('password');
       if (password.length == 0) {
-        form_set_invalid('password', true, errors.missing_password);
+        form_set_invalid('password', true, tr.errors.missing_password);
         return false;
       }
 
+      form_set_valid('password', true);
       return true;
     }
 
@@ -67,26 +81,37 @@
       result = (password_change || validatePassword()) && result;
       return result;
     }
+
+    if (typeof tr === 'undefined') {
+      window.location.replace('{{ root | safe }}/en/login.html');
+    } else {
+      $(document).ready(function () {
+        serverValidatedLogin();
+
+        title.innerText = tr.title;
+      })
+    }
   </script>
 </head>
 
 <body class="h-100">
-
   <div class="container h-100">
     <div class="row h-100 justify-content-center align-items-center">
       <div class="col-10 col-md-8 col-lg-6">
         <div class="card">
           <div class="card-header, text-center">
-            <h3>Login</h3>
+            <h3 id="title">Login</h3>
             {% if redirect %}
-            <footer><small>for <em>{{ redirect }}</em></small></footer>
+            <footer><small><em>{{ redirect }}</em></small></footer>
             {% endif %}
           </div>
           <div class="card-body">
+            <div id="globalError" class="alert alert-danger" role="alert">
+            </div>
             <form id="loginForm" method="post" onsubmit="return validateForm()"
               enctype="application/x-www-form-urlencoded">
 
-              <div class="form-group input-group" id="user">
+              <div class="form-group input-group" id="user" oninput="validateUsername()">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-user"></i>
                   </span>
@@ -94,7 +119,7 @@
                 <input type="text" name="user" class="form-control" placeholder="Username or email" value="{{ user }}">
               </div>
 
-              <div class="form-group input-group" id="password">
+              <div class="form-group input-group" id="password" oninput="validatePassword()">
                 <div class="input-group-prepend">
                   <span class="input-group-text"><i class="fa fa-unlock"></i></span>
                 </div>

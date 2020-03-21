@@ -3,6 +3,7 @@ members = [
     "core",
     "auth",
     "web",
+    "gamestate",
     "backend",
     "testdata"
 ]

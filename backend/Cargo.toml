@@ -15,3 +15,4 @@ actix-web = "2.0"
 shine-core = {path = "../core", version = "0.1.0"}
 shine-auth = {path = "../auth", version = "0.1.0"}
 shine-web = {path = "../web", version = "0.1.0"}
+shine-gamestate = {path = "../gamestate", version = "0.1.0"}
