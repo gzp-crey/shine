@@ -4,6 +4,9 @@ members = [
     "auth",
     "web",
     "gamestate",
-    "backend",
-    "testdata"
+    "backend",	
+    "testdata",
+	
+	"game",
+	"webgame",
 ]
