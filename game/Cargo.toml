@@ -1,12 +1,5 @@
-[package]
-name = "shine-game"
-version = "0.1.0"
-authors = ["gzp-crey <gzp@creygames.com>"]
-edition = "2018"
-
-[dependencies]
-log = "0.4"
-
-[dev-dependencies]
-rand = "0.7"
-permutohedron = "0.2"
+[workspace]
+members = [
+    "game",
+    "webgame",
+]

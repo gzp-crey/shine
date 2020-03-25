@@ -1,35 +1,50 @@
-use console_error_panic_hook;
-use shine_game::GameRender;
+use crate::inputmapper::{WebInputEvent, WebInputMapper};
+use crate::webwindow::WebWindow;
+use js_sys;
+use shine_game::{render::GameRender, wgpu};
 use std::cell::RefCell;
 use std::rc::Rc;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use wasm_logger;
-use web_sys::HtmlCanvasElement;
-
-mod inputmapper;
-
-use inputmapper::{WebInputEvent, WebInputMapper};
+use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use wasm_bindgen_macro::wasm_bindgen;
+use web_sys::{HtmlCanvasElement, WebGlRenderingContext};
 
 struct Inner {
-    canvas: HtmlCanvasElement,
+    window: WebWindow,
     render: GameRender,
     input_mapper: WebInputMapper,
 }
 
 #[wasm_bindgen]
-pub struct WebGame {
+pub struct WebGameRender {
     inner: Rc<RefCell<Inner>>,
 }
 
-impl WebGame {
-    fn attach_mouse_down_handler(&mut self) -> Result<(), JsValue> {
+impl WebGameRender {
+    pub async fn new(element: &str) -> Result<WebGameRender, JsValue> {
+        let window = WebWindow::from_element_by_id(element)?;
+        //window.attach_mouse_down_handler()?;
+
+        let surface = wgpu::Surface::create(&window);
+        let render = GameRender::new(surface)
+            .await
+            .map_err(|err| js_sys::Error::new(&format!("{:?}", err)))?;
+
+        let inner = Rc::new(RefCell::new(Inner {
+            window,
+            render,
+            input_mapper: WebInputMapper::new(),
+        }));
+
+        Ok(WebGameRender { inner })
+    }
+
+    /*fn attach_mouse_down_handler(&mut self) -> Result<(), JsValue> {
         let inner = self.inner.clone();
         let handler = move |event: web_sys::MouseEvent| {
             let Inner {
                 ref mut render,
                 ref input_mapper,
-                ref canvas,
+                ref window,
             } = &mut *inner.borrow_mut();
 
             let w = canvas.width() as f32;
@@ -50,35 +65,11 @@ impl WebGame {
         handler.forget();
 
         Ok(())
-    }
+    }*/
 }
 
 #[wasm_bindgen]
-impl WebGame {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Result<WebGame, JsValue> {
-        wasm_logger::init(wasm_logger::Config::default());
-        console_error_panic_hook::set_once();
-
-        let canvas = {
-            let window = web_sys::window().unwrap();
-            let document = window.document().unwrap();
-            let canvas = document.get_element_by_id("gameCanvas").unwrap();
-            canvas.dyn_into::<web_sys::HtmlCanvasElement>()?
-        };
-
-        let inner = Rc::new(RefCell::new(Inner {
-            canvas,
-            input_mapper: WebInputMapper::new(),
-            render: GameRender::new(),
-        }));
-
-        let mut game = WebGame { inner };
-
-        game.attach_mouse_down_handler()?;
-        Ok(game)
-    }
-
+impl WebGameRender {
     pub fn render(&self) {
         //log::info!("render game");
     }

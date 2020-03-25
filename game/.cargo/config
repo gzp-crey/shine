@@ -1,0 +1,5 @@
+[alias]
+web_build = "build --target wasm32-unknown-unknown"
+
+[target.'cfg(target_arch = "wasm32")']
+rustflags = ["--cfg=web_sys_unstable_apis"] 

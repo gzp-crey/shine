@@ -1,0 +1,41 @@
+use raw_window_handle::{web::WebHandle, HasRawWindowHandle, RawWindowHandle};
+use wasm_bindgen::{JsCast, JsValue};
+use web_sys::HtmlCanvasElement;
+
+pub struct WebWindow {
+    canvas: HtmlCanvasElement,
+    id: u32,
+}
+
+impl WebWindow {
+    pub fn new(canvas: HtmlCanvasElement) -> WebWindow {
+        WebWindow { canvas: canvas, id: 0 }
+    }
+
+    pub fn from_element_by_id(element: &str) -> Result<WebWindow, JsValue> {
+        let window = web_sys::window().ok_or_else(|| js_sys::Error::new("web window not found"))?;
+        let document = window
+            .document()
+            .ok_or_else(|| js_sys::Error::new("web documnet not found"))?;
+        let canvas = document
+            .get_element_by_id(element)
+            .ok_or_else(|| js_sys::Error::new(&format!("html element [{}] not found", element)))?
+            .dyn_into::<HtmlCanvasElement>()?;
+        Ok(WebWindow::new(canvas))
+    }
+
+    fn raw_window_handle(&self) -> RawWindowHandle {
+        let handle = WebHandle {
+            id: self.id,
+            ..WebHandle::empty()
+        };
+
+        RawWindowHandle::Web(handle)
+    }
+}
+
+unsafe impl HasRawWindowHandle for WebWindow {
+    fn raw_window_handle(&self) -> RawWindowHandle {
+        self.raw_window_handle()
+    }
+}

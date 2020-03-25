@@ -2,7 +2,7 @@
 
 # execute service only if git clone and build is enabled
 if [ "${GIT_TOKEN}" != "" ]; then
-    /webapp/binary/shine-app /webapp/binary/secret.config.json
+    /webapp/binary/shine-backend /webapp/binary/secret.config.json
 else
-	 exec "$@"
+    exec "$@"
 fi    

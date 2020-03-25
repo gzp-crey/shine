@@ -11,7 +11,11 @@ crate-type = ["cdylib"]
 log = "0.4"
 wasm-logger = "0.2"
 console_error_panic_hook = "0.1"
+raw-window-handle = "0.3"
 wasm-bindgen = "0.2"
+wasm-bindgen-macro = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
 
 shine-game = {path = "../game", version = "0.1.0"}
 

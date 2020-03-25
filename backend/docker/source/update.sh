@@ -16,8 +16,9 @@ else
         cd shine-backend
     fi
 
-    rm -f $CARGO_TARGET_DIR/release/shine-auth
-    cargo build --release
+    rm -f $CARGO_TARGET_DIR/release/shine-backend
+    cd backend
+    cargo build --bin shine-backend --release
 
-    cp $CARGO_TARGET_DIR/release/shine-auth /webapp/binary
+    cp $CARGO_TARGET_DIR/release/shine-backend /webapp/binary
 fi
