@@ -8,11 +8,12 @@ pub struct WebWindow {
 }
 
 impl WebWindow {
-    pub fn new(canvas: HtmlCanvasElement) -> WebWindow {
-        WebWindow { canvas: canvas, id: 0 }
+    pub fn new(canvas: HtmlCanvasElement, id: u32) -> WebWindow {
+        canvas.set_attribute("data-raw-handle", &id.to_string());
+        WebWindow { canvas, id }
     }
 
-    pub fn from_element_by_id(element: &str) -> Result<WebWindow, JsValue> {
+    pub fn from_element_by_id(element: &str, id: u32) -> Result<WebWindow, JsValue> {
         let window = web_sys::window().ok_or_else(|| js_sys::Error::new("web window not found"))?;
         let document = window
             .document()
@@ -21,7 +22,7 @@ impl WebWindow {
             .get_element_by_id(element)
             .ok_or_else(|| js_sys::Error::new(&format!("html element [{}] not found", element)))?
             .dyn_into::<HtmlCanvasElement>()?;
-        Ok(WebWindow::new(canvas))
+        Ok(WebWindow::new(canvas, id))
     }
 
     fn raw_window_handle(&self) -> RawWindowHandle {

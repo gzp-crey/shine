@@ -1,14 +1,13 @@
 const rust = import('./pkg/shine_webgame');
 const canvas = document.getElementById('gameCanvas');
-const gl = canvas.getContext("webgl", { antialias: true });
-
+const webgpu = canvas.getContext("gpupresent");
 
 
 rust
     .then(
         async m => {
-            if (!gl) {
-                alert('Failed to initialize WebGL');
+            if (!webgpu) {
+                alert('Failed to initialize WebGPU');
                 return;
             }
 

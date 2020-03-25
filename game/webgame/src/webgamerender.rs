@@ -20,8 +20,8 @@ pub struct WebGameRender {
 }
 
 impl WebGameRender {
-    pub async fn new(element: &str) -> Result<WebGameRender, JsValue> {
-        let window = WebWindow::from_element_by_id(element)?;
+    pub async fn new(element: &str, id: u32) -> Result<WebGameRender, JsValue> {
+        let window = WebWindow::from_element_by_id(element, id)?;
         //window.attach_mouse_down_handler()?;
 
         let surface = wgpu::Surface::create(&window);
