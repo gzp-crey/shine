@@ -1,4 +1,4 @@
-use shine_game::input::{InputMapper, InputState};
+use shine_input::{InputMapper, InputState};
 
 #[derive(Debug)]
 pub enum WebInputEvent {
@@ -16,7 +16,7 @@ impl WebInputMapper {
 impl InputMapper for WebInputMapper {
     type InputEvent = WebInputEvent;
 
-    fn map_event(&self, event: &WebInputEvent, _state: &mut InputState) {
+    fn update_state(&self, event: &WebInputEvent, _state: &mut InputState) {
         log::info!("{:?}", event);
     }
 }

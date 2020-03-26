@@ -1,28 +1,51 @@
-pub mod guestures;
-pub use self::guestures::Guesture;
+use shine_ecs::world::{ResourceWorld, World};
+use shine_input::{InputManager, InputState};
+use std::ops::{Deref, DerefMut};
 
-mod manager;
-pub use self::manager::*;
-mod state;
-pub use self::state::*;
+pub mod systems;
 
-/// Id of an input controller (Ex. button, axis, etc.)
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct InputId(u32);
+/// The input state for the current frame.
+pub struct CurrentInputState(InputState);
 
-impl InputId {
-    pub const fn new(code: u32) -> InputId {
-        InputId(code)
-    }
+impl Deref for CurrentInputState {
+    type Target = InputState;
 
-    pub fn id(self) -> u32 {
-        self.0
+    fn deref(&self) -> &InputState {
+        &self.0
     }
 }
 
-/// Trait to map OS events into state change
-pub trait InputMapper {
-    type InputEvent;
+impl DerefMut for CurrentInputState {
+    fn deref_mut(&mut self) -> &mut InputState {
+        &mut self.0
+    }
+}
 
-    fn map_event(&self, event: &Self::InputEvent, state: &mut InputState);
+/// Handler for the inputs to prepare the state for the next frame.
+pub struct InputHandler {
+    state: InputState,
+    manager: InputManager,
+}
+
+impl InputHandler {
+    fn new() -> InputHandler {
+        InputHandler {
+            state: InputState::new(),
+            manager: InputManager::new(),
+        }
+    }
+
+    pub fn advance(&mut self, previous_state: &mut InputState) {
+        self.manager.advance_states(previous_state, &mut self.state);
+    }
+}
+
+/// Add required resource to handle inputs.
+/// - *CurrentInputState* stores the input state for the current frame and thus should be Read only in systems.
+/// - *InputHandler* handles the user inputs. As input arrives from a single thread, it should not be used from
+/// systems generally and access it usually restricted to the main loop.
+pub fn add_input_system(world: &mut World) {
+    log::info!("adding input system to the world");
+    world.register_resource_with(CurrentInputState(InputState::new()));
+    world.register_resource_with(InputHandler::new());
 }

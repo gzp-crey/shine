@@ -1,4 +1,4 @@
-use crate::input::{Guesture, InputId, InputState, InputValue};
+use crate::{Guesture, InputId, InputState, InputValue};
 
 /// Trigger when all the input buttons are triggered.
 pub struct ButtonCombo {

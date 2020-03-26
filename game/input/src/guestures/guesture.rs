@@ -1,4 +1,4 @@
-use crate::input::{InputId, InputState};
+use crate::{InputId, InputState};
 
 pub trait Guesture: Send + Sync {
     fn inputs(&self) -> Vec<InputId>;

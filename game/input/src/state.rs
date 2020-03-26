@@ -1,4 +1,4 @@
-use super::InputId;
+use crate::InputId;
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -101,7 +101,7 @@ impl InputState {
     }
 
     /// Copy the previous state
-    pub fn prepare(&mut self, prev: &InputState, time: u128) {
+    pub fn init_from(&mut self, prev: &InputState, time: u128) {
         self.clear();
 
         self.time = time;

@@ -1,4 +1,4 @@
-use crate::input::{Guesture, InputId, InputState, InputValue};
+use crate::{Guesture, InputId, InputState, InputValue};
 
 /// Convert two button into an axis movement.
 pub struct ButtonAxis {

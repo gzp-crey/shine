@@ -14,7 +14,7 @@ rust
             const game = new m.WebGame;
             console.log(game);
             const gameView = await game.create_render('gameCanvas');
-            console.log(render);
+            console.log(gameView);
         })
     .catch(
         error => {

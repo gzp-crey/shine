@@ -6,7 +6,10 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-wgpu = {git = "https://github.com/gzp-crey/wgpu-rs.git", branch = "gzp"}
+wgpu = {git = "https://github.com/gzp-crey/wgpu-rs.git", branch = "gzp2"}
+
+shine-input = {path = "../input", version = "0.1.0"}
+shine-ecs = {path = "../ecs", version = "0.1.0"}
 
 [dev-dependencies]
 rand = "0.7"

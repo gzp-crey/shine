@@ -19,6 +19,8 @@ impl Context {
         .await
         .ok_or(GameError::RenderContext("Adapter not found".to_owned()))?;
 
+        //log::info!("Graphics adapter: {:?}", adapter.get_info());
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 extensions: wgpu::Extensions {

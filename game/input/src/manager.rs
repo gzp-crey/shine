@@ -1,12 +1,10 @@
-use crate::input::{Guesture, InputMapper, InputState};
+use crate::{Guesture, InputState};
 use std::mem;
 
 pub struct InputManager {
     time: u128,
     guestures: Vec<Box<dyn Guesture>>,
     guestures_order: Vec<usize>,
-    state: InputState,
-    previous_state: InputState,
 }
 
 impl InputManager {
@@ -23,8 +21,6 @@ impl InputManager {
             time: 0,
             guestures: Vec::new(),
             guestures_order: Vec::new(),
-            state: InputState::new(),
-            previous_state: InputState::new(),
         }
     }
 
@@ -33,18 +29,13 @@ impl InputManager {
         self.guestures_order.clear();
     }
 
-    pub fn state(&self) -> &InputState {
-        &self.state
-    }
-
-    pub fn state_mut(&mut self) -> &InputState {
-        &mut self.state
-    }
-
-    pub fn prepare(&mut self) {
+    /// Prepare for the next input frame. The current state is made the previous state
+    /// and the current state is prepared to accept new inputs.
+    pub fn advance_states(&mut self, previous: &mut InputState, current: &mut InputState) {
         self.time = Self::now();
-        mem::swap(&mut self.previous_state, &mut self.state);
-        self.state.prepare(&self.previous_state, self.time);
+        self.process_guestures(previous, current);
+        mem::swap(previous, current);
+        current.init_from(previous, self.time);
     }
 
     fn update_guesture_order(&mut self) {
@@ -54,16 +45,13 @@ impl InputManager {
         }
     }
 
-    pub fn update(&mut self) {
+    /// Perform the guesture handling based on previous and current states
+    fn process_guestures(&mut self, previous: &InputState, current: &mut InputState) {
         self.update_guesture_order();
         for i in &self.guestures_order {
             let guesture = &mut self.guestures[*i];
-            guesture.on_update(&self.previous_state, &mut self.state);
+            guesture.on_update(previous, current);
         }
-    }
-
-    pub fn handle_input<M: InputMapper>(&mut self, mapper: &M, event: &M::InputEvent) {
-        mapper.map_event(event, &mut self.state);
     }
 }
 
