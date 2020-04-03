@@ -1,7 +1,7 @@
 use crate::inputmapper::{WebInputEvent, WebInputMapper};
 use crate::webwindow::WebWindow;
 use js_sys;
-use shine_game::{render::GameRender, wgpu};
+use shine_game::{wgpu, GameRender};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -74,5 +74,7 @@ impl WebGameRender {
         //log::info!("render game");
     }
 
-    pub fn update(&self) {}
+    pub fn update(&self) {
+        self.inner.borrow_mut().render.update();
+    }
 }

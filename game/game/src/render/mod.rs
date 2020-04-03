@@ -1,5 +1,23 @@
-mod context;
-mod gamerender;
+use crate::GameError;
+use shine_ecs::legion::{resource::Resources, thread_resources::ThreadResources, world::World};
+use wgpu;
 
+mod context;
 pub use self::context::*;
-pub use self::gamerender::*;
+//mod shader;
+//pub use self::shader::*;
+
+/// Add required resource to handle inputs.
+/// - *Context* stores the render surface, driver and queue.
+/// - *Shader* store TBD
+/// - *Pipeline* store TBD
+pub async fn add_render_system(
+    thread_resources: &mut ThreadResources,
+    _resources: &mut Resources,
+    _world: &mut World,
+    surface: wgpu::Surface,
+) -> Result<(), GameError> {
+    log::info!("adding render system to the world");
+    thread_resources.insert(Context::new(surface).await?);
+    Ok(())
+}

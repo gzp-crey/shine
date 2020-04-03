@@ -1,7 +1,6 @@
 #![feature(drain_filter)]
+#![feature(async_closure)]
+#![feature(get_mut_unchecked)]
 
-pub mod store;
-
-pub use shred;
-pub mod resources;
-pub mod world;
+pub mod core;
+pub mod legion;
