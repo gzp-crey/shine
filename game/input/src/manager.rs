@@ -1,6 +1,12 @@
 use crate::{Guesture, InputState};
 use std::mem;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_timer::SystemTime;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::SystemTime;
+
 pub struct InputManager {
     time: u128,
     guestures: Vec<Box<dyn Guesture>>,
@@ -9,7 +15,6 @@ pub struct InputManager {
 
 impl InputManager {
     fn now() -> u128 {
-        use std::time::SystemTime;
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()

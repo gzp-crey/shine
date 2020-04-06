@@ -1,5 +1,6 @@
+use crate::tasks::TaskEngine;
 use crate::GameError;
-use shine_ecs::legion::{resource::Resources, thread_resources::ThreadResources, world::World};
+use shine_ecs::legion::{systems::resource::Resources, thread_resources::ThreadResources, world::World};
 use shine_input::{InputManager, InputState};
 use std::ops::{Deref, DerefMut};
 
@@ -49,6 +50,7 @@ pub async fn add_input_system(
     _thread_resources: &mut ThreadResources,
     resources: &mut Resources,
     _world: &mut World,
+    _task_engine: &mut TaskEngine,
 ) -> Result<(), GameError> {
     log::info!("adding input system to the world");
     resources.insert(CurrentInputState(InputState::new()));

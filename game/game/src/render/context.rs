@@ -1,5 +1,5 @@
 use crate::GameError;
-use wgpu;
+use crate::wgpu;
 
 pub struct Context {
     surface: wgpu::Surface,
@@ -13,6 +13,7 @@ impl Context {
         let adapter = wgpu::Adapter::request(
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::Default,
+                //compatible_surface: None,
             },
             wgpu::BackendBit::PRIMARY,
         )

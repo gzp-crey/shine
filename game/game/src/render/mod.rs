@@ -1,6 +1,7 @@
+use crate::tasks::TaskEngine;
 use crate::GameError;
-use shine_ecs::legion::{resource::Resources, thread_resources::ThreadResources, world::World};
-use wgpu;
+use shine_ecs::legion::{systems::{resource::Resources}, thread_resources::ThreadResources, world::World};
+use crate::wgpu;
 
 mod context;
 pub use self::context::*;
@@ -15,6 +16,7 @@ pub async fn add_render_system(
     thread_resources: &mut ThreadResources,
     _resources: &mut Resources,
     _world: &mut World,
+    _task_engine: &mut TaskEngine,
     surface: wgpu::Surface,
 ) -> Result<(), GameError> {
     log::info!("adding render system to the world");

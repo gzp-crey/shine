@@ -1,5 +1,5 @@
 [package]
-name = "shine-webgame"
+name = "shine-wasm"
 version = "0.1.0"
 authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
@@ -18,7 +18,7 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 
 shine-input = {path = "../input", version = "0.1.0"}
-shine-game = {path = "../game", version = "0.1.0"}
+shine-game = {path = "../game", version = "0.1.0", default_features = false, features = ["wasm"]}
 
 [dependencies.web-sys]
 version = "0.3"
@@ -35,7 +35,3 @@ features = [
     "WebGlUniformLocation",
     "Window",
 ]
-
-[dev-dependencies]
-rand = "0.7"
-permutohedron = "0.2"

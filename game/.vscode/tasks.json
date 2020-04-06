@@ -4,11 +4,13 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "cargo build ",
+            "label": "build native",
             "type": "shell",
             "command": "cargo",
             "args": [
-                "build"
+                "build",
+                "-p",
+                "shine-native"
             ],
             "presentation": {
                 "echo": true,
@@ -22,14 +24,18 @@
             "group": "build"
         },
         {
-            "label": "cargo web_build ",
+            "label": "build wasm",
             "type": "shell",
-            "command": "cargo",
+            "command": "wasm-pack",
             "args": [
-                "web_build"
+                "build",
+                "--dev"
             ],
+            "options": {
+                "cwd": "wasmgame"
+            },
             "presentation": {
-                "echo": true,
+                "echo": true, 
                 "reveal": "always",
                 "focus": false,
                 "clear": true,

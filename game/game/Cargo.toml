@@ -4,14 +4,25 @@ version = "0.1.0"
 authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
+[features]
+default= []
+wasm = ["wasm_wgpu", "wasm-bindgen", "wasm-bindgen-futures"]
+native = ["native_wgpu", "tokio"]
+
+
 [dependencies]
 log = "0.4"
 #glsl-to-spirv = "0.1"
-wgpu = {git = "https://github.com/gzp-crey/wgpu-rs.git", branch = "gzp2"}
 
 shine-input = {path = "../input", version = "0.1.0"}
 shine-ecs = {path = "../ecs", version = "0.1.0"}
 
+tokio = {version = "0.2", features = ["rt-core"], optional = true}
+native_wgpu = {package = "wgpu", git = "https://github.com/gfx-rs/wgpu-rs.git", optional = true}
+
+wasm_wgpu = {package = "wgpu", git = "https://github.com/gzp-crey/wgpu-rs.git", branch = "gzp2", optional = true}
+wasm-bindgen = {version = "0.2", optional = true}
+wasm-bindgen-futures = {version = "0.4", optional = true}
 
 [dev-dependencies]
 rand = "0.7"

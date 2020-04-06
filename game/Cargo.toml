@@ -3,5 +3,6 @@ members = [
     "input",
     "ecs",
     "game",
-    "webgame",
+    "wasmgame",
+    "nativegame"
 ]

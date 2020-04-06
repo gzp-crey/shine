@@ -5,6 +5,11 @@ pub use self::gamerender::*;
 
 pub mod input;
 pub mod render;
+pub mod tasks;
 
 //reexport wgpu for easier project maintenance
-pub use wgpu;
+#[cfg(feature = "wasm")]
+pub use wasm_wgpu as wgpu;
+
+#[cfg(feature = "native")]
+pub use native_wgpu as wgpu;
