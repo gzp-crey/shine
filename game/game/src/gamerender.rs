@@ -1,8 +1,8 @@
 use crate::input::{self, add_input_system};
 use crate::render::add_render_system;
 use crate::tasks::TaskEngine;
-use crate::GameError;
 use crate::wgpu;
+use crate::GameError;
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
     thread_resources::ThreadResources,

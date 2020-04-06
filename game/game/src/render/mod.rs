@@ -1,7 +1,7 @@
 use crate::tasks::TaskEngine;
-use crate::GameError;
-use shine_ecs::legion::{systems::{resource::Resources}, thread_resources::ThreadResources, world::World};
 use crate::wgpu;
+use crate::GameError;
+use shine_ecs::legion::{systems::resource::Resources, thread_resources::ThreadResources, world::World};
 
 mod context;
 pub use self::context::*;

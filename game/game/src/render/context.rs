@@ -1,5 +1,5 @@
-use crate::GameError;
 use crate::wgpu;
+use crate::GameError;
 
 pub struct Context {
     surface: wgpu::Surface,

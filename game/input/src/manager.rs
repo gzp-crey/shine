@@ -10,10 +10,9 @@ pub struct InputManager {
 
 impl InputManager {
     fn now() -> u128 {
-
-        // std::time::System::now is not implemented for wasm, 
+        // std::time::System::now is not implemented for wasm,
         // use a compatible layer
-        #[cfg(feature = "wasm")]        
+        #[cfg(feature = "wasm")]
         use wasm_timer::SystemTime;
 
         SystemTime::now()

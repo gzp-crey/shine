@@ -2,7 +2,6 @@ use crate::tasks::TaskSpawner;
 use std::future::Future;
 use tokio;
 
-
 pub struct TaskEngine;
 
 impl TaskEngine {

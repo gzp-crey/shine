@@ -1,5 +1,5 @@
 use crate::input::{CurrentInputState, InputHandler};
-use shine_ecs::legion::{systems::{SystemBuilder, schedule::Schedulable}};
+use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
 
 pub fn advance_input_states() -> Box<dyn Schedulable> {
     SystemBuilder::new("advance_input_states")
