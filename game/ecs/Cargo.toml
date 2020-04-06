@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
+[features]
+default= []
+wasm = []
+native = ["legion/par-iter", "legion/par-schedule", "legion/ffi"]
+
 [dependencies]
 log = "0.4"
 futures = "0.3"
@@ -11,13 +16,6 @@ futures = "0.3"
 downcast-rs = "1.1"
 legion = {git = "https://github.com/TomGillen/legion.git", default-features = false}
 fxhash = "0.2"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies.legion]
-git = "https://github.com/TomGillen/legion.git"
-default-features = false
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.legion]
-git = "https://github.com/TomGillen/legion.git"
 
 [dev-dependencies]
 env_logger = "0.7"

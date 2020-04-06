@@ -5,7 +5,7 @@ if (!webgpu) {
     alert('Failed to initialize WebGPU');
 }
 else {
-    const rust = import('./pkg/shine_webgame');
+    const rust = import('./pkg/shine_wasm');
 
     rust
         .then(

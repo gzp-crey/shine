@@ -5,9 +5,8 @@ authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
 [features]
-default= []
-wasm = ["wasm_wgpu", "wasm-bindgen", "wasm-bindgen-futures"]
-native = ["native_wgpu", "tokio"]
+wasm = ["wasm_wgpu", "wasm-bindgen", "wasm-bindgen-futures", "shine-ecs/wasm"]
+native = ["native_wgpu", "tokio", "shine-ecs/native"]
 
 
 [dependencies]
