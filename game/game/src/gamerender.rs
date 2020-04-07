@@ -66,4 +66,8 @@ impl GameRender {
         let resources = &mut self.resources;
         self.logic.update.execute(world, resources);
     }
+
+    pub fn render(&mut self, _size: (u32, u32)) {
+
+    } 
 }

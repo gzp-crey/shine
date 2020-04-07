@@ -24,6 +24,26 @@
             "group": "build"
         },
         {
+            "label": "run native",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "run",
+                "-p",
+                "shine-native"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "clear": true,
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        },
+        {
             "label": "build wasm",
             "type": "shell",
             "command": "wasm-pack",

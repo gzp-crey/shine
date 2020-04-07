@@ -7,6 +7,8 @@ edition = "2018"
 [dependencies]
 log = "0.4"
 env_logger = "0.7"
+winit = "0.22"
+tokio = "0.2"
 
 shine-input = {path = "../input", version = "0.1.0"}
 shine-game = {path = "../game", version = "0.1.0", features = ["native"]}
