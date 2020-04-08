@@ -7,6 +7,7 @@ mod context;
 pub use self::context::*;
 //mod shader;
 //pub use self::shader::*;
+pub mod systems;
 
 /// Add required resource to handle inputs.
 /// - *Context* stores the render surface, driver and queue.

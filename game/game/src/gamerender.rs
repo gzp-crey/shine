@@ -1,27 +1,52 @@
 use crate::input::{self, add_input_system};
-use crate::render::add_render_system;
+use crate::render::{self, add_render_system};
 use crate::tasks::TaskEngine;
 use crate::wgpu;
 use crate::GameError;
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
-    thread_resources::ThreadResources,
+    thread_resources::{ThreadResources, WrapThreadResource},
     world::World,
 };
+use std::collections::HashMap;
 
-struct Logic {
-    update: Schedule,
+struct ScheduleSet {
+    wrap_thread_local: WrapThreadResource,
+    logics: HashMap<String, Schedule>,
 }
 
-impl Logic {
-    fn new() -> Logic {
-        let update = Schedule::builder()
-            .add_system(input::systems::advance_input_states())
-            .flush()
-            //.add_thread_local_fn(thread_local_example)
-            .build();
+impl ScheduleSet {
+    fn new() -> ScheduleSet {
+        let wrap_thread_local = WrapThreadResource::new();
+        let mut logics = HashMap::new();
 
-        Logic { update }
+        logics.insert(
+            "update".to_owned(),
+            Schedule::builder()
+                .add_system(input::systems::advance_input_states())
+                .flush()
+                .add_thread_local(render::systems::prepare_context(wrap_thread_local.clone()))
+                .build(),
+        );
+
+        ScheduleSet {
+            wrap_thread_local,
+            logics,
+        }
+    }
+
+    fn execute(
+        &mut self,
+        logic: &str,
+        world: &mut World,
+        resources: &mut Resources,
+        thread_resources: &mut ThreadResources,
+    ) {
+        if let Some(schedule) = self.logics.get_mut(logic) {
+            self.wrap_thread_local.wrap(thread_resources);
+            schedule.execute(world, resources);
+            self.wrap_thread_local.unwrap();
+        }
     }
 }
 
@@ -30,7 +55,7 @@ pub struct GameRender {
     pub resources: Resources,
     pub world: World,
     pub task_engine: TaskEngine,
-    logic: Logic,
+    schedules: ScheduleSet,
 }
 
 impl GameRender {
@@ -55,19 +80,26 @@ impl GameRender {
             resources,
             world,
             task_engine,
-            logic: Logic::new(),
+            schedules: ScheduleSet::new(),
         })
     }
 
     pub fn init_world() {}
 
-    pub fn update(&mut self) {
+    pub fn run_logic(&mut self, logic: &str) {
+        log::trace!("logice: {}", logic);
         let world = &mut self.world;
         let resources = &mut self.resources;
-        self.logic.update.execute(world, resources);
+        let thread_resources = &mut self.thread_resources;
+        self.schedules.execute("update", world, resources, thread_resources);
+    }
+
+    pub fn update(&mut self) {
+        self.run_logic("update");
     }
 
     pub fn render(&mut self, _size: (u32, u32)) {
-
-    } 
+        //todo: get context, set requetsed size
+        self.run_logic("render");
+    }
 }

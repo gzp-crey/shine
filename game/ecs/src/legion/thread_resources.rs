@@ -255,3 +255,32 @@ mod tests {
         assert_eq!(owned.unwrap().value, "balls")
     }
 }
+
+use std::cell::Cell;
+use std::rc::Rc;
+
+#[derive(Clone)]
+pub struct WrapThreadResource {
+    inner: Rc<Cell<Option<*mut ThreadResources>>>,
+}
+
+impl WrapThreadResource {
+    pub fn new() -> Self {
+        WrapThreadResource {
+            inner: Rc::new(Cell::new(None)),
+        }
+    }
+
+    pub fn wrap(&mut self, resources: &mut ThreadResources) {
+        self.inner.set(Some(resources as *mut _));
+    }
+
+    pub fn unwrap(&mut self) {
+        self.inner.set(None);
+    }
+
+    pub fn get(&self) -> &mut ThreadResources {
+        let ptr = self.inner.get().unwrap();
+        unsafe { &mut *ptr }
+    }
+}
