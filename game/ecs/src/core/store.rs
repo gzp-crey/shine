@@ -203,6 +203,8 @@ impl<D: Data> ExclusiveData<D> {
 /// The context of the loading operation to check cancelation.
 pub struct LoadContext<D: Data>(Weak<()>, *mut Entry<D>, Key<D>);
 
+unsafe impl<D> Send for LoadContext<D> where D: Data {}
+
 impl<D: Data> LoadContext<D> {
     pub fn is_canceled(&self) -> bool {
         self.0.upgrade().is_none()
@@ -215,7 +217,7 @@ impl<D: Data> Clone for LoadContext<D> {
     }
 }
 
-pub trait DataLoader<D>
+pub trait DataLoader<D>: Send
 where
     D: Data,
 {
@@ -249,6 +251,8 @@ where
     responses: UnboundedSender<(D::LoadResponse, LoadContext<D>)>,
     data_loader: Box<dyn DataLoader<D>>,
 }
+
+unsafe impl<D> Send for StoreLoader<D> where D: Data {}
 
 impl<D> StoreLoader<D>
 where
@@ -304,7 +308,6 @@ pub struct Store<D: Data> {
 }
 
 unsafe impl<D: Data> Send for Store<D> {}
-
 unsafe impl<D: Data> Sync for Store<D> {}
 
 impl<D: Data> Store<D> {
@@ -670,26 +673,47 @@ impl<'a, 'i: 'a, D: 'a + Data> ops::IndexMut<&'i Index<D>> for WriteGuard<'a, D>
     }
 }
 
-/*pub mod systems {
+pub mod systems {
     use super::*;
-    use std::marker::PhantomData;
+    use crate::legion::systems::{
+        schedule::{Runnable, Schedulable},
+        SystemBuilder,
+    };
 
-    pub struct UpdateStore<D: Data>(PhantomData<D>);
-
-    pub fn update_store<D: Data>() -> UpdateStore<D> {
-        UpdateStore(PhantomData)
+    pub fn update_store<D: 'static + Data>() -> Box<dyn Schedulable> {
+        SystemBuilder::new("update_store")
+            .write_resource::<Store<D>>()
+            .build(|_, _, store, _| {
+                let mut store = store.write();
+                store.finalize_requests();
+                store.drain_unused();
+                store.update();
+            })
     }
 
-    impl<'a, D: 'static + Data> System<'a> for UpdateStore<D> {
-        type SystemData = WriteNamedStore<'a, D>;
+    pub fn update_store_with<D: 'static + Data, F: 'static + Send + Sync + Copy + Fn(&mut D) -> bool>(
+        finalize: F,
+    ) -> Box<dyn Schedulable> {
+        SystemBuilder::new("update_store")
+            .write_resource::<Store<D>>()
+            .build(move |_, _, store, _| {
+                let mut store = store.write();
+                store.finalize_requests_with(finalize);
+                store.drain_unused();
+                store.update();
+            })
+    }
 
-        fn run(&mut self, mut store: Self::SystemData) {
-            let mut store = store.write();
-
-            store.finalize_requests();
-            store.drain_unused();
-            store.update();
-        }
+    pub fn update_store_with_thread_local<D: 'static + Data, F: 'static + Copy + Fn(&mut D) -> bool>(
+        finalize: F,
+    ) -> Box<dyn Runnable> {
+        SystemBuilder::new("update_store")
+            .write_resource::<Store<D>>()
+            .build_thread_local(move |_, _, store, _| {
+                let mut store = store.write();
+                store.finalize_requests_with(finalize);
+                store.drain_unused();
+                store.update();
+            })
     }
 }
-*/

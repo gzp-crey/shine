@@ -1,5 +1,5 @@
 use crate::input::{self, add_input_system};
-use crate::render::{self, add_render_system};
+use crate::render::{self, add_render_system, Surface};
 use crate::tasks::TaskEngine;
 use crate::wgpu;
 use crate::GameError;
@@ -59,21 +59,15 @@ pub struct GameRender {
 }
 
 impl GameRender {
-    pub async fn new(surface: wgpu::Surface) -> Result<GameRender, GameError> {
+    pub async fn new(surface: Surface) -> Result<GameRender, GameError> {
         let mut resources = Resources::default();
         let mut thread_resources = ThreadResources::default();
         let mut world = World::new();
         let mut task_engine = TaskEngine::new();
 
         add_input_system(&mut thread_resources, &mut resources, &mut world, &mut task_engine).await?;
-        add_render_system(
-            &mut thread_resources,
-            &mut resources,
-            &mut world,
-            &mut task_engine,
-            surface,
-        )
-        .await?;
+        thread_resources.insert(surface);
+        add_render_system(&mut thread_resources, &mut resources, &mut world, &mut task_engine).await?;
 
         Ok(GameRender {
             thread_resources,
@@ -98,8 +92,11 @@ impl GameRender {
         self.run_logic("update");
     }
 
-    pub fn render(&mut self, _size: (u32, u32)) {
+    pub fn render(&mut self, size: (u32, u32)) {
         //todo: get context, set requetsed size
+        self.thread_resources
+            .get_mut::<Surface>()
+            .map(|mut surface| surface.set_size(size));
         self.run_logic("render");
     }
 }

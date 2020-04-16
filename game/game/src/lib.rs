@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+
 mod error;
 pub use self::error::*;
 mod gamerender;

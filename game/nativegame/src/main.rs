@@ -1,4 +1,4 @@
-use shine_game::{wgpu, GameRender};
+use shine_game::{render::Surface, wgpu, GameRender};
 use tokio::runtime::Runtime;
 use winit::{
     event,
@@ -8,9 +8,10 @@ use winit::{
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let surface = wgpu::Surface::create(&window);
-    let mut game_view = GameRender::new(surface).await.unwrap();
-
     let mut size: (u32, u32) = window.inner_size().into();
+
+    let surface = Surface::new(surface, size);
+    let mut game_view = GameRender::new(surface).await.unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
