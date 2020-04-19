@@ -1,21 +1,6 @@
+use crate::render::Surface;
 use crate::wgpu;
 use crate::GameError;
-
-/// Thread local rendering surface.
-pub struct Surface {
-    surface: wgpu::Surface,
-    size: (u32, u32),
-}
-
-impl Surface {
-    pub fn new(surface: wgpu::Surface, size: (u32, u32)) -> Surface {
-        Surface { surface, size }
-    }
-
-    pub fn set_size(&mut self, size: (u32, u32)) {
-        self.size = size;
-    }
-}
 
 /// Thread safe rendering context.
 pub struct Context {
@@ -54,10 +39,14 @@ impl Context {
         })
     }
 
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
     pub fn init_swap_chain(&mut self, surface: &Surface) {
         let device = &self.device;
         if let Some((_, size)) = self.swap_chain {
-            if size != surface.size {
+            if size != *surface.size() {
                 self.swap_chain = None
             }
         }
@@ -66,12 +55,12 @@ impl Context {
             let sc_desc = wgpu::SwapChainDescriptor {
                 usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
                 format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                width: surface.size.0,
-                height: surface.size.1,
+                width: surface.size().0,
+                height: surface.size().1,
                 present_mode: wgpu::PresentMode::Mailbox,
             };
 
-            (device.create_swap_chain(&surface.surface, &sc_desc), surface.size)
+            (device.create_swap_chain(surface.surface(), &sc_desc), *surface.size())
         });
     }
 }

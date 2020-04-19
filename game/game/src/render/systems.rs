@@ -1,4 +1,4 @@
-use crate::render::{Context, Shader, ShaderStore, Surface};
+use crate::render::{Context, ShaderStore, Surface};
 use shine_ecs::legion::{
     systems::{
         schedule::{Runnable, Schedulable},
@@ -21,8 +21,10 @@ pub fn update_shaders() -> Box<dyn Schedulable> {
     SystemBuilder::new("update_shaders")
         .write_resource::<ShaderStore>()
         .write_resource::<Context>()
-        .build(move |_, _, (shaders, _context), _| {
-            let mut _shaders = shaders.write();
-            //todo: compile shaders for device
+        .build(move |_, _, (shaders, context), _| {
+            let mut shaders = shaders.write();
+            //shaders.drain_unused();
+            shaders.update(&context);
+            shaders.finalize_requests();
         })
 }

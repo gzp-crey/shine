@@ -14,12 +14,17 @@ pub trait Data {
     type Key: Clone + Send + Eq + Hash + fmt::Display;
     type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
+    type UpdateContext;
 
-    fn on_load(&mut self, load_response: Option<Self::LoadResponse>) -> Option<Self::LoadRequest>;
+    fn on_load(
+        &mut self,
+        context: &Self::UpdateContext,
+        load_response: Self::LoadResponse,
+    ) -> Option<Self::LoadRequest>;
 }
 
 pub trait FromKey: Data {
-    fn from_key(key: &Self::Key) -> Self
+    fn from_key(key: &Self::Key) -> (Self, Option<<Self as Data>::LoadRequest>)
     where
         Self: Sized;
 }
@@ -142,7 +147,9 @@ impl<D: Data> Entry<D> {
     }
 }
 
-/// Shared data that may have multiple readers (or single a writer)
+/// Shared data that may have multiple readers (or a single writer)
+/// The ready to be used resources are stored here those can be
+/// used from multiple threads at the same time.
 struct SharedData<D: Data> {
     entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
     load_requests: UnboundedSender<(D::LoadRequest, LoadContext<D>)>,
@@ -156,6 +163,8 @@ impl<D: Data> SharedData<D> {
 }
 
 /// Shared data those requires exclusive access always.
+/// The pending, new resourceas and memory managment related objects are stored here
+/// those require explicit log for access.
 struct ExclusiveData<D: Data> {
     arena: Arena<Entry<D>>,
     entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
@@ -169,20 +178,20 @@ impl<D: Data> ExclusiveData<D> {
     }
 
     /// Adds a new item to the store
-    fn get_or_add<B: FnOnce(&Key<D>) -> D>(&mut self, k: Key<D>, builder: B) -> Index<D> {
+    fn get_or_add<B: FnOnce(&Key<D>) -> (D, Option<D::LoadRequest>)>(&mut self, k: Key<D>, builder: B) -> Index<D> {
         let mut load_request = None;
         let entries = &mut self.entries;
         let arena = &mut self.arena;
 
         let (_, entry_ptr) = entries.entry(k.clone()).or_insert_with(|| {
-            let value = builder(&k);
+            let (value, load) = builder(&k);
             let entry = Entry {
                 ref_count: AtomicUsize::new(0),
                 load_token: Arc::new(()),
                 value,
             };
             let (id, entry) = arena.allocate(entry);
-            if let Some(load) = entry.value.on_load(None) {
+            if let Some(load) = load {
                 load_request = Some((load, Arc::downgrade(&entry.load_token)))
             }
             (id, entry as *mut _)
@@ -193,7 +202,7 @@ impl<D: Data> ExclusiveData<D> {
             log::debug!("Deferred loading [{}]", k);
             let context = LoadContext(load_token, *entry_ptr, k.clone());
             if let Err(err) = self.load_requests.unbounded_send((load, context)) {
-                log::error!("Failed to start deferred load for [{}]: {:?}", k, err);
+                log::error!("Failed to send load task for [{}]: {:?}", k, err);
             }
         }
         idx
@@ -204,6 +213,7 @@ impl<D: Data> ExclusiveData<D> {
 pub struct LoadContext<D: Data>(Weak<()>, *mut Entry<D>, Key<D>);
 
 unsafe impl<D> Send for LoadContext<D> where D: Data {}
+unsafe impl<D> Sync for LoadContext<D> where D: Data {}
 
 impl<D: Data> LoadContext<D> {
     pub fn is_canceled(&self) -> bool {
@@ -217,15 +227,15 @@ impl<D: Data> Clone for LoadContext<D> {
     }
 }
 
-pub trait DataLoader<D>: Send
+pub trait DataLoader<D>: Send + Sync
 where
     D: Data,
 {
-    fn load(
-        &mut self,
+    fn load<'a>(
+        &'a mut self,
         request: D::LoadRequest,
-        context: &mut LoadContext<D>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send>>;
+        context: LoadContext<D>,
+    ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send + 'a>>;
 }
 
 struct NoDataLoader;
@@ -234,11 +244,11 @@ impl<D> DataLoader<D> for NoDataLoader
 where
     D: Data,
 {
-    fn load(
-        &mut self,
+    fn load<'a>(
+        &'a mut self,
         _request: D::LoadRequest,
-        _context: &mut LoadContext<D>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send>> {
+        _context: LoadContext<D>,
+    ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send + 'a>> {
         Box::pin(futures::future::ready(None))
     }
 }
@@ -259,7 +269,8 @@ where
     D: Data,
 {
     pub async fn handle_one(&mut self) -> bool {
-        let (data, mut context) = match self.requests.next().await {
+        log::info!("handle one");
+        let (data, context) = match self.requests.next().await {
             Some((data, context)) => (data, context),
             None => {
                 log::info!("Loader requests failed.");
@@ -270,7 +281,7 @@ where
         if context.is_canceled() {
             return true;
         }
-        let output = match self.data_loader.load(data, &mut context).await {
+        let output = match self.data_loader.load(data, context.clone()).await {
             Some(output) => output,
             None => return true,
         };
@@ -288,20 +299,22 @@ where
     }
 
     pub async fn run(mut self) {
-        while self.handle_one().await {}
+        log::info!("run task");
+        while self.handle_one().await {
+            log::info!("wait");
+        }
     }
 }
 
 /// Thread safe resource store.
-/// While the store is locked for reading, no resource can be updated, but new one can be created
-/// with a two phase storage policy
-/// - 1. the shared data is searched for an existing items (non-blocking)
-/// - 2. the pending, mutex guarded data is used if the item's been already added (blocking)
-/// - no data is released (dropped), dispite of having no external references
-/// When the store is write locked
-/// - 1. the items from the pending, mutex guarded data are moved into the shared one
-/// - 2. entries can be updated
-/// - 3. entries can be dropped if there are no external references left
+/// While the store is locked for reading, no resource can be updated, but new one can be aquired:
+/// - 1st the shared data is searched for an existing item (non-blocking)
+/// - 2nd the mutex guarded shared data is used to find or create the resource. (blocking)
+/// While the store is locked for write, resources are updated and released:
+/// - 1st the items from the mutex guarded data are moved into the shared store.
+/// - 2nd entries are updated based on the async loading queue
+/// - 3nd on requests entries are dropped if there are no external references left. Dispite of
+///   having a reference count for the sotred items, they are not reclaimed without an explicit request.
 pub struct Store<D: Data> {
     shared: RwLock<SharedData<D>>,
     exclusive: Mutex<ExclusiveData<D>>,
@@ -465,7 +478,18 @@ impl<'a, D: 'a + Data> ReadGuard<'a, D> {
         exclusive.unnamed_id += 1;
         let k = Key::Unnamed(exclusive.unnamed_id);
         exclusive.get_or_add(k, move |k| match &k {
-            Key::Unnamed(_) => data,
+            Key::Unnamed(_) => (data, None),
+            _ => unreachable!(),
+        })
+    }
+
+    pub fn add_blocking_with_load(&mut self, data: D, load: D::LoadRequest) -> Index<D> {
+        let mut exclusive = self.exclusive.lock().unwrap();
+
+        exclusive.unnamed_id += 1;
+        let k = Key::Unnamed(exclusive.unnamed_id);
+        exclusive.get_or_add(k, move |k| match &k {
+            Key::Unnamed(_) => (data, Some(load)),
             _ => unreachable!(),
         })
     }
@@ -530,7 +554,18 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
         exclusive.unnamed_id += 1;
         let k = Key::Unnamed(exclusive.unnamed_id);
         exclusive.get_or_add(k, move |k| match &k {
-            Key::Unnamed(_) => data,
+            Key::Unnamed(_) => (data, None),
+            _ => unreachable!(),
+        })
+    }
+
+    pub fn add_with_load(&mut self, data: D, load: D::LoadRequest) -> Index<D> {
+        let exclusive = &mut self.locked_exclusive;
+
+        exclusive.unnamed_id += 1;
+        let k = Key::Unnamed(exclusive.unnamed_id);
+        exclusive.get_or_add(k, move |k| match &k {
+            Key::Unnamed(_) => (data, Some(load)),
             _ => unreachable!(),
         })
     }
@@ -552,32 +587,14 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
         self.shared.entries.extend(&mut self.locked_exclusive.entries.drain());
     }
 
-    /// Move new (pending) entries into the active shared container based on the provided filter.
-    pub fn finalize_requests_with<F: Fn(&mut D) -> bool>(&mut self, finalize: F) {
-        let shared_entries = &mut self.shared.entries;
-        let exclusive_entries = &mut self.locked_exclusive.entries;
-
-        exclusive_entries.retain(|k, (id, ptr)| {
-            // Index<D> may reference this, but those cannot be turned into &mut Entry<D>
-            // as that would require a second &mut on self
-            let entry = unsafe { &mut **ptr };
-            if finalize(&mut entry.value) {
-                shared_entries.insert(k.to_owned(), (*id, *ptr));
-                false
-            } else {
-                true
-            }
-        });
-    }
-
-    pub fn update(&mut self) {
+    pub fn update(&mut self, update_context: &D::UpdateContext) {
         loop {
-            let (response, context) = match self.shared.load_responses.try_next() {
-                Ok(Some((response, context))) => (response, context),
+            let (response, load_context) = match self.shared.load_responses.try_next() {
+                Ok(Some((response, load_context))) => (response, load_context),
                 _ => break,
             };
 
-            if context.is_canceled() {
+            if load_context.is_canceled() {
                 continue;
             }
 
@@ -587,7 +604,7 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
                 let stored = {
                     let shared = &self.shared;
                     let exclusive = &self.locked_exclusive;
-                    let k = &context.2;
+                    let k = &load_context.2;
                     exclusive
                         .entries
                         .get(k)
@@ -596,15 +613,15 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
                         .unwrap_or(ptr::null_mut())
                 };
                 debug_assert!(
-                    stored == context.1,
+                    stored == load_context.1,
                     "Borrow checker error, entry was altered while token is still valid"
                 );
             }
 
-            let entry = unsafe { &mut *context.1 };
-            if let Some(req) = entry.value.on_load(Some(response)) {
-                if let Err(err) = self.shared.load_requests.unbounded_send((req, context)) {
-                    log::error!("Failed to deferred load: {:?}", err);
+            let entry = unsafe { &mut *load_context.1 };
+            if let Some(req) = entry.value.on_load(update_context, response) {
+                if let Err(err) = self.shared.load_requests.unbounded_send((req, load_context)) {
+                    log::error!("Failed send load task: {:?}", err);
                 }
             }
         }
@@ -670,50 +687,5 @@ impl<'a, 'i: 'a, D: 'a + Data> ops::Index<&'i Index<D>> for WriteGuard<'a, D> {
 impl<'a, 'i: 'a, D: 'a + Data> ops::IndexMut<&'i Index<D>> for WriteGuard<'a, D> {
     fn index_mut(&mut self, index: &'i Index<D>) -> &mut Self::Output {
         self.at_mut(index)
-    }
-}
-
-pub mod systems {
-    use super::*;
-    use crate::legion::systems::{
-        schedule::{Runnable, Schedulable},
-        SystemBuilder,
-    };
-
-    pub fn update_store<D: 'static + Data>() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_store")
-            .write_resource::<Store<D>>()
-            .build(|_, _, store, _| {
-                let mut store = store.write();
-                store.finalize_requests();
-                store.drain_unused();
-                store.update();
-            })
-    }
-
-    pub fn update_store_with<D: 'static + Data, F: 'static + Send + Sync + Copy + Fn(&mut D) -> bool>(
-        finalize: F,
-    ) -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_store")
-            .write_resource::<Store<D>>()
-            .build(move |_, _, store, _| {
-                let mut store = store.write();
-                store.finalize_requests_with(finalize);
-                store.drain_unused();
-                store.update();
-            })
-    }
-
-    pub fn update_store_with_thread_local<D: 'static + Data, F: 'static + Copy + Fn(&mut D) -> bool>(
-        finalize: F,
-    ) -> Box<dyn Runnable> {
-        SystemBuilder::new("update_store")
-            .write_resource::<Store<D>>()
-            .build_thread_local(move |_, _, store, _| {
-                let mut store = store.write();
-                store.finalize_requests_with(finalize);
-                store.drain_unused();
-                store.update();
-            })
     }
 }

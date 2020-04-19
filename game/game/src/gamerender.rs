@@ -1,8 +1,7 @@
 use crate::input::{self, add_input_system};
-use crate::render::{self, add_render_system, Surface};
-use crate::tasks::TaskEngine;
-use crate::wgpu;
-use crate::GameError;
+use crate::render::{self, add_render_system, ShaderStore, Surface};
+use crate::utils::runtime::Runtime;
+use crate::{Config, GameError};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
     thread_resources::{ThreadResources, WrapThreadResource},
@@ -24,6 +23,14 @@ impl ScheduleSet {
             "update".to_owned(),
             Schedule::builder()
                 .add_system(input::systems::advance_input_states())
+                .flush()
+                .build(),
+        );
+
+        logics.insert(
+            "render".to_owned(),
+            Schedule::builder()
+                .add_system(render::systems::update_shaders())
                 .flush()
                 .add_thread_local(render::systems::prepare_context(wrap_thread_local.clone()))
                 .build(),
@@ -54,26 +61,27 @@ pub struct GameRender {
     pub thread_resources: ThreadResources,
     pub resources: Resources,
     pub world: World,
-    pub task_engine: TaskEngine,
+    pub runtime: Runtime,
     schedules: ScheduleSet,
 }
 
 impl GameRender {
-    pub async fn new(surface: Surface) -> Result<GameRender, GameError> {
+    pub async fn new(config: Config, surface: Surface) -> Result<GameRender, GameError> {
         let mut resources = Resources::default();
         let mut thread_resources = ThreadResources::default();
         let mut world = World::new();
-        let mut task_engine = TaskEngine::new();
+        let mut runtime = Runtime::new();
 
-        add_input_system(&mut thread_resources, &mut resources, &mut world, &mut task_engine).await?;
         thread_resources.insert(surface);
-        add_render_system(&mut thread_resources, &mut resources, &mut world, &mut task_engine).await?;
+
+        add_input_system(&config, &mut resources, &mut world, &mut runtime).await?;
+        add_render_system(&config, &mut resources, &mut world, &mut runtime).await?;
 
         Ok(GameRender {
             thread_resources,
             resources,
             world,
-            task_engine,
+            runtime,
             schedules: ScheduleSet::new(),
         })
     }
@@ -85,7 +93,7 @@ impl GameRender {
         let world = &mut self.world;
         let resources = &mut self.resources;
         let thread_resources = &mut self.thread_resources;
-        self.schedules.execute("update", world, resources, thread_resources);
+        self.schedules.execute(logic, world, resources, thread_resources);
     }
 
     pub fn update(&mut self) {
@@ -98,5 +106,14 @@ impl GameRender {
             .get_mut::<Surface>()
             .map(|mut surface| surface.set_size(size));
         self.run_logic("render");
+    }
+
+    pub fn test(&mut self) {
+        self.resources.get_mut::<ShaderStore>().map(|mut store| {
+            log::info!("test");
+            let mut store = store.write();
+            let i = store.named_get_or_add(&"main.vs_spv".to_owned());
+            //log::info!("id:{:?}", i);
+        });
     }
 }

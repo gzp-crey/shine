@@ -31,7 +31,14 @@
                 "run",
                 "-p",
                 "shine-native"
+                "--"
+                "config_native.json"
             ],
+            "options": {
+                "env": {
+                    "RUST_BACKTRACE" : "1"
+                }
+            },
             "presentation": {
                 "echo": true,
                 "reveal": "always",

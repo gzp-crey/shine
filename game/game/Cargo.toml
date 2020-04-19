@@ -5,19 +5,22 @@ authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
 [features]
-wasm = ["wasm_wgpu", "wasm-bindgen", "wasm-bindgen-futures", "shine-ecs/wasm"]
-native = ["native_wgpu", "tokio", "shine-ecs/native"]
+wasm = ["wasm-bindgen", "wasm-bindgen-futures", "shine-ecs/wasm"]
+native = ["tokio", "shine-ecs/native"]
 
 
 [dependencies]
 log = "0.4"
-#glsl-to-spirv = "0.1"
+serde = {vesrion = "1.0", features = ["derive"] }
+serde_derive = "1.0"
+config ="0.10"
 
 futures = "0.3"
+url = "2.1"
 tokio = {version = "0.2", features = ["rt-core"], optional = true}
-native_wgpu = {package = "wgpu", verion = "0.5", optional = true}
 
-wasm_wgpu = {package = "wgpu", git = "https://github.com/grovesNL/wgpu-rs.git", branch = "wasm1", optional = true}
+wgpu = {package = "wgpu", git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master"}
+
 wasm-bindgen = {version = "0.2", optional = true}
 wasm-bindgen-futures = {version = "0.4", optional = true}
 

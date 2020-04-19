@@ -1,9 +1,10 @@
-//use glsl_to_spirv;
-use crate::wgpu;
+use crate::{render::Context, utils, wgpu, GameError};
 use futures::future::FutureExt;
 use shine_ecs::core::store::{Data, DataLoader, FromKey, LoadContext, Store};
-use std::mem;
+use std::ffi::OsStr;
+use std::path::Path;
 use std::pin::Pin;
+use url::Url;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ShaderType {
@@ -13,70 +14,110 @@ pub enum ShaderType {
 }
 
 pub enum Shader {
-    Source(String),
-    Spirv(ShaderType, Vec<u32>),
+    None,
     Compiled(ShaderType, wgpu::ShaderModule),
     Error(String),
-    None,
 }
 
-impl Shader {
-    pub fn compile(&mut self, device: &wgpu::Device) {
-        let module = match self {
-            Shader::Spirv(ty, spirv) => Some(Shader::Compiled(*ty, device.create_shader_module(&spirv))),
-            _ => None,
-        };
-
-        if let Some(module) = module {
-            let _ = mem::replace(self, module);
-        }
-    }
+pub enum ShaderLoadResult {
+    Spirv(ShaderType, Vec<u32>),
+    Error(String),
 }
 
 impl Data for Shader {
     type Key = String;
-    type LoadRequest = Self;
-    type LoadResponse = Self;
+    type LoadRequest = String;
+    type LoadResponse = ShaderLoadResult;
+    type UpdateContext = Context;
 
-    fn on_load(&mut self, load_response: Option<Self::LoadResponse>) -> Option<Self::LoadRequest> {
+    fn on_load(&mut self, context: &Context, load_response: ShaderLoadResult) -> Option<String> {
         match load_response {
-            Some(response) => {
-                let _ = mem::replace(self, Shader::None);
-                None
+            ShaderLoadResult::Error(err) => {
+                *self = Shader::Error(err);
             }
-            None => {
-                if let Shader::Source(ref src) = self {
-                    Some(Shader::Source(src.to_owned()))
-                } else {
-                    None
-                }
+
+            ShaderLoadResult::Spirv(ty, spirv) => {
+                *self = Shader::Compiled(ty, context.device().create_shader_module(&spirv));
             }
         }
+        None
     }
 }
 
 impl FromKey for Shader {
-    fn from_key(key: &Self::Key) -> Self {
-        Shader::Source(key.clone())
+    fn from_key(key: &String) -> (Self, Option<String>) {
+        (Shader::None, Some(key.to_owned()))
     }
 }
 
-async fn load_spirv_from_file(file: String) -> Option<Shader> {
-    unimplemented!()
+pub struct ShaderLoader {
+    base_url: Url,
 }
 
-pub struct ShaderLoader;
+impl ShaderLoader {
+    pub fn new(base_url: &str) -> Result<ShaderLoader, GameError> {
+        let base_url = Url::parse(base_url)
+            .map_err(|err| GameError::Config(format!("Failes to parse base url for shaders: {:?}", err)))?;
+
+        Ok(ShaderLoader { base_url })
+    }
+
+    async fn load_spirv_from_url(
+        &mut self,
+        context: LoadContext<Shader>,
+        shader_file: String,
+    ) -> Option<ShaderLoadResult> {
+        if context.is_canceled() {
+            return None;
+        }
+
+        let url = match self.base_url.join(&shader_file) {
+            Err(err) => {
+                let err = format!("Invalid shader url ({}): {:?}", shader_file, err);
+                log::warn!("{}", err);
+                return Some(ShaderLoadResult::Error(err));
+            }
+            Ok(url) => url,
+        };
+
+        log::info!("loading: {}", url.as_str());
+
+        let ext = Path::new(&shader_file)
+            .extension()
+            .and_then(OsStr::to_str)
+            .unwrap_or("");
+
+        let ty = match ext {
+            "fs_spv" => ShaderType::Fragment,
+            "vs_spv" => ShaderType::Vertex,
+            "cs_spv" => ShaderType::Compute,
+            ext => {
+                let err = format!("Unknown shader type ({})", ext);
+                log::warn!("{}", err);
+                return Some(ShaderLoadResult::Error(err));
+            }
+        };
+
+        let data = match utils::asset::download_vec_u32(&url).await {
+            Err(err) => {
+                let err = format!("Failed to get shader({}): {:?}", shader_file, err);
+                log::warn!("{}", err);
+                return Some(ShaderLoadResult::Error(err));
+            }
+            Ok(data) => data,
+        };
+
+        Some(ShaderLoadResult::Spirv(ty, data))
+    }
+}
 
 impl DataLoader<Shader> for ShaderLoader {
-    fn load(
-        &mut self,
-        request: Shader,
-        context: &mut LoadContext<Shader>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Option<Shader>> + Send>> {
-        match request {
-            Shader::Source(file) => load_spirv_from_file(file).boxed(),
-            _ => unimplemented!(),
-        }
+    fn load<'a>(
+        &'a mut self,
+        request: String,
+        context: LoadContext<Shader>,
+    ) -> Pin<Box<dyn std::future::Future<Output = Option<ShaderLoadResult>> + Send + 'a>> {
+        self.load_spirv_from_url(context, request).boxed()
     }
 }
 

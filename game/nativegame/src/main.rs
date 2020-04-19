@@ -1,17 +1,32 @@
-use shine_game::{render::Surface, wgpu, GameRender};
+#![feature(async_closure)]
+
+use shine_game::{render::Surface, wgpu, Config, GameRender};
+use tokio;
 use tokio::runtime::Runtime;
 use winit::{
     event,
     event_loop::{ControlFlow, EventLoop},
-    window::Window,
 };
 
-async fn run(event_loop: EventLoop<()>, window: Window) {
+async fn run() {
+    let event_loop = EventLoop::new();
+    let window = {
+        let mut builder = winit::window::WindowBuilder::new();
+        builder = builder.with_title("Shine");
+        #[cfg(windows_OFF)] //TODO
+        {
+            use winit::platform::windows::WindowBuilderExtWindows;
+            builder = builder.with_no_redirection_bitmap(true);
+        }
+        builder.build(&event_loop).unwrap()
+    };
+
     let surface = wgpu::Surface::create(&window);
     let mut size: (u32, u32) = window.inner_size().into();
 
     let surface = Surface::new(surface, size);
-    let mut game_view = GameRender::new(surface).await.unwrap();
+    let config = Config::new().unwrap();
+    let mut game_view = GameRender::new(config, surface).await.unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -30,13 +45,17 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 event::WindowEvent::KeyboardInput {
                     input:
                         event::KeyboardInput {
-                            virtual_keycode: Some(event::VirtualKeyCode::Escape),
+                            virtual_keycode,
                             state: event::ElementState::Pressed,
                             ..
                         },
                     ..
-                }
-                | event::WindowEvent::CloseRequested => {
+                } => match virtual_keycode {
+                    Some(event::VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
+                    Some(event::VirtualKeyCode::A) => game_view.test(),
+                    _ => {}
+                },
+                event::WindowEvent::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
                 }
                 _ => {
@@ -45,7 +64,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             },
             _ => {}
         }
-    });
+    })
 }
 
 fn main() {
@@ -56,16 +75,5 @@ fn main() {
         .try_init();
     let mut rt = Runtime::new().unwrap();
 
-    let event_loop = EventLoop::new();
-    let window = {
-        let mut builder = winit::window::WindowBuilder::new();
-        builder = builder.with_title("Shine");
-        #[cfg(windows_OFF)] //TODO
-        {
-            use winit::platform::windows::WindowBuilderExtWindows;
-            builder = builder.with_no_redirection_bitmap(true);
-        }
-        builder.build(&event_loop).unwrap()
-    };
-    rt.block_on(run(event_loop, window));
+    rt.block_on(run());
 }
