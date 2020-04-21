@@ -30,9 +30,9 @@
             "args": [
                 "run",
                 "-p",
-                "shine-native"
-                "--"
-                "config_native.json"
+                "shine-native",
+                "--",
+                "config_native_game.json"
             ],
             "options": {
                 "env": {
@@ -71,6 +71,55 @@
                 "$rustc"
             ],
             "group": "build"
-        }
+        },
+        {
+            "label": "build cooker",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "-p",
+                "shine-cooker"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "clear": true,
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "cook shader",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "run",                
+                "--bin",
+                "shine-cook-shader",
+                "-p",
+                "shine-cooker",
+                "--",
+                "config_local_cooker.json"
+            ],
+            "options": {
+                "env": {
+                    "RUST_BACKTRACE" : "1"
+                }
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "clear": true,
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        },
     ]
 }

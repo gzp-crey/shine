@@ -1,14 +1,24 @@
 [package]
-name = "shine-native"
+name = "shine-cooker"
 version = "0.1.0"
 authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
+[[bin]]
+name = "shine-cook-shader"
+path = "src/cook_shader.rs"
+
 [dependencies]
 log = "0.4"
 env_logger = "0.7"
-winit = "0.22"
+serde = {version = "1.0", features = ["derive"] }
+config ="0.10"
+
+ring = "0.16"
+data-encoding = "2.2"
+
 tokio = {version = "0.2", features = ["time", "blocking", "rt-threaded", "rt-util"]}
 
-shine-input = {path = "../input", version = "0.1.0"}
+shaderc = {version = "0.6", features = ["build-from-source"] }
+
 shine-game = {path = "../game", version = "0.1.0", features = ["native"]}

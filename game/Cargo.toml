@@ -4,5 +4,6 @@ members = [
     "ecs",
     "game",
     "wasmgame",
-    "nativegame"
+    "nativegame",
+    "cooker"
 ]

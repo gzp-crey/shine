@@ -1,10 +1,8 @@
+use crate::utils::url::Url;
 use crate::{render::Context, utils, wgpu, GameError};
 use futures::future::FutureExt;
 use shine_ecs::core::store::{Data, DataLoader, FromKey, LoadContext, Store};
-use std::ffi::OsStr;
-use std::path::Path;
 use std::pin::Pin;
-use url::Url;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ShaderType {
@@ -81,13 +79,7 @@ impl ShaderLoader {
         };
 
         log::info!("loading: {}", url.as_str());
-
-        let ext = Path::new(&shader_file)
-            .extension()
-            .and_then(OsStr::to_str)
-            .unwrap_or("");
-
-        let ty = match ext {
+        let ty = match url.extension() {
             "fs_spv" => ShaderType::Fragment,
             "vs_spv" => ShaderType::Vertex,
             "cs_spv" => ShaderType::Compute,
@@ -98,7 +90,7 @@ impl ShaderLoader {
             }
         };
 
-        let data = match utils::asset::download_vec_u32(&url).await {
+        let data = match utils::assets::download_binary(&url).await {
             Err(err) => {
                 let err = format!("Failed to get shader({}): {:?}", shader_file, err);
                 log::warn!("{}", err);
@@ -107,7 +99,17 @@ impl ShaderLoader {
             Ok(data) => data,
         };
 
-        Some(ShaderLoadResult::Spirv(ty, data))
+        use std::io::Cursor;
+        let spirv = match wgpu::read_spirv(Cursor::new(&data[..])) {
+            Err(err) => {
+                let err = format!("Failed to read spirv ({}): {:?}", shader_file, err);
+                log::warn!("{}", err);
+                return Some(ShaderLoadResult::Error(err));
+            }
+            Ok(spirv) => spirv,
+        };
+
+        Some(ShaderLoadResult::Spirv(ty, spirv))
     }
 }
 

@@ -53,6 +53,7 @@ async fn run() {
                 } => match virtual_keycode {
                     Some(event::VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
                     Some(event::VirtualKeyCode::A) => game_view.test(),
+                    Some(event::VirtualKeyCode::G) => game_view.gc_all(),
                     _ => {}
                 },
                 event::WindowEvent::CloseRequested => {
@@ -64,7 +65,7 @@ async fn run() {
             },
             _ => {}
         }
-    })
+    });
 }
 
 fn main() {

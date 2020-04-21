@@ -3,4 +3,5 @@
 #![feature(get_mut_unchecked)]
 
 pub mod core;
-pub mod legion;
+
+pub use legion;

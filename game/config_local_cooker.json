@@ -1,0 +1,4 @@
+{
+    "asset_source_base" : "file://./assets/",
+    "asset_target_base" : "file://./cooked_assets/"
+}
