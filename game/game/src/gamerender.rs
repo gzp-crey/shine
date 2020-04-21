@@ -102,7 +102,7 @@ impl GameRender {
         self.resources.get_mut::<ShaderStore>().map(|mut store| {
             log::info!("test");
             let mut store = store.write();
-            store.named_get_or_add(&"main.vs_spv".to_owned());
+            store.named_get_or_add(&"f153d545de7d036a42532c268d0be9359cc043a899064c4e6017ed4b79d85f15.vs_spv".to_owned());
         });
     }
 }

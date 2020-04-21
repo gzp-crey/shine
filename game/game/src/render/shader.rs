@@ -35,6 +35,7 @@ impl Data for Shader {
             }
 
             ShaderLoadResult::Spirv(ty, spirv) => {
+                log::info!("compile shader");
                 *self = Shader::Compiled(ty, context.device().create_shader_module(&spirv));
             }
         }
