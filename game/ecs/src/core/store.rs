@@ -18,6 +18,7 @@ pub trait Data {
 
     fn on_load(
         &mut self,
+        key: Option<&Self::Key>,
         context: &Self::UpdateContext,
         load_response: Self::LoadResponse,
     ) -> Option<Self::LoadRequest>;
@@ -619,7 +620,11 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
             }
 
             let entry = unsafe { &mut *load_context.1 };
-            if let Some(req) = entry.value.on_load(update_context, response) {
+            let key = match load_context.2 {
+                Key::Named(ref key) => Some(key),
+                Key::Unnamed(_) => None,
+            };
+            if let Some(req) = entry.value.on_load(key, update_context, response) {
                 if let Err(err) = self.shared.load_requests.unbounded_send((req, load_context)) {
                     log::error!("Failed send load task: {:?}", err);
                 }

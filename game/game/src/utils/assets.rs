@@ -44,8 +44,7 @@ pub async fn download_binary(url: &Url) -> Result<Vec<u8>, AssetError> {
 pub async fn upload_binary(url: &Url, data: &[u8]) -> Result<(), AssetError> {
     match url.scheme() {
         "file" => {
-            use tokio::io::AsyncReadExt;
-            let mut file = tokio::fs::write(&url.to_file_path(), data)
+            tokio::fs::write(&url.to_file_path(), data)
                 .await
                 .map_err(|err| AssetError::ContentSave(format!("Save failed: {:?}", err)))?;
             Ok(())

@@ -28,14 +28,14 @@ impl Data for Shader {
     type LoadResponse = ShaderLoadResult;
     type UpdateContext = Context;
 
-    fn on_load(&mut self, context: &Context, load_response: ShaderLoadResult) -> Option<String> {
+    fn on_load(&mut self, key: Option<&String>, context: &Context, load_response: ShaderLoadResult) -> Option<String> {
         match load_response {
             ShaderLoadResult::Error(err) => {
                 *self = Shader::Error(err);
             }
 
             ShaderLoadResult::Spirv(ty, spirv) => {
-                log::info!("compile shader");
+                log::info!("Compile shader {:?}", key);
                 *self = Shader::Compiled(ty, context.device().create_shader_module(&spirv));
             }
         }
