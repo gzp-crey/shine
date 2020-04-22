@@ -8,6 +8,9 @@ mod context;
 pub use self::context::*;
 mod shader;
 pub use self::shader::*;
+mod pipeline;
+pub use self::pipeline::*;
+
 pub mod systems;
 
 /// Add required resource to handle rendering.
