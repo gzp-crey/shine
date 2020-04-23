@@ -10,6 +10,8 @@ mod shader;
 pub use self::shader::*;
 mod pipeline;
 pub use self::pipeline::*;
+pub mod pipeline_descriptor;
+pub use self::pipeline_descriptor::*;
 
 pub mod systems;
 

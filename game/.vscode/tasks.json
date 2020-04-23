@@ -93,13 +93,11 @@
             "group": "build"
         },
         {
-            "label": "cook shader",
+            "label": "run cooker",
             "type": "shell",
             "command": "cargo",
             "args": [
                 "run",                
-                "--bin",
-                "shine-cook-shader",
                 "-p",
                 "shine-cooker",
                 "--",

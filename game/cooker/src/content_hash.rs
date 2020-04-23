@@ -10,3 +10,7 @@ pub fn sha256_bytes(data: &[u8]) -> String {
     let hash = context.finish();
     HEXLOWER.encode(hash.as_ref())
 }
+
+pub fn hash_to_path(hash: &str) -> String {
+    format!("{}/{}", &hash[..4], &hash[4..])
+}

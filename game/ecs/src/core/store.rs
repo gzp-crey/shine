@@ -2,6 +2,7 @@ use crate::core::arena::Arena;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
@@ -10,18 +11,20 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuar
 use std::{fmt, ops};
 
 /// Data stored in the Store
-pub trait Data {
+pub trait Data: 'static {
     type Key: Clone + Send + Eq + Hash + fmt::Display;
     type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
     type UpdateContext;
 
-    fn on_load(
+    fn on_load<'a>(
         &mut self,
-        key: Option<&Self::Key>,
-        context: &Self::UpdateContext,
+        load_context: LoadContext<'a, Self>,
+        update_context: &Self::UpdateContext,
         load_response: Self::LoadResponse,
-    ) -> Option<Self::LoadRequest>;
+    ) -> Option<Self::LoadRequest>
+    where
+        Self: Sized;
 }
 
 pub trait FromKey: Data {
@@ -153,8 +156,9 @@ impl<D: Data> Entry<D> {
 /// used from multiple threads at the same time.
 struct SharedData<D: Data> {
     entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
-    load_requests: UnboundedSender<(D::LoadRequest, LoadContext<D>)>,
-    load_responses: UnboundedReceiver<(D::LoadResponse, LoadContext<D>)>,
+    load_request_sender: UnboundedSender<(D::LoadRequest, CancellationToken<D>)>,
+    load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
+    load_respons_receiver: UnboundedReceiver<(D::LoadResponse, CancellationToken<D>)>,
 }
 
 impl<D: Data> SharedData<D> {
@@ -170,7 +174,8 @@ struct ExclusiveData<D: Data> {
     arena: Arena<Entry<D>>,
     entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
     unnamed_id: usize,
-    load_requests: UnboundedSender<(D::LoadRequest, LoadContext<D>)>,
+    load_request_sender: UnboundedSender<(D::LoadRequest, CancellationToken<D>)>,
+    load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
 }
 
 impl<D: Data> ExclusiveData<D> {
@@ -201,8 +206,8 @@ impl<D: Data> ExclusiveData<D> {
         let idx = Index::from_ptr(*entry_ptr);
         if let Some((load, load_token)) = load_request {
             log::debug!("Deferred loading [{}]", k);
-            let context = LoadContext(load_token, *entry_ptr, k.clone());
-            if let Err(err) = self.load_requests.unbounded_send((load, context)) {
+            let cancellation_token = CancellationToken(load_token, *entry_ptr, k.clone());
+            if let Err(err) = self.load_request_sender.unbounded_send((load, cancellation_token)) {
                 log::error!("Failed to send load task for [{}]: {:?}", k, err);
             }
         }
@@ -210,87 +215,91 @@ impl<D: Data> ExclusiveData<D> {
     }
 }
 
-/// The context of the loading operation to check cancelation.
-pub struct LoadContext<D: Data>(Weak<()>, *mut Entry<D>, Key<D>);
+/// A token to test for the cancelation of loading operation.
+pub struct CancellationToken<D: Data>(Weak<()>, *mut Entry<D>, Key<D>);
 
-unsafe impl<D> Send for LoadContext<D> where D: Data {}
-unsafe impl<D> Sync for LoadContext<D> where D: Data {}
+unsafe impl<D: Data> Send for CancellationToken<D> {}
+unsafe impl<D: Data> Sync for CancellationToken<D> {}
 
-impl<D: Data> LoadContext<D> {
+impl<D: Data> CancellationToken<D> {
     pub fn is_canceled(&self) -> bool {
         self.0.upgrade().is_none()
     }
 }
 
-impl<D: Data> Clone for LoadContext<D> {
+impl<D: Data> Clone for CancellationToken<D> {
     fn clone(&self) -> Self {
-        LoadContext(self.0.clone(), self.1, self.2.clone())
+        CancellationToken(self.0.clone(), self.1, self.2.clone())
     }
 }
 
-pub trait DataLoader<D>: Send + Sync
-where
-    D: Data,
-{
+/// A context for load opration to handle notification.
+pub struct LoadContext<'a, D: Data> {
+    key: &'a Key<D>,
+    load_response_sender: &'a UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
+    cancellation_token: &'a CancellationToken<D>,
+}
+
+impl<'a, D: Data> LoadContext<'a, D> {
+    pub fn key(&self) -> Option<&D::Key> {
+        match self.key {
+            Key::Named(ref key) => Some(key),
+            _ => None,
+        }
+    }
+}
+
+pub trait DataLoader<D: Data>: 'static + Send + Sync {
     fn load<'a>(
         &'a mut self,
         request: D::LoadRequest,
-        context: LoadContext<D>,
+        cancellation_token: CancellationToken<D>,
     ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send + 'a>>;
 }
 
 struct NoDataLoader;
 
-impl<D> DataLoader<D> for NoDataLoader
-where
-    D: Data,
-{
+impl<D: Data> DataLoader<D> for NoDataLoader {
     fn load<'a>(
         &'a mut self,
         _request: D::LoadRequest,
-        _context: LoadContext<D>,
+        _cancellation_token: CancellationToken<D>,
     ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send + 'a>> {
         Box::pin(futures::future::ready(None))
     }
 }
 
-pub struct StoreLoader<D>
-where
-    D: Data,
-{
-    requests: UnboundedReceiver<(D::LoadRequest, LoadContext<D>)>,
-    responses: UnboundedSender<(D::LoadResponse, LoadContext<D>)>,
+pub struct StoreLoader<D: Data> {
+    load_request_receiver: UnboundedReceiver<(D::LoadRequest, CancellationToken<D>)>,
+    load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
     data_loader: Box<dyn DataLoader<D>>,
 }
 
-unsafe impl<D> Send for StoreLoader<D> where D: Data {}
+unsafe impl<D: Data> Send for StoreLoader<D> {}
 
-impl<D> StoreLoader<D>
-where
-    D: Data,
-{
+impl<D: Data> StoreLoader<D> {
     pub async fn handle_one(&mut self) -> bool {
         log::info!("handle one");
-        let (data, context) = match self.requests.next().await {
-            Some((data, context)) => (data, context),
+        let (data, cancellation_token) = match self.load_request_receiver.next().await {
+            Some((data, cancellation_token)) => (data, cancellation_token),
             None => {
                 log::info!("Loader requests failed.");
                 return false;
             }
         };
 
-        if context.is_canceled() {
+        if cancellation_token.is_canceled() {
             return true;
         }
-        let output = match self.data_loader.load(data, context.clone()).await {
+        let output = match self.data_loader.load(data, cancellation_token.clone()).await {
             Some(output) => output,
             None => return true,
         };
-        if context.is_canceled() {
+        if cancellation_token.is_canceled() {
             return true;
         }
 
-        match self.responses.send((output, context)).await {
+        match self.load_response_sender.send((output, cancellation_token)).await {
             Ok(_) => true,
             Err(err) => {
                 log::info!("Loader response failed: {:?}", err);
@@ -331,26 +340,28 @@ impl<D: Data> Store<D> {
     }
 
     /// Creates a new store and the async load handler.
-    pub fn new_with_loader<L: 'static + DataLoader<D>>(page_size: usize, data_loader: L) -> (Store<D>, StoreLoader<D>) {
-        let (req_send, req_recv) = mpsc::unbounded();
-        let (resp_send, resp_recv) = mpsc::unbounded();
+    pub fn new_with_loader<L: DataLoader<D>>(page_size: usize, data_loader: L) -> (Store<D>, StoreLoader<D>) {
+        let (load_request_sender, load_request_receiver) = mpsc::unbounded();
+        let (load_response_sender, load_respons_receiver) = mpsc::unbounded();
         (
             Store {
                 shared: RwLock::new(SharedData {
                     entries: HashMap::new(),
-                    load_requests: req_send.clone(),
-                    load_responses: resp_recv,
+                    load_request_sender: load_request_sender.clone(),
+                    load_response_sender: load_response_sender.clone(),
+                    load_respons_receiver: load_respons_receiver,
                 }),
                 exclusive: Mutex::new(ExclusiveData {
                     arena: Arena::new(page_size),
                     entries: HashMap::new(),
                     unnamed_id: 0,
-                    load_requests: req_send.clone(),
+                    load_request_sender: load_request_sender.clone(),
+                    load_response_sender: load_response_sender.clone(),
                 }),
             },
             StoreLoader {
-                requests: req_recv,
-                responses: resp_send,
+                load_request_receiver: load_request_receiver,
+                load_response_sender: load_response_sender,
                 data_loader: Box::new(data_loader),
             },
         )
@@ -385,8 +396,6 @@ impl<D: Data> Store<D> {
         self.try_write().unwrap()
     }
 }
-
-impl<D> Store<D> where D: Data<LoadRequest = (), LoadResponse = ()> {}
 
 impl<D: Data> Drop for Store<D> {
     fn drop(&mut self) {
@@ -590,12 +599,12 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
 
     pub fn update(&mut self, update_context: &D::UpdateContext) {
         loop {
-            let (response, load_context) = match self.shared.load_responses.try_next() {
-                Ok(Some((response, load_context))) => (response, load_context),
+            let (response, cancellation_token) = match self.shared.load_respons_receiver.try_next() {
+                Ok(Some((response, cancellation_token))) => (response, cancellation_token),
                 _ => break,
             };
 
-            if load_context.is_canceled() {
+            if cancellation_token.is_canceled() {
                 continue;
             }
 
@@ -605,7 +614,7 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
                 let stored = {
                     let shared = &self.shared;
                     let exclusive = &self.locked_exclusive;
-                    let k = &load_context.2;
+                    let k = &cancellation_token.2;
                     exclusive
                         .entries
                         .get(k)
@@ -614,18 +623,26 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
                         .unwrap_or(ptr::null_mut())
                 };
                 debug_assert!(
-                    stored == load_context.1,
+                    stored == cancellation_token.1,
                     "Borrow checker error, entry was altered while token is still valid"
                 );
             }
 
-            let entry = unsafe { &mut *load_context.1 };
-            let key = match load_context.2 {
-                Key::Named(ref key) => Some(key),
-                Key::Unnamed(_) => None,
-            };
-            if let Some(req) = entry.value.on_load(key, update_context, response) {
-                if let Err(err) = self.shared.load_requests.unbounded_send((req, load_context)) {
+            let entry = unsafe { &mut *cancellation_token.1 };
+            if let Some(request) = entry.value.on_load(
+                LoadContext {
+                    key: &cancellation_token.2,
+                    load_response_sender: &self.shared.load_response_sender,
+                    cancellation_token: &cancellation_token,
+                },
+                update_context,
+                response,
+            ) {
+                if let Err(err) = self
+                    .shared
+                    .load_request_sender
+                    .unbounded_send((request, cancellation_token))
+                {
                     log::error!("Failed send load task: {:?}", err);
                 }
             }
@@ -692,5 +709,78 @@ impl<'a, 'i: 'a, D: 'a + Data> ops::Index<&'i Index<D>> for WriteGuard<'a, D> {
 impl<'a, 'i: 'a, D: 'a + Data> ops::IndexMut<&'i Index<D>> for WriteGuard<'a, D> {
     fn index_mut(&mut self, index: &'i Index<D>) -> &mut Self::Output {
         self.at_mut(index)
+    }
+}
+
+/// Type eraser trait to notify listeners.
+trait Listeners: Any {
+    fn notify(&mut self);
+}
+
+/// Listener of a specific type.
+struct TypedListeners<D: Data> {
+    load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
+    listeners: Vec<(D::LoadResponse, CancellationToken<D>)>,
+}
+
+impl<D: Data> TypedListeners<D> {
+    fn add(&mut self, request: D::LoadResponse, cancellation_token: CancellationToken<D>) {
+        if !cancellation_token.is_canceled() {
+            self.listeners.push((request, cancellation_token));
+        }
+    }
+}
+
+impl<D: Data> Listeners for TypedListeners<D> {
+    fn notify(&mut self) {
+        for (request, cancellation_token) in self.listeners.drain(..) {
+            if cancellation_token.is_canceled() {
+                continue;
+            }
+
+            if let Err(err) = self.load_response_sender.unbounded_send((request, cancellation_token)) {
+                log::error!("Failed to notify store: {:?}", err);
+            }
+        }
+    }
+}
+
+/// Manage listener waiting for load completion.
+pub struct LoadListeners {
+    listeners: Mutex<HashMap<TypeId, Box<dyn Listeners>>>,
+}
+
+impl LoadListeners {
+    pub fn new() -> LoadListeners {
+        LoadListeners {
+            listeners: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn add<'a, D: Data>(&self, load_context: &LoadContext<'a, D>, request: D::LoadResponse) {
+        if load_context.cancellation_token.is_canceled() {
+            return;
+        }
+
+        let mut listeners = self.listeners.lock().unwrap();
+
+        let listener = listeners.entry(TypeId::of::<TypedListeners<D>>()).or_insert_with(|| {
+            Box::new(TypedListeners {
+                load_response_sender: load_context.load_response_sender.clone(),
+                listeners: Vec::new(),
+            })
+        });
+
+        let listener = Any::downcast_mut::<TypedListeners<D>>(listener).unwrap();
+        listener.add(request, load_context.cancellation_token.clone());
+    }
+
+    pub fn notify_all(&self) {
+        let mut listeners = self.listeners.lock().unwrap();
+        {
+            for (_, mut listener) in listeners.drain() {
+                listener.notify();
+            }
+        }
     }
 }

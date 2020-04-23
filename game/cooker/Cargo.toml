@@ -4,15 +4,12 @@ version = "0.1.0"
 authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
-[[bin]]
-name = "shine-cook-shader"
-path = "src/cook_shader.rs"
-
 [dependencies]
 log = "0.4"
 env_logger = "0.7"
-serde = {version = "1.0", features = ["derive"] }
 config ="0.10"
+serde = {version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 ring = "0.16"
 data-encoding = "2.2"

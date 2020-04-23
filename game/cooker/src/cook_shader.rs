@@ -1,11 +1,8 @@
 use shaderc;
 use shine_game::utils::{assets, url::Url};
-use tokio::runtime::Runtime;
+use crate::content_hash;
 
-mod config;
-mod content_hash;
-
-pub async fn cook_shader(sourc_base: &Url, target_base: &Url, source_id: &str) -> Result<(String,String), String> {
+pub async fn cook(sourc_base: &Url, target_base: &Url, source_id: &str) -> Result<(String, String), String> {
     let source_url = sourc_base
         .join(source_id)
         .map_err(|err| format!("Invalid source url: {:?}", err))?;
@@ -23,12 +20,13 @@ pub async fn cook_shader(sourc_base: &Url, target_base: &Url, source_id: &str) -
     };
     log::trace!("Compiling {:?} shader", ty);
     let mut compiler = shaderc::Compiler::new().unwrap();
-    let mut options = shaderc::CompileOptions::new().unwrap();
+    let options = shaderc::CompileOptions::new().unwrap();
     let compiled_artifact = compiler
         .compile_into_spirv(&shader_source, ty, source_url.as_str(), "main", Some(&options))
         .map_err(|err| format!("Shader compilation failed: {:?}", err))?;
 
     let hash = content_hash::sha256_bytes(shader_source.as_bytes());
+    let hash = content_hash::hash_to_path(&hash);
     let target_id = format!("{}.{}_spv", hash, ext);
     let target_url = target_base
         .join(&target_id)
@@ -39,27 +37,4 @@ pub async fn cook_shader(sourc_base: &Url, target_base: &Url, source_id: &str) -
         .map_err(|err| format!("Failed to upload {}: {:?}", target_url.as_str(), err))?;
 
     Ok((source_id.to_owned(), target_id))
-}
-
-async fn run() {
-    let config = config::Config::new().unwrap();
-    let asset_source_base = Url::parse(&config.asset_source_base).unwrap();
-    let asset_target_base = Url::parse(&config.asset_target_base).unwrap();
-
-    let shader = "pipeline/hello.vs";
-    match cook_shader(&asset_source_base, &asset_target_base, shader).await {
-        Ok((f,t)) => log::info!("Cooking shader done: [{}] -> [{}]", f, t),
-        Err(err) => log::error!("Cookinf shader {} failed: {}", shader, err),
-    }
-}
-
-fn main() {
-    let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .filter_module("shine-ecs", log::LevelFilter::Debug)
-        .filter_module("shine-game", log::LevelFilter::Trace)
-        .try_init();
-    let mut rt = Runtime::new().unwrap();
-
-    rt.block_on(run());
 }
