@@ -39,7 +39,9 @@ async fn run() {
                 size = s.into();
             }
             event::Event::RedrawRequested(_) => {
-                game_view.render(size);
+                if let Err(err) = game_view.render(size) {
+                    log::warn!("render failed: {}", err);
+                }
             }
             event::Event::WindowEvent { event, .. } => match event {
                 event::WindowEvent::KeyboardInput {
@@ -53,6 +55,7 @@ async fn run() {
                 } => match virtual_keycode {
                     Some(event::VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
                     Some(event::VirtualKeyCode::A) => game_view.test(),
+                    Some(event::VirtualKeyCode::U) => game_view.update(),
                     Some(event::VirtualKeyCode::G) => game_view.gc_all(),
                     _ => {}
                 },
@@ -71,8 +74,8 @@ async fn run() {
 fn main() {
     let _ = env_logger::builder()
         .filter_level(log::LevelFilter::Info)
-        .filter_module("shine-ecs", log::LevelFilter::Debug)
-        .filter_module("shine-game", log::LevelFilter::Trace)
+        .filter_module("shine_ecs", log::LevelFilter::Trace)
+        .filter_module("shine_game", log::LevelFilter::Trace)
         .try_init();
     let mut rt = Runtime::new().unwrap();
 

@@ -1,4 +1,4 @@
-use crate::render::Surface;
+use crate::render::{FrameOutput, Surface};
 use crate::wgpu;
 use crate::GameError;
 
@@ -6,7 +6,8 @@ use crate::GameError;
 pub struct Context {
     device: wgpu::Device,
     queue: wgpu::Queue,
-    swap_chain: Option<(wgpu::SwapChain, (u32, u32))>,
+    swap_chain_format: wgpu::TextureFormat,
+    swap_chain: Option<(wgpu::SwapChain, wgpu::SwapChainDescriptor)>,
 }
 
 impl Context {
@@ -35,6 +36,7 @@ impl Context {
         Ok(Context {
             device,
             queue,
+            swap_chain_format: wgpu::TextureFormat::Bgra8UnormSrgb,
             swap_chain: None,
         })
     }
@@ -43,24 +45,48 @@ impl Context {
         &self.device
     }
 
-    pub fn init_swap_chain(&mut self, surface: &Surface) {
-        let device = &self.device;
-        if let Some((_, size)) = self.swap_chain {
-            if size != *surface.size() {
-                self.swap_chain = None
-            }
-        }
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
 
-        let _ = self.swap_chain.get_or_insert_with(|| {
-            let sc_desc = wgpu::SwapChainDescriptor {
+    pub fn swap_chain_format(&self) -> wgpu::TextureFormat {
+        self.swap_chain_format
+    }
+
+    pub fn create_frame(&mut self, surface: &Surface) -> Result<FrameOutput, String> {
+        let device = &self.device;
+
+        let format = self.swap_chain_format;
+        let size = surface.size();
+
+        if self
+            .swap_chain
+            .as_ref()
+            .map(|(_, sd)| (sd.width, sd.height) != size)
+            .unwrap_or(false)
+        {
+            self.swap_chain = None;
+        };
+
+        let (ref mut sc, sd) = self.swap_chain.get_or_insert_with(|| {
+            let sd = wgpu::SwapChainDescriptor {
                 usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-                format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                format,
                 width: surface.size().0,
                 height: surface.size().1,
                 present_mode: wgpu::PresentMode::Mailbox,
             };
 
-            (device.create_swap_chain(surface.surface(), &sc_desc), *surface.size())
+            let sc = device.create_swap_chain(surface.surface(), &sd);
+            (sc, sd)
         });
+
+        let frame = sc
+            .get_next_texture()
+            .map_err(|err| format!("Frame request error: {:?}", err))?;
+        Ok(FrameOutput {
+            frame,
+            descriptor: sd.clone(),
+        })
     }
 }

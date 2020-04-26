@@ -15,16 +15,6 @@ pub trait Data: 'static {
     type Key: Clone + Send + Eq + Hash + fmt::Display;
     type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
-    type UpdateContext;
-
-    fn on_load<'a>(
-        &mut self,
-        load_context: LoadContext<'a, Self>,
-        update_context: &Self::UpdateContext,
-        load_response: Self::LoadResponse,
-    ) -> Option<Self::LoadRequest>
-    where
-        Self: Sized;
 }
 
 pub trait FromKey: Data {
@@ -175,7 +165,7 @@ struct ExclusiveData<D: Data> {
     entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
     unnamed_id: usize,
     load_request_sender: UnboundedSender<(D::LoadRequest, CancellationToken<D>)>,
-    load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
+    //load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
 }
 
 impl<D: Data> ExclusiveData<D> {
@@ -205,7 +195,7 @@ impl<D: Data> ExclusiveData<D> {
 
         let idx = Index::from_ptr(*entry_ptr);
         if let Some((load, load_token)) = load_request {
-            log::debug!("Deferred loading [{}]", k);
+            log::debug!("Request loading for [{}]", k);
             let cancellation_token = CancellationToken(load_token, *entry_ptr, k.clone());
             if let Err(err) = self.load_request_sender.unbounded_send((load, cancellation_token)) {
                 log::error!("Failed to send load task for [{}]: {:?}", k, err);
@@ -249,6 +239,21 @@ impl<'a, D: Data> LoadContext<'a, D> {
     }
 }
 
+impl<'a, D: Data> fmt::Display for LoadContext<'a, D> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.key)
+    }
+}
+
+pub trait DataUpdater<'a, D: 'a + Data> {
+    fn update<'u>(
+        &mut self,
+        load_context: LoadContext<'u, D>,
+        data: &mut D,
+        load_response: D::LoadResponse,
+    ) -> Option<D::LoadRequest>;
+}
+
 pub trait DataLoader<D: Data>: 'static + Send + Sync {
     fn load<'a>(
         &'a mut self,
@@ -279,11 +284,10 @@ unsafe impl<D: Data> Send for StoreLoader<D> {}
 
 impl<D: Data> StoreLoader<D> {
     pub async fn handle_one(&mut self) -> bool {
-        log::info!("handle one");
         let (data, cancellation_token) = match self.load_request_receiver.next().await {
             Some((data, cancellation_token)) => (data, cancellation_token),
             None => {
-                log::info!("Loader requests failed.");
+                log::info!("Loader requests failed {:?}", TypeId::of::<D>());
                 return false;
             }
         };
@@ -302,17 +306,14 @@ impl<D: Data> StoreLoader<D> {
         match self.load_response_sender.send((output, cancellation_token)).await {
             Ok(_) => true,
             Err(err) => {
-                log::info!("Loader response failed: {:?}", err);
+                log::info!("Loader response failed {:?}: {:?}", TypeId::of::<D>(), err);
                 false
             }
         }
     }
 
     pub async fn run(mut self) {
-        log::info!("run task");
-        while self.handle_one().await {
-            log::info!("wait");
-        }
+        while self.handle_one().await {}
     }
 }
 
@@ -356,7 +357,7 @@ impl<D: Data> Store<D> {
                     entries: HashMap::new(),
                     unnamed_id: 0,
                     load_request_sender: load_request_sender.clone(),
-                    load_response_sender: load_response_sender.clone(),
+                    //load_response_sender: load_response_sender.clone(),
                 }),
             },
             StoreLoader {
@@ -597,7 +598,7 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
         self.shared.entries.extend(&mut self.locked_exclusive.entries.drain());
     }
 
-    pub fn update(&mut self, update_context: &D::UpdateContext) {
+    pub fn update<'u, U: DataUpdater<'u, D>>(&mut self, updater: &mut U) {
         loop {
             let (response, cancellation_token) = match self.shared.load_respons_receiver.try_next() {
                 Ok(Some((response, cancellation_token))) => (response, cancellation_token),
@@ -629,13 +630,13 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
             }
 
             let entry = unsafe { &mut *cancellation_token.1 };
-            if let Some(request) = entry.value.on_load(
+            if let Some(request) = updater.update(
                 LoadContext {
                     key: &cancellation_token.2,
                     load_response_sender: &self.shared.load_response_sender,
                     cancellation_token: &cancellation_token,
                 },
-                update_context,
+                &mut entry.value,
                 response,
             ) {
                 if let Err(err) = self
@@ -658,7 +659,6 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
             let entry = unsafe { &mut **ptr };
             if !entry.has_reference() {
                 if !k.is_named() || filter(&mut entry.value) {
-                    log::debug!("Draining {}", k);
                     arena.deallocate(*id);
                     false
                 } else {
@@ -712,8 +712,25 @@ impl<'a, 'i: 'a, D: 'a + Data> ops::IndexMut<&'i Index<D>> for WriteGuard<'a, D>
     }
 }
 
+/// workaround or rust limitations
+/// see https://github.com/rust-lang/rfcs/issues/2765
+trait AsAny {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+/*impl<T: Any> AsAny for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}*/
+
 /// Type eraser trait to notify listeners.
-trait Listeners: Any {
+trait Listeners {
+    fn as_any_mut(&mut self) -> &mut dyn Any;
     fn notify(&mut self);
 }
 
@@ -732,12 +749,17 @@ impl<D: Data> TypedListeners<D> {
 }
 
 impl<D: Data> Listeners for TypedListeners<D> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn notify(&mut self) {
         for (request, cancellation_token) in self.listeners.drain(..) {
             if cancellation_token.is_canceled() {
                 continue;
             }
 
+            log::debug!("Notify dependency completed: [{}]", cancellation_token.2);
             if let Err(err) = self.load_response_sender.unbounded_send((request, cancellation_token)) {
                 log::error!("Failed to notify store: {:?}", err);
             }
@@ -771,7 +793,8 @@ impl LoadListeners {
             })
         });
 
-        let listener = Any::downcast_mut::<TypedListeners<D>>(listener).unwrap();
+        let listener = Any::downcast_mut::<TypedListeners<D>>(listener.as_any_mut()).unwrap();
+        log::debug!("Add dependency listener: [{}]", load_context.cancellation_token.2);
         listener.add(request, load_context.cancellation_token.clone());
     }
 

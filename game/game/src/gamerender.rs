@@ -1,5 +1,5 @@
 use crate::input::{self, add_input_system};
-use crate::render::{self, add_render_system, Context, ShaderStore, Surface};
+use crate::render::{self, add_render_system, test_tech, Context, Frame, PipelineStore, Surface};
 use crate::utils::runtime::Runtime;
 use crate::{Config, GameError};
 use shine_ecs::legion::{
@@ -25,12 +25,15 @@ impl ScheduleSet {
         );
 
         logics.insert(
-            "render".to_owned(),
+            "update_render".to_owned(),
             Schedule::builder()
                 .add_system(render::systems::update_shaders())
+                .add_system(render::systems::update_pipeline())
                 .flush()
                 .build(),
         );
+
+        logics.insert("test_render".to_owned(), test_tech::create_schedule());
 
         ScheduleSet { logics }
     }
@@ -73,7 +76,6 @@ impl GameRender {
     pub fn init_world() {}
 
     pub fn run_logic(&mut self, logic: &str) {
-        log::trace!("logice: {}", logic);
         let world = &mut self.world;
         let resources = &mut self.resources;
         self.schedules.execute(logic, world, resources);
@@ -83,15 +85,28 @@ impl GameRender {
         self.run_logic("update");
     }
 
-    pub fn render(&mut self, size: (u32, u32)) {
-        // prepare context
+    fn start_frame(&mut self, size: (u32, u32)) -> Result<(), String> {
         let surface = &mut self.surface;
         surface.set_size(size);
-        self.resources.get_mut::<Context>().map(|mut context| {
-            context.init_swap_chain(surface);
-        });
+        let mut context = self.resources.get_mut::<Context>().unwrap();
+        let mut frame = self.resources.get_mut::<Frame>().unwrap();
+        frame.start(context.create_frame(surface)?);
+        Ok(())
+    }
 
-        self.run_logic("render");
+    fn end_frame(&mut self) -> Result<(), String> {
+        let context = self.resources.get_mut::<Context>().unwrap();
+        let mut frame = self.resources.get_mut::<Frame>().unwrap();
+        frame.end(context.queue());
+        Ok(())
+    }
+
+    pub fn render(&mut self, size: (u32, u32)) -> Result<(), String> {
+        self.run_logic("update_render");
+
+        self.start_frame(size)?;
+        self.run_logic("test_render");
+        self.end_frame()
     }
 
     pub fn gc_all(&mut self) {
@@ -99,10 +114,10 @@ impl GameRender {
     }
 
     pub fn test(&mut self) {
-        self.resources.get_mut::<ShaderStore>().map(|mut store| {
+        self.resources.get_mut::<PipelineStore>().map(|mut store| {
             log::info!("test");
             let mut store = store.write();
-            store.named_get_or_add(&"f153/d545de7d036a42532c268d0be9359cc043a899064c4e6017ed4b79d85f15.pl".to_owned());
+            store.named_get_or_add(&"a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl".to_owned());
         });
     }
 }

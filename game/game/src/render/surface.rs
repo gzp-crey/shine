@@ -15,8 +15,8 @@ impl Surface {
         &self.surface
     }
 
-    pub fn size(&self) -> &(u32, u32) {
-        &self.size
+    pub fn size(&self) -> (u32, u32) {
+        self.size
     }
 
     pub fn set_size(&mut self, size: (u32, u32)) {

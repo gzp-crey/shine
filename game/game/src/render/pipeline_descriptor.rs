@@ -1,8 +1,9 @@
+use crate::render::Context;
 use crate::wgpu;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum Primitives {
     PointList,
     LineList,
@@ -69,11 +70,64 @@ pub enum Blending {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipelineDescriptor {
-    pub primitive_topology: Primitives,
+    pub primitives: Primitives,
     pub vertex_stage: VertexStage,
     pub fragment_stage: FragmentStage,
     color_stage: Blending,
     //depth_stencile_stage:
+}
+
+impl PipelineDescriptor {
+    pub fn compile(
+        &self,
+        context: &Context,
+        (vs, fs): (&wgpu::ShaderModule, &wgpu::ShaderModule),
+    ) -> Result<wgpu::RenderPipeline, String> {
+        let device = context.device();
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[],
+        });
+
+        let vertex_state = wgpu::VertexStateDescriptor {
+            index_format: wgpu::IndexFormat::Uint16,
+            vertex_buffers: &[],
+        };
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: &pipeline_layout,
+            primitive_topology: self.primitives.into(),
+
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: vs,
+                entry_point: "main",
+            },
+
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: fs,
+                entry_point: "main",
+            }),
+
+            rasterization_state: None,
+
+            color_states: &[wgpu::ColorStateDescriptor {
+                format: context.swap_chain_format(),
+                color_blend: wgpu::BlendDescriptor::REPLACE,
+                alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                write_mask: wgpu::ColorWrite::ALL,
+            }],
+
+            depth_stencil_state: None,
+
+            vertex_state,
+
+            sample_count: 1,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
+        Ok(pipeline)
+    }
 }
 
 pub fn foo() {
@@ -81,7 +135,7 @@ pub fn foo() {
     use Uniform::*;
 
     let p = PipelineDescriptor {
-        primitive_topology: Primitives::TriangleList,
+        primitives: Primitives::TriangleList,
         vertex_stage: VertexStage {
             shader: "pipeline/hello.vs".to_owned(),
             attributes: [

@@ -55,3 +55,19 @@ pub async fn upload_binary(url: &Url, data: &[u8]) -> Result<(), AssetError> {
         sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
     }
 }
+
+#[cfg(feature = "native")]
+pub async fn upload_string(url: &Url, data: &str) -> Result<(), AssetError> {
+    match url.scheme() {
+        "file" => {
+            tokio::fs::create_dir_all(url.to_file_folder())
+                .await
+                .map_err(|err| AssetError::ContentSave(format!("Failed to create folder: {:?}", err)))?;
+            tokio::fs::write(&url.to_file_path(), data)
+                .await
+                .map_err(|err| AssetError::ContentSave(format!("Save failed: {:?}", err)))?;
+            Ok(())
+        }
+        sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
+    }
+}
