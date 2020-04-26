@@ -28,14 +28,14 @@ impl ShaderDependency {
         load_context: &LoadContext<'_, D>,
         notify_data: D::LoadResponse,
     ) -> ShaderDependency {
-        let id = shaders.named_get_or_add_blocking(&key.to_owned());
-        match shaders[&id] {
+        let id = shaders.get_or_add_blocking(&key.to_owned());
+        match shaders.at(&id) {
             Shader::Pending(ref listeners) => {
                 listeners.add(load_context, notify_data);
                 ShaderDependency::Pending(shader_type, id)
             }
             Shader::Compiled(st, _) => {
-                if st == shader_type {
+                if *st == shader_type {
                     ShaderDependency::Completed(id)
                 } else {
                     ShaderDependency::Failed(format!(
@@ -51,10 +51,10 @@ impl ShaderDependency {
 
     pub fn update(self, shaders: &mut ShaderStoreRead<'_>) -> ShaderDependency {
         match self {
-            ShaderDependency::Pending(shader_type, id) => match shaders[&id] {
+            ShaderDependency::Pending(shader_type, id) => match shaders.at(&id) {
                 Shader::Pending(_) => ShaderDependency::Pending(shader_type, id),
                 Shader::Compiled(st, _) => {
-                    if st == shader_type {
+                    if *st == shader_type {
                         ShaderDependency::Completed(id)
                     } else {
                         ShaderDependency::Failed(format!(

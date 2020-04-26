@@ -5,6 +5,8 @@ use shine_ecs::core::arena::Arena;
 use std::cell::Cell;
 use std::mem;
 
+mod utils;
+
 struct DropTracker<'a>(&'a Cell<usize>);
 
 impl<'a> Drop for DropTracker<'a> {
@@ -16,16 +18,9 @@ impl<'a> Drop for DropTracker<'a> {
 
 struct Node<'a>(i32, DropTracker<'a>);
 
-fn init_logger() {
-    let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
-}
-
 #[test]
 fn simple() {
-    init_logger();
+    utils::init_logger();
 
     let drop_counter = Cell::new(0);
     {
@@ -73,7 +68,7 @@ fn simple() {
 
 #[test]
 fn stress() {
-    init_logger();
+    utils::init_logger();
 
     let mut data = [1usize, 2, 5, 7, 100, 4000];
 

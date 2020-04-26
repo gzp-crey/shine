@@ -12,7 +12,7 @@ pub use self::frame::*;
 mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderLoader, ShaderStore, ShaderStoreRead, ShaderType};
 mod pipeline;
-pub use self::pipeline::{Pipeline, PipelineIndex, PipelineLoader, PipelineStore};
+pub use self::pipeline::{Pipeline, PipelineIndex, PipelineLoader, PipelineStore, PipelineStoreRead};
 pub mod pipeline_descriptor;
 pub use self::pipeline_descriptor::*;
 

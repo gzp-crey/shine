@@ -7,6 +7,7 @@ use futures::future::FutureExt;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
+use std::ops::Range;
 use std::pin::Pin;
 
 pub struct Dependecy {
@@ -78,8 +79,8 @@ impl Dependecy {
             (ShaderDependency::Completed(vs), ShaderDependency::Completed(fs)) => {
                 log::debug!("Pipeline compilation completed [{}]", load_context);
                 listeners.notify_all();
-                let vs = shaders[&vs].shadere_module().unwrap();
-                let fs = shaders[&fs].shadere_module().unwrap();
+                let vs = shaders.at(&vs).shadere_module().unwrap();
+                let fs = shaders.at(&fs).shadere_module().unwrap();
                 match self.descriptor.compile(context, (vs, fs)) {
                     Ok(pipeline) => Pipeline::Compiled(pipeline),
                     Err(err) => Pipeline::Error(err),
@@ -98,6 +99,24 @@ pub enum Pipeline {
 }
 
 impl Pipeline {
+    pub fn bind<'a: 'pass, 'pass>(
+        &'a self,
+        encoder: &'a mut wgpu::CommandEncoder,
+        pass_descriptor: &wgpu::RenderPassDescriptor<'pass, 'pass>,
+    ) -> Option<BoundPipeline<'a, 'pass>> {
+        match self {
+            Pipeline::Compiled(ref pipeline) => {
+                let mut b = BoundPipeline {
+                    pipeline,
+                    render_pass: encoder.begin_render_pass(pass_descriptor),
+                };
+                b.bind_pipeline();
+                Some(b)
+            }
+            _ => None,
+        }
+    }
+
     fn on_load(
         &mut self,
         load_context: LoadContext<'_, Pipeline>,
@@ -227,6 +246,28 @@ impl<'a> DataUpdater<'a, Pipeline> for (&Context, &ShaderStore) {
         load_response: PipelineLoadResponse,
     ) -> Option<PipelineLoadRequest> {
         data.on_load(load_context, self.0, &mut self.1.read(), load_response)
+    }
+}
+
+pub struct BoundPipeline<'a: 'pass, 'pass> {
+    pipeline: &'a wgpu::RenderPipeline,
+    render_pass: wgpu::RenderPass<'pass>,
+}
+
+impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
+    #[inline]
+    fn bind_pipeline(&mut self) {
+        self.render_pass.set_pipeline(self.pipeline);
+    }
+
+    #[inline]
+    pub fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
+        self.render_pass.draw(vertices, instances)
+    }
+
+    #[inline]
+    pub fn draw_indexed(&mut self, indices: Range<u32>, base_vertex: i32, instances: Range<u32>) {
+        self.render_pass.draw_indexed(indices, base_vertex, instances);
     }
 }
 

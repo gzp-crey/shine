@@ -64,6 +64,8 @@ impl GameRender {
         add_input_system(&config, &mut resources, &mut world, &mut runtime).await?;
         add_render_system(&config, &mut resources, &mut world, &mut runtime).await?;
 
+        test_tech::add_test_scene(&config, &mut resources, &mut world, &mut runtime).await?;
+
         Ok(GameRender {
             surface,
             resources,
@@ -117,7 +119,7 @@ impl GameRender {
         self.resources.get_mut::<PipelineStore>().map(|mut store| {
             log::info!("test");
             let mut store = store.write();
-            store.named_get_or_add(&"a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl".to_owned());
+            store.get_or_add(&"a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl".to_owned());
         });
     }
 }

@@ -1,26 +1,13 @@
 use shine_ecs::core::spscstate::state_channel;
-use std::{env, thread};
+use std::thread;
+
+mod utils;
 
 const ITER_COUNT: i32 = 0x2ffff;
 
-fn init_logger() {
-    let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .is_test(true)
-        .try_init();
-}
-
-fn single_threaded_test() {
-    assert!(
-        env::args().any(|a| a == "--test-threads=1")
-            || env::var("RUST_TEST_THREADS").unwrap_or_else(|_| "0".to_string()) == "1",
-        "Force single threaded test execution. Command line: --test-threads=1, Env: RUST_TEST_THREADS=2"
-    );
-}
-
 #[test]
 fn single_threaded_logic() {
-    init_logger();
+    utils::init_logger();
 
     let (p, c) = state_channel();
     assert!(c.receive().is_err());
@@ -48,7 +35,7 @@ fn single_threaded_logic() {
 
 #[test]
 fn single_threaded_stress_small_buffer() {
-    init_logger();
+    utils::init_logger();
 
     let (p, c) = state_channel();
     for x in 0..ITER_COUNT {
@@ -59,8 +46,8 @@ fn single_threaded_stress_small_buffer() {
 
 #[test]
 fn multi_threaded_stress_small_buffer() {
-    init_logger();
-    single_threaded_test();
+    utils::init_logger();
+    utils::single_threaded_test();
 
     let (p, c) = state_channel();
     let tp = thread::spawn(move || {
@@ -138,7 +125,7 @@ impl Default for BigData {
 
 #[test]
 fn single_threaded_stress_big_buffer() {
-    init_logger();
+    utils::init_logger();
 
     let (p, c) = state_channel::<BigData>();
     for x in 0..ITER_COUNT {
@@ -168,8 +155,8 @@ fn single_threaded_stress_big_buffer() {
 
 #[test]
 fn multi_threaded_stress_big_buffer() {
-    init_logger();
-    single_threaded_test();
+    utils::init_logger();
+    utils::single_threaded_test();
 
     let (p, c) = state_channel::<BigData>();
     let tp = thread::spawn(move || {

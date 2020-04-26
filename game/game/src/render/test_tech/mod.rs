@@ -1,22 +1,70 @@
-use crate::render::{Context, Frame, PipelineStore};
-use shine_ecs::legion::systems::{
-    schedule::{Schedulable, Schedule},
-    SystemBuilder,
+use crate::render::{Context, Frame, PipelineIndex, PipelineStore, PipelineStoreRead};
+use crate::utils::runtime::Runtime;
+use crate::{Config, GameError};
+use shine_ecs::legion::{
+    systems::schedule::{Schedulable, Schedule},
+    systems::{resource::Resources, SystemBuilder},
+    world::World,
 };
 use wgpu;
+
+struct TestScene {
+    pipeline: Option<PipelineIndex>,
+}
+
+impl TestScene {
+    fn new() -> TestScene {
+        TestScene { pipeline: None }
+    }
+
+    pub fn render(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
+        pipelines: &mut PipelineStoreRead<'_>,
+    ) {
+        let pipeline = self.pipeline.get_or_insert_with(|| {
+            pipelines
+                .get_or_add_blocking(&"a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl".to_owned())
+        });
+
+        let pipeline = pipelines.at(pipeline);
+        //let pipeline = &pipelines[pipeline];
+        if let Some(mut pipeline) = pipeline.bind(encoder, pass_descriptor) {
+            pipeline.draw(0..3, 0..1);
+        }
+    }
+}
+
+/// Add required resource for the test scene
+pub async fn add_test_scene(
+    _config: &Config,
+    resources: &mut Resources,
+    _world: &mut World,
+    _runtime: &mut Runtime,
+) -> Result<(), GameError> {
+    log::info!("adding test scene to the world");
+
+    resources.insert(TestScene::new());
+
+    Ok(())
+}
 
 fn render_test() -> Box<dyn Schedulable> {
     SystemBuilder::new("test_render")
         .read_resource::<Context>()
         .read_resource::<Frame>()
         .write_resource::<PipelineStore>()
-        .build(move |_, _, (context, frame, _pipelines), _| {
+        .write_resource::<TestScene>()
+        .build(move |_, _, (context, frame, pipelines, scene), _| {
+            let mut pipelines = pipelines.read();
+
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
             {
-                let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                let pass_descriptor = wgpu::RenderPassDescriptor {
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: frame.texture_view(),
                         resolve_target: None,
@@ -30,7 +78,9 @@ fn render_test() -> Box<dyn Schedulable> {
                         },
                     }],
                     depth_stencil_attachment: None,
-                });
+                };
+
+                scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
             }
 
             frame.add_command(encoder.finish());

@@ -8,7 +8,7 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
-use std::{fmt, ops};
+use std::{fmt, ptr};
 
 /// Data stored in the Store
 pub trait Data: 'static {
@@ -94,8 +94,8 @@ impl<D: Data> Index<D> {
         Index(entry as *const _)
     }
 
-    fn from_ptr(entry: *const Entry<D>) -> Index<D> {
-        Self::from_ref(unsafe { &*entry })
+    unsafe fn from_ptr(entry: *const Entry<D>) -> Index<D> {
+        Self::from_ref(&*entry)
     }
 
     unsafe fn entry(&self) -> &Entry<D> {
@@ -153,7 +153,7 @@ struct SharedData<D: Data> {
 
 impl<D: Data> SharedData<D> {
     fn get(&self, k: &Key<D>) -> Option<Index<D>> {
-        self.entries.get(k).map(|(_, ptr)| Index::from_ptr(*ptr))
+        self.entries.get(k).map(|(_, ptr)| unsafe { Index::from_ptr(*ptr) })
     }
 }
 
@@ -170,7 +170,7 @@ struct ExclusiveData<D: Data> {
 
 impl<D: Data> ExclusiveData<D> {
     fn get(&self, k: &Key<D>) -> Option<Index<D>> {
-        self.entries.get(k).map(|(_, ptr)| Index::from_ptr(*ptr))
+        self.entries.get(k).map(|(_, ptr)| unsafe { Index::from_ptr(*ptr) })
     }
 
     /// Adds a new item to the store
@@ -193,7 +193,7 @@ impl<D: Data> ExclusiveData<D> {
             (id, entry as *mut _)
         });
 
-        let idx = Index::from_ptr(*entry_ptr);
+        let idx = unsafe { Index::from_ptr(*entry_ptr) };
         if let Some((load, load_token)) = load_request {
             log::debug!("Request loading for [{}]", k);
             let cancellation_token = CancellationToken(load_token, *entry_ptr, k.clone());
@@ -245,7 +245,7 @@ impl<'a, D: Data> fmt::Display for LoadContext<'a, D> {
     }
 }
 
-pub trait DataUpdater<'a, D: 'a + Data> {
+pub trait DataUpdater<'a, D: Data> {
     fn update<'u>(
         &mut self,
         load_context: LoadContext<'u, D>,
@@ -259,7 +259,7 @@ pub trait DataLoader<D: Data>: 'static + Send + Sync {
         &'a mut self,
         request: D::LoadRequest,
         cancellation_token: CancellationToken<D>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send + 'a>>;
+    ) -> Pin<Box<dyn 'a + Send + std::future::Future<Output = Option<D::LoadResponse>>>>;
 }
 
 struct NoDataLoader;
@@ -269,7 +269,7 @@ impl<D: Data> DataLoader<D> for NoDataLoader {
         &'a mut self,
         _request: D::LoadRequest,
         _cancellation_token: CancellationToken<D>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Option<D::LoadResponse>> + Send + 'a>> {
+    ) -> Pin<Box<dyn 'a + Send + std::future::Future<Output = Option<D::LoadResponse>>>> {
         Box::pin(futures::future::ready(None))
     }
 }
@@ -437,7 +437,7 @@ pub struct ReadGuard<'a, D: Data> {
     exclusive: &'a Mutex<ExclusiveData<D>>,
 }
 
-impl<'a, D: 'a + Data> ReadGuard<'a, D> {
+impl<'a, D: Data> ReadGuard<'a, D> {
     /// Try to get the index of a resource by the key.
     /// If the global container is not accessible (ex. update is in progress),
     /// a null index is returned.
@@ -455,7 +455,7 @@ impl<'a, D: 'a + Data> ReadGuard<'a, D> {
         })
     }
 
-    pub fn named_get_blocking(&self, k: &D::Key) -> Option<Index<D>> {
+    pub fn try_get_blocking(&self, k: &D::Key) -> Option<Index<D>> {
         let shared = &self.shared;
         let exclusive = &self.exclusive;
 
@@ -466,7 +466,7 @@ impl<'a, D: 'a + Data> ReadGuard<'a, D> {
         })
     }
 
-    pub fn named_get_or_add_blocking(&mut self, k: &D::Key) -> Index<D>
+    pub fn get_or_add_blocking(&mut self, k: &D::Key) -> Index<D>
     where
         D: FromKey,
     {
@@ -520,22 +520,14 @@ impl<'a, D: 'a + Data> ReadGuard<'a, D> {
     }
 }
 
-impl<'a, 'i: 'a, D: 'a + Data> ops::Index<&'i Index<D>> for ReadGuard<'a, D> {
-    type Output = D;
-
-    fn index(&self, index: &'i Index<D>) -> &Self::Output {
-        self.at(index)
-    }
-}
-
 /// Guarded update access to a store
 pub struct WriteGuard<'a, D: Data> {
     shared: RwLockWriteGuard<'a, SharedData<D>>,
     locked_exclusive: MutexGuard<'a, ExclusiveData<D>>,
 }
 
-impl<'a, D: 'a + Data> WriteGuard<'a, D> {
-    pub fn named_get(&self, k: &D::Key) -> Option<Index<D>> {
+impl<'a, D: Data> WriteGuard<'a, D> {
+    pub fn try_get(&self, k: &D::Key) -> Option<Index<D>> {
         let shared = &self.shared;
         let exclusive = &self.locked_exclusive;
 
@@ -543,7 +535,7 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
         exclusive.get(&k).or_else(|| shared.get(&k))
     }
 
-    pub fn named_get_or_add(&mut self, k: &D::Key) -> Index<D>
+    pub fn get_or_add(&mut self, k: &D::Key) -> Index<D>
     where
         D: FromKey,
     {
@@ -611,7 +603,6 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
 
             #[cfg(debug_assertions)]
             {
-                use std::ptr;
                 let stored = {
                     let shared = &self.shared;
                     let exclusive = &self.locked_exclusive;
@@ -695,20 +686,6 @@ impl<'a, D: 'a + Data> WriteGuard<'a, D> {
         // one have to get mutable reference to the store,
         // but that would contradict to the borrow checker.
         unsafe { &mut index.entry_mut().value }
-    }
-}
-
-impl<'a, 'i: 'a, D: 'a + Data> ops::Index<&'i Index<D>> for WriteGuard<'a, D> {
-    type Output = D;
-
-    fn index(&self, index: &'i Index<D>) -> &Self::Output {
-        self.at(index)
-    }
-}
-
-impl<'a, 'i: 'a, D: 'a + Data> ops::IndexMut<&'i Index<D>> for WriteGuard<'a, D> {
-    fn index_mut(&mut self, index: &'i Index<D>) -> &mut Self::Output {
-        self.at_mut(index)
     }
 }
 
