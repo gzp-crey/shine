@@ -25,7 +25,7 @@ impl TestScene {
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
             pipelines
-                .get_or_add_blocking(&"a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl".to_owned())
+                .get_or_add_blocking(&"2ac6/7657415604b23eb7ab7b32cc86d6c22b8b319ce813b53f75ad6ad3d6385b.pl".to_owned())
         });
 
         let pipeline = pipelines.at(pipeline);
