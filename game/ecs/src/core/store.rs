@@ -12,7 +12,7 @@ use std::{fmt, ptr};
 
 /// Data stored in the Store
 pub trait Data: 'static {
-    type Key: Clone + Send + Eq + Hash + fmt::Display;
+    type Key: Clone + Send + Eq + Hash + fmt::Debug;
     type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
 }
@@ -73,11 +73,11 @@ impl<D: Data> Clone for Key<D> {
     }
 }
 
-impl<D: Data> fmt::Display for Key<D> {
+impl<D: Data> fmt::Debug for Key<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            Key::Named(ref k) => write!(f, "Named({})", k),
-            Key::Unnamed(ref id) => write!(f, "Unnamed({})", id),
+            Key::Named(ref k) => f.debug_tuple("Named").field(&k).finish(),
+            Key::Unnamed(ref id) => f.debug_tuple("Unnamed").field(&id).finish(),
         }
     }
 }
@@ -195,10 +195,10 @@ impl<D: Data> ExclusiveData<D> {
 
         let idx = unsafe { Index::from_ptr(*entry_ptr) };
         if let Some((load, load_token)) = load_request {
-            log::debug!("Request loading for [{}]", k);
+            log::debug!("Request loading for [{:?}]", k);
             let cancellation_token = CancellationToken(load_token, *entry_ptr, k.clone());
             if let Err(err) = self.load_request_sender.unbounded_send((load, cancellation_token)) {
-                log::error!("Failed to send load task for [{}]: {:?}", k, err);
+                log::error!("Failed to send load task for [{:?}]: {:?}", k, err);
             }
         }
         idx
@@ -239,9 +239,9 @@ impl<'a, D: Data> LoadContext<'a, D> {
     }
 }
 
-impl<'a, D: Data> fmt::Display for LoadContext<'a, D> {
+impl<'a, D: Data> fmt::Debug for LoadContext<'a, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.key)
+        write!(f, "{:?}", self.key)
     }
 }
 
@@ -411,7 +411,7 @@ impl<D: Data> Drop for Store<D> {
                 let entry = unsafe { &**ptr };
                 debug_assert!(
                     !entry.has_reference(),
-                    "Entry leak: [{}] is still referenced, shared",
+                    "Entry leak: [{:?}] is still referenced, shared",
                     k
                 );
             }
@@ -421,7 +421,7 @@ impl<D: Data> Drop for Store<D> {
                 let entry = unsafe { &**ptr };
                 debug_assert!(
                     !entry.has_reference(),
-                    "Entry leak: [{}] is still referenced, exclusive",
+                    "Entry leak: [{:?}] is still referenced, exclusive",
                     k
                 );
             }
@@ -736,7 +736,7 @@ impl<D: Data> Listeners for TypedListeners<D> {
                 continue;
             }
 
-            log::debug!("Notify dependency completed: [{}]", cancellation_token.2);
+            log::debug!("Notify dependency completed: [{:?}]", cancellation_token.2);
             if let Err(err) = self.load_response_sender.unbounded_send((request, cancellation_token)) {
                 log::error!("Failed to notify store: {:?}", err);
             }
@@ -771,7 +771,7 @@ impl LoadListeners {
         });
 
         let listener = Any::downcast_mut::<TypedListeners<D>>(listener.as_any_mut()).unwrap();
-        log::debug!("Add dependency listener: [{}]", load_context.cancellation_token.2);
+        log::debug!("Add dependency listener: [{:?}]", load_context.cancellation_token.2);
         listener.add(request, load_context.cancellation_token.clone());
     }
 

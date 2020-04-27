@@ -1,6 +1,5 @@
-use crate::utils::runtime::Runtime;
-use crate::{Config, GameError};
-use shine_ecs::legion::{systems::resource::Resources, world::World};
+use crate::GameError;
+use shine_ecs::legion::systems::resource::Resources;
 use shine_input::{InputManager, InputState};
 use std::ops::{Deref, DerefMut};
 
@@ -46,12 +45,7 @@ impl InputHandler {
 /// - *CurrentInputState* stores the input state for the current frame and thus should be Read only in systems.
 /// - *InputHandler* handles the user inputs. As input arrives from a single thread, it should not be used from
 /// systems generally and access it usually restricted to the main loop.
-pub async fn add_input_system(
-    _config: &Config,
-    resources: &mut Resources,
-    _world: &mut World,
-    _runtime: &mut Runtime,
-) -> Result<(), GameError> {
+pub async fn add_input_system(resources: &mut Resources) -> Result<(), GameError> {
     log::info!("adding input system to the world");
     resources.insert(CurrentInputState(InputState::new()));
     resources.insert(InputHandler::new());

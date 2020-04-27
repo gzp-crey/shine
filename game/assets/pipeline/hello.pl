@@ -1,5 +1,5 @@
 {
-    "primitives": "TriangleList",
+    "primitive_topology": "TriangleList",
     "vertex_stage": {
         "shader": "pipeline/hello.vs",
         "attributes": {},

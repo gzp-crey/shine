@@ -58,15 +58,15 @@ pub struct GameRender {
 }
 
 impl GameRender {
-    pub async fn new(config: Config, surface: Surface) -> Result<GameRender, GameError> {
+    pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameRender, GameError> {
         let mut resources = Resources::default();
-        let mut world = World::new();
+        let world = World::new();
         let mut runtime = Runtime::new();
 
-        add_input_system(&config, &mut resources, &mut world, &mut runtime).await?;
-        add_render_system(&config, &mut resources, &mut world, &mut runtime).await?;
+        add_input_system(&mut resources).await?;
+        add_render_system(&config, wgpu_instance, &mut resources, &mut runtime).await?;
 
-        test_tech::add_test_scene(&config, &mut resources, &mut world, &mut runtime).await?;
+        test_tech::add_test_scene(&mut resources).await?;
 
         Ok(GameRender {
             surface,

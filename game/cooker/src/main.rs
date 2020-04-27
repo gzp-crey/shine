@@ -19,7 +19,8 @@ async fn run() {
 }
 
 fn main() {
-    //shine_game::render::foo();
+    shine_game::render::foo();
+
     let _ = env_logger::builder()
         .filter_level(log::LevelFilter::Trace)
         .filter_module("shine-ecs", log::LevelFilter::Debug)

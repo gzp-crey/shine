@@ -27,8 +27,7 @@ impl Frame {
     pub fn end(&mut self, queue: &wgpu::Queue) {
         {
             let mut buffers = self.buffers.lock().unwrap();
-            queue.submit(&*buffers);
-            buffers.clear();
+            queue.submit(buffers.drain(..));
         }
         self.frame = None;
     }

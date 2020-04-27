@@ -95,13 +95,13 @@ impl Shader {
     ) -> Option<String> {
         *self = match (std::mem::replace(self, Shader::None), load_response) {
             (Shader::Pending(listeners), ShaderLoadResponse::Error(err)) => {
-                log::debug!("Shader compilation failed [{}]: {}", load_context, err);
+                log::debug!("Shader compilation failed [{:?}]: {:?}", load_context, err);
                 listeners.notify_all();
                 Shader::Error(err)
             }
 
             (Shader::Pending(listeners), ShaderLoadResponse::Spirv(ty, spirv)) => {
-                log::debug!("Shader compilation completed for [{}]", load_context);
+                log::debug!("Shader compilation completed for [{:?}]", load_context);
                 listeners.notify_all();
                 Shader::Compiled(ty, context.device().create_shader_module(&spirv))
             }

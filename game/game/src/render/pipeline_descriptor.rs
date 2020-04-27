@@ -1,51 +1,20 @@
-use crate::render::Context;
+use crate::render::{Context, VertexBufferLayout};
 use crate::wgpu;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
-pub enum Primitives {
-    PointList,
-    LineList,
-    LineStrip,
-    TriangleList,
-    TriangleStrip,
-}
-
-impl From<Primitives> for wgpu::PrimitiveTopology {
-    fn from(pt: Primitives) -> wgpu::PrimitiveTopology {
-        match pt {
-            Primitives::PointList => wgpu::PrimitiveTopology::PointList,
-            Primitives::LineList => wgpu::PrimitiveTopology::LineList,
-            Primitives::LineStrip => wgpu::PrimitiveTopology::LineStrip,
-            Primitives::TriangleList => wgpu::PrimitiveTopology::TriangleList,
-            Primitives::TriangleStrip => wgpu::PrimitiveTopology::TriangleStrip,
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum ValueType {
-    Float,
-    Float3,
-    Int3,
-    Float3a(u32),
-    Mat2,
-    Mat2a(u32),
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum PipelineAttribute {
-    Position(ValueType),
-    Color(ValueType),
-    Normal(ValueType),
-    Named(String, ValueType),
+    Position(wgpu::VertexFormat),
+    Color(wgpu::VertexFormat),
+    Normal(wgpu::VertexFormat),
+    Named(String, wgpu::VertexFormat),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Uniform {
     ModelView,
-    Custom(String, ValueType),
+    //Named(String, wgpu::VertexFormat),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -54,6 +23,16 @@ pub struct VertexStage {
     pub attributes: HashMap<u8, PipelineAttribute>,
     pub global_uniforms: HashMap<u8, Uniform>,
     pub local_uniforms: HashMap<u8, Uniform>,
+}
+
+impl VertexStage {
+    pub fn check_vertex_layout(&self, vertex_layout: &VertexBufferLayout) -> Result<(), String> {
+        if self.attributes.len() > vertex_layout.attributes.len() {
+            return Err("Missing vertex attributes".to_string());
+        }
+        //todo: more checks
+        Ok(())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -70,7 +49,7 @@ pub enum Blending {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipelineDescriptor {
-    pub primitives: Primitives,
+    pub primitive_topology: wgpu::PrimitiveTopology,
     pub vertex_stage: VertexStage,
     pub fragment_stage: FragmentStage,
     color_stage: Blending,
@@ -96,7 +75,7 @@ impl PipelineDescriptor {
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
-            primitive_topology: self.primitives.into(),
+            primitive_topology: self.primitive_topology,
 
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: vs,
@@ -135,13 +114,16 @@ pub fn foo() {
     use Uniform::*;
 
     let p = PipelineDescriptor {
-        primitives: Primitives::TriangleList,
+        primitive_topology: wgpu::PrimitiveTopology::TriangleList,
         vertex_stage: VertexStage {
             shader: "pipeline/hello.vs".to_owned(),
             attributes: [
-                (0, Position(ValueType::Float3)),
-                (1, Normal(ValueType::Float3)),
-                (2, PipelineAttribute::Named("c1".to_owned(), ValueType::Float3)),
+                (0, Position(wgpu::VertexFormat::Float2)),
+                (1, Normal(wgpu::VertexFormat::Float3)),
+                (
+                    2,
+                    PipelineAttribute::Named("c1".to_owned(), wgpu::VertexFormat::Ushort2Norm),
+                ),
             ]
             .iter()
             .cloned()

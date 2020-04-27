@@ -4,6 +4,7 @@ use crate::GameError;
 
 /// Thread safe rendering context.
 pub struct Context {
+    //instance: wgpu::Instance,
     device: wgpu::Device,
     queue: wgpu::Queue,
     swap_chain_format: wgpu::TextureFormat,
@@ -11,16 +12,17 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn new() -> Result<Context, GameError> {
-        let adapter = wgpu::Adapter::request(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::Default,
-                compatible_surface: None,
-            },
-            wgpu::BackendBit::PRIMARY,
-        )
-        .await
-        .ok_or(GameError::RenderContext("Adapter not found".to_owned()))?;
+    pub async fn new(instance: wgpu::Instance) -> Result<Context, GameError> {
+        let adapter = instance
+            .request_adapter(
+                &wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::Default,
+                    compatible_surface: None,
+                },
+                wgpu::BackendBit::PRIMARY,
+            )
+            .await
+            .ok_or(GameError::RenderContext("Adapter not found".to_owned()))?;
 
         //log::info!("Graphics adapter: {:?}", adapter.get_info());
 
@@ -31,9 +33,11 @@ impl Context {
                 },
                 limits: wgpu::Limits::default(),
             })
-            .await;
+            .await
+            .map_err(|err| GameError::RenderContext(format!("Failed to create device: {:?}", err)))?;
 
         Ok(Context {
+            //instance,
             device,
             queue,
             swap_chain_format: wgpu::TextureFormat::Bgra8UnormSrgb,

@@ -51,5 +51,5 @@ pub async fn cook(source_base: &Url, target_base: &Url, source_id: &str) -> Resu
         .await
         .map_err(|err| format!("Failed to upload {}: {:?}", target_url.as_str(), err))?;
 
-    Ok("target_id".to_owned())
+    Ok(target_id.to_owned())
 }

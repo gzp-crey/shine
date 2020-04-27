@@ -1,7 +1,7 @@
 use crate::utils::runtime::{Runtime, TaskSpawner};
 use crate::{Config, GameError};
 use shine_ecs::core::store::{Data, DataLoader, Store};
-use shine_ecs::legion::{systems::resource::Resources, world::World};
+use shine_ecs::legion::systems::resource::Resources;
 
 mod surface;
 pub use self::surface::*;
@@ -41,13 +41,13 @@ fn register_store<D: Data, L: DataLoader<D>>(
 /// - *Pipeline* store
 pub async fn add_render_system(
     config: &Config,
+    wgpu_instance: wgpu::Instance,
     resources: &mut Resources,
-    _world: &mut World,
     runtime: &mut Runtime,
 ) -> Result<(), GameError> {
     log::info!("adding render system to the world");
 
-    resources.insert(Context::new().await?);
+    resources.insert(Context::new(wgpu_instance).await?);
     resources.insert(Frame::new());
 
     register_store(ShaderLoader::new(&config.asset_base)?, 16, resources, runtime);

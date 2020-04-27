@@ -1,10 +1,8 @@
-use crate::render::{Context, Frame, PipelineIndex, PipelineStore, PipelineStoreRead, PipelineKey, VertexNull};
-use crate::utils::runtime::Runtime;
-use crate::{Config, GameError};
+use crate::render::{Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead, VertexNull};
+use crate::GameError;
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::{resource::Resources, SystemBuilder},
-    world::World,
 };
 use wgpu;
 
@@ -25,7 +23,7 @@ impl TestScene {
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
             pipelines.get_or_add_blocking(&PipelineKey::new::<VertexNull>(
-                "2ac6/7657415604b23eb7ab7b32cc86d6c22b8b319ce813b53f75ad6ad3d6385b.pl",
+                "fe89/b2406e97285d2964831bc4914375778a9051cb3320bab7f5fc92444ce1ed.pl",
             ))
         });
 
@@ -38,12 +36,7 @@ impl TestScene {
 }
 
 /// Add required resource for the test scene
-pub async fn add_test_scene(
-    _config: &Config,
-    resources: &mut Resources,
-    _world: &mut World,
-    _runtime: &mut Runtime,
-) -> Result<(), GameError> {
+pub async fn add_test_scene(resources: &mut Resources) -> Result<(), GameError> {
     log::info!("adding test scene to the world");
 
     resources.insert(TestScene::new());

@@ -21,12 +21,13 @@ async fn run() {
         builder.build(&event_loop).unwrap()
     };
 
-    let surface = wgpu::Surface::create(&window);
+    let wgpu_instance = wgpu::Instance::new();
+    let surface = unsafe { wgpu_instance.create_surface(&window) };
     let mut size: (u32, u32) = window.inner_size().into();
 
     let surface = Surface::new(surface, size);
     let config = Config::new().unwrap();
-    let mut game_view = GameRender::new(config, surface).await.unwrap();
+    let mut game_view = GameRender::new(config, wgpu_instance, surface).await.unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;

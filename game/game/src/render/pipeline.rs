@@ -1,7 +1,8 @@
 use crate::utils::url::Url;
 use crate::{
     render::{
-        Context, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType, Vertex, VertexTypeId,
+        Context, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType, Vertex,
+        VertexBufferLayout, VertexTypeId,
     },
     utils, wgpu, GameError,
 };
@@ -80,7 +81,7 @@ impl Dependecy {
             (ShaderDependency::Pending(_, _), _) => Pipeline::WaitingDependency(self, listeners),
             (_, ShaderDependency::Pending(_, _)) => Pipeline::WaitingDependency(self, listeners),
             (ShaderDependency::Completed(vs), ShaderDependency::Completed(fs)) => {
-                log::debug!("Pipeline compilation completed [{}]", load_context);
+                log::debug!("Pipeline compilation completed [{:?}]", load_context);
                 listeners.notify_all();
                 let vs = shaders.at(&vs).shadere_module().unwrap();
                 let fs = shaders.at(&fs).shadere_module().unwrap();
@@ -126,10 +127,10 @@ impl Pipeline {
         context: &Context,
         shaders: &mut ShaderStoreRead<'_>,
         load_response: PipelineLoadResponse,
-    ) -> Option<String> {
+    ) -> Option<PipelineKey> {
         *self = match (std::mem::replace(self, Pipeline::None), load_response) {
             (Pipeline::Pending(listeners), PipelineLoadResponse::Error(err)) => {
-                log::debug!("Pipeline compilation failed [{}]: {}", load_context, err);
+                log::debug!("Pipeline compilation failed [{:?}]: {}", load_context, err);
                 listeners.notify_all();
                 Pipeline::Error(err)
             }
@@ -158,7 +159,7 @@ impl Pipeline {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct PipelineKey {
     pub name: String,
     pub vertex_type: VertexTypeId,
@@ -173,9 +174,9 @@ impl PipelineKey {
     }
 }
 
-impl fmt::Display for PipelineKey {
+impl fmt::Debug for PipelineKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({},{:?})", self.name, self.vertex_type)
+        f.debug_tuple("").field(&self.name).field(&self.vertex_type).finish()
     }
 }
 
@@ -186,12 +187,12 @@ impl Data for Pipeline {
 }
 
 impl FromKey for Pipeline {
-    fn from_key(key: &PipelineKey) -> (Self, Option<String>) {
-        (Pipeline::Pending(LoadListeners::new()), Some(key.name.to_owned()))
+    fn from_key(key: &PipelineKey) -> (Self, Option<PipelineKey>) {
+        (Pipeline::Pending(LoadListeners::new()), Some(key.to_owned()))
     }
 }
 
-pub type PipelineLoadRequest = String;
+pub type PipelineLoadRequest = PipelineKey;
 
 pub enum PipelineLoadResponse {
     Error(String),
@@ -214,11 +215,15 @@ impl PipelineLoader {
     async fn load_from_url(
         &mut self,
         cancellation_token: CancellationToken<Pipeline>,
-        source_id: String,
+        pipeline_key: PipelineKey,
     ) -> Option<PipelineLoadResponse> {
         if cancellation_token.is_canceled() {
             return None;
         }
+
+        let source_id = &pipeline_key.name;
+        let vertex_attributes = VertexBufferLayout::from_id(&pipeline_key.vertex_type);
+        log::trace!("Vertex attributes: {:#?}", vertex_attributes);
 
         let url = match self.base_url.join(&source_id) {
             Err(err) => {
@@ -239,7 +244,7 @@ impl PipelineLoader {
         };
         log::trace!("pipeline [{}]: {}", source_id, data);
 
-        let descriptor = match serde_json::from_str(&data) {
+        let descriptor: PipelineDescriptor = match serde_json::from_str(&data) {
             Err(err) => {
                 let err = format!("Failed to parse pipeline({}): {:?}", source_id, err);
                 log::warn!("{}", err);
@@ -248,6 +253,15 @@ impl PipelineLoader {
             Ok(descriptor) => descriptor,
         };
 
+        if let Err(err) = descriptor.vertex_stage.check_vertex_layout(&vertex_attributes) {
+            let err = format!(
+                "Pipeline and vertex layouts are not matching [{}]: {:?}",
+                source_id, err
+            );
+            log::warn!("{}", err);
+            return Some(PipelineLoadResponse::Error(err));
+        }
+
         Some(PipelineLoadResponse::Descriptor(descriptor))
     }
 }
@@ -255,10 +269,10 @@ impl PipelineLoader {
 impl DataLoader<Pipeline> for PipelineLoader {
     fn load<'a>(
         &'a mut self,
-        pipeline_name: String,
+        pipeline_key: PipelineKey,
         cancellation_token: CancellationToken<Pipeline>,
     ) -> Pin<Box<dyn std::future::Future<Output = Option<PipelineLoadResponse>> + Send + 'a>> {
-        self.load_from_url(cancellation_token, pipeline_name).boxed()
+        self.load_from_url(cancellation_token, pipeline_key).boxed()
     }
 }
 
