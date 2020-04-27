@@ -12,9 +12,11 @@ pub use self::frame::*;
 mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderLoader, ShaderStore, ShaderStoreRead, ShaderType};
 mod pipeline;
-pub use self::pipeline::{Pipeline, PipelineIndex, PipelineLoader, PipelineStore, PipelineStoreRead};
+pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineLoader, PipelineStore, PipelineStoreRead};
 pub mod pipeline_descriptor;
 pub use self::pipeline_descriptor::*;
+mod vertex_buffer;
+pub use self::vertex_buffer::*;
 
 pub mod test_tech;
 

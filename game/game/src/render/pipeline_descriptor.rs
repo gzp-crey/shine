@@ -35,11 +35,11 @@ pub enum ValueType {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum Attribute {
-    Pos2,
-    Pos3,
-    Norm3,
-    Custom(String, ValueType),
+pub enum PipelineAttribute {
+    Position(ValueType),
+    Color(ValueType),
+    Normal(ValueType),
+    Named(String, ValueType),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -51,7 +51,7 @@ pub enum Uniform {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct VertexStage {
     pub shader: String,
-    pub attributes: HashMap<u8, Attribute>,
+    pub attributes: HashMap<u8, PipelineAttribute>,
     pub global_uniforms: HashMap<u8, Uniform>,
     pub local_uniforms: HashMap<u8, Uniform>,
 }
@@ -131,7 +131,7 @@ impl PipelineDescriptor {
 }
 
 pub fn foo() {
-    use Attribute::*;
+    use PipelineAttribute::*;
     use Uniform::*;
 
     let p = PipelineDescriptor {
@@ -139,9 +139,9 @@ pub fn foo() {
         vertex_stage: VertexStage {
             shader: "pipeline/hello.vs".to_owned(),
             attributes: [
-                (0, Pos3),
-                (1, Norm3),
-                (2, Attribute::Custom("c1".to_owned(), ValueType::Float3a(16))),
+                (0, Position(ValueType::Float3)),
+                (1, Normal(ValueType::Float3)),
+                (2, PipelineAttribute::Named("c1".to_owned(), ValueType::Float3)),
             ]
             .iter()
             .cloned()

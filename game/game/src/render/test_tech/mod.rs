@@ -1,4 +1,4 @@
-use crate::render::{Context, Frame, PipelineIndex, PipelineStore, PipelineStoreRead};
+use crate::render::{Context, Frame, PipelineIndex, PipelineStore, PipelineStoreRead, PipelineKey, VertexNull};
 use crate::utils::runtime::Runtime;
 use crate::{Config, GameError};
 use shine_ecs::legion::{
@@ -24,8 +24,9 @@ impl TestScene {
         pipelines: &mut PipelineStoreRead<'_>,
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
-            pipelines
-                .get_or_add_blocking(&"2ac6/7657415604b23eb7ab7b32cc86d6c22b8b319ce813b53f75ad6ad3d6385b.pl".to_owned())
+            pipelines.get_or_add_blocking(&PipelineKey::new::<VertexNull>(
+                "2ac6/7657415604b23eb7ab7b32cc86d6c22b8b319ce813b53f75ad6ad3d6385b.pl",
+            ))
         });
 
         let pipeline = pipelines.at(pipeline);

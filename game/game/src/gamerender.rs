@@ -1,5 +1,7 @@
 use crate::input::{self, add_input_system};
-use crate::render::{self, add_render_system, test_tech, Context, Frame, PipelineStore, Surface};
+use crate::render::{
+    self, add_render_system, test_tech, Context, Frame, PipelineKey, PipelineStore, Surface, VertexNull,
+};
 use crate::utils::runtime::Runtime;
 use crate::{Config, GameError};
 use shine_ecs::legion::{
@@ -119,7 +121,9 @@ impl GameRender {
         self.resources.get_mut::<PipelineStore>().map(|mut store| {
             log::info!("test");
             let mut store = store.write();
-            store.get_or_add(&"a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl".to_owned());
+            store.get_or_add(&PipelineKey::new::<VertexNull>(
+                "a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl",
+            ));
         });
     }
 }

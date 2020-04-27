@@ -1,12 +1,15 @@
 use crate::utils::url::Url;
 use crate::{
-    render::{Context, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType},
+    render::{
+        Context, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType, Vertex, VertexTypeId,
+    },
     utils, wgpu, GameError,
 };
 use futures::future::FutureExt;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
+use std::fmt;
 use std::ops::Range;
 use std::pin::Pin;
 
@@ -155,15 +158,36 @@ impl Pipeline {
     }
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct PipelineKey {
+    pub name: String,
+    pub vertex_type: VertexTypeId,
+}
+
+impl PipelineKey {
+    pub fn new<V: Vertex>(name: &str) -> PipelineKey {
+        PipelineKey {
+            name: name.to_owned(),
+            vertex_type: <V as Vertex>::id(),
+        }
+    }
+}
+
+impl fmt::Display for PipelineKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({},{:?})", self.name, self.vertex_type)
+    }
+}
+
 impl Data for Pipeline {
-    type Key = String;
+    type Key = PipelineKey;
     type LoadRequest = PipelineLoadRequest;
     type LoadResponse = PipelineLoadResponse;
 }
 
 impl FromKey for Pipeline {
-    fn from_key(key: &String) -> (Self, Option<String>) {
-        (Pipeline::Pending(LoadListeners::new()), Some(key.to_owned()))
+    fn from_key(key: &PipelineKey) -> (Self, Option<String>) {
+        (Pipeline::Pending(LoadListeners::new()), Some(key.name.to_owned()))
     }
 }
 
@@ -231,10 +255,10 @@ impl PipelineLoader {
 impl DataLoader<Pipeline> for PipelineLoader {
     fn load<'a>(
         &'a mut self,
-        pipeline_id: String,
+        pipeline_name: String,
         cancellation_token: CancellationToken<Pipeline>,
     ) -> Pin<Box<dyn std::future::Future<Output = Option<PipelineLoadResponse>> + Send + 'a>> {
-        self.load_from_url(cancellation_token, pipeline_id).boxed()
+        self.load_from_url(cancellation_token, pipeline_name).boxed()
     }
 }
 
