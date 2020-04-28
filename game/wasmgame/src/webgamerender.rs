@@ -1,7 +1,7 @@
 use crate::inputmapper::{WebInputEvent, WebInputMapper};
 use crate::webwindow::WebWindow;
 use js_sys;
-use shine_game::{wgpu, GameRender};
+use shine_game::{render::Surface, wgpu, Config, GameRender};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -20,12 +20,15 @@ pub struct WebGameRender {
 }
 
 impl WebGameRender {
-    pub async fn new(element: &str, id: u32) -> Result<WebGameRender, JsValue> {
+    pub async fn new(element: &str, id: u32, cfg: &str) -> Result<WebGameRender, JsValue> {
+        let config = Config::from_str(cfg).map_err(|err| js_sys::Error::new(&format!("{:?}", err)))?;
         let window = WebWindow::from_element_by_id(element, id)?;
         //window.attach_mouse_down_handler()?;
 
-        let surface = wgpu::Surface::create(&window);
-        let render = GameRender::new(surface)
+        let wgpu_instance = wgpu::Instance::new();
+        let surface = unsafe { wgpu_instance.create_surface(&window) };
+        let size: (u32, u32) = window.inner_size().into();
+        let render = GameRender::new(config, wgpu_instance, Surface::new(surface, size))
             .await
             .map_err(|err| js_sys::Error::new(&format!("{:?}", err)))?;
 

@@ -5,31 +5,56 @@ authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
 [features]
-wasm = ["wasm-bindgen", "wasm-bindgen-futures", "shine-ecs/wasm"]
-native = ["tokio", "shine-ecs/native"]
+wasm = [ 
+    "web-sys", 
+    "js-sys",
+    "wasm-bindgen",
+    "wasm-bindgen-futures",
+    "wasm-bindgen-macro" ]
 
+native = [ 
+    "tokio", 
+    "shine-ecs/parallel" ]
 
 [dependencies]
 log = "0.4"
-serde = {version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 bincode = "1.2"
-config ="0.10"
-
+config = "0.10"
 futures = "0.3"
 url = "2.1"
-tokio = {version = "0.2", features = ["rt-core", "fs"], optional = true}
 
-wgpu-types = {git = "https://github.com/gfx-rs/wgpu", rev = "5c172dd4756aa152b4f3350e624d7b1b5d24ddda", features = ["serde"]}
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master"}
-#wgpu = {git = "https://github.com/gzp-crey/wgpu-rs.git", features = ["serde"], branch = "gzp"}
+# render
+wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "5c172dd4756aa152b4f3350e624d7b1b5d24ddda", features = [ "serde" ] }
+wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
 
-wasm-bindgen = {version = "0.2", optional = true}
-wasm-bindgen-futures = {version = "0.4", optional = true}
+# native
+tokio = { version = "0.2", features = ["rt-core", "fs"], optional = true }
 
-shine-input = {path = "../input", version = "0.1.0"}
-shine-ecs = {path = "../ecs", version = "0.1.0"}
+# wasm support
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+wasm-bindgen-macro = { version = "0.2", optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "Document",
+    "Element",
+    "EventTarget",
+    "HtmlCanvasElement",
+    "MouseEvent",
+    "WebGlBuffer",
+    "WebGlProgram",
+    "WebGlRenderingContext",
+    "WebGlShader",
+    "WebGlUniformLocation",
+    "Window",
+] }
+js-sys = { version = "0.3", optional = true }
+
+shine-input = { path = "../input", version = "0.1.0" }
+shine-ecs = { path = "../ecs", version = "0.1.0" }
 
 [dev-dependencies]
 rand = "0.7"
 permutohedron = "0.2"
+

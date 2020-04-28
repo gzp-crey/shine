@@ -53,31 +53,33 @@ fn render_test() -> Box<dyn Schedulable> {
         .build(move |_, _, (context, frame, pipelines, scene), _| {
             let mut pipelines = pipelines.read();
 
-            let mut encoder = context
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            for _ in 0..10 {
+                let mut encoder = context
+                    .device()
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-            {
-                let pass_descriptor = wgpu::RenderPassDescriptor {
-                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: frame.texture_view(),
-                        resolve_target: None,
-                        load_op: wgpu::LoadOp::Clear,
-                        store_op: wgpu::StoreOp::Store,
-                        clear_color: wgpu::Color {
-                            r: 0.0,
-                            g: 0.8,
-                            b: 0.0,
-                            a: 1.0,
-                        },
-                    }],
-                    depth_stencil_attachment: None,
-                };
+                {
+                    let pass_descriptor = wgpu::RenderPassDescriptor {
+                        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                            attachment: frame.texture_view(),
+                            resolve_target: None,
+                            load_op: wgpu::LoadOp::Clear,
+                            store_op: wgpu::StoreOp::Store,
+                            clear_color: wgpu::Color {
+                                r: 0.0,
+                                g: 0.8,
+                                b: 0.0,
+                                a: 1.0,
+                            },
+                        }],
+                        depth_stencil_attachment: None,
+                    };
 
-                scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
+                    scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
+                }
+
+                frame.add_command(encoder.finish());
             }
-
-            frame.add_command(encoder.finish());
         })
 }
 

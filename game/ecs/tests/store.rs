@@ -247,6 +247,18 @@ fn check_lock() {
     {
         let store = Store::<TestData>::new(2);
         assert!(panic::catch_unwind(|| {
+            let w = store.try_read().unwrap();
+            let r = store.try_read().unwrap();
+            drop(r);
+            drop(w);
+        })
+        .is_ok());
+        mem::forget(store);
+    }
+
+    {
+        let store = Store::<TestData>::new(2);
+        assert!(panic::catch_unwind(|| {
             let w = store.try_write().unwrap();
             let r = store.try_read().unwrap();
             drop(r);

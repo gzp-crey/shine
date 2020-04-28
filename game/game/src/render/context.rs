@@ -11,6 +11,13 @@ pub struct Context {
     swap_chain: Option<(wgpu::SwapChain, wgpu::SwapChainDescriptor)>,
 }
 
+//https://github.com/gfx-rs/wgpu-rs/issues/287
+#[cfg(feature = "wasm")]
+mod wasm_hack {
+    unsafe impl Send for super::Context {}
+    unsafe impl Sync for super::Context {}
+}
+
 impl Context {
     pub async fn new(instance: wgpu::Instance) -> Result<Context, GameError> {
         let adapter = instance

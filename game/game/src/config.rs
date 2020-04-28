@@ -30,4 +30,19 @@ impl Config {
         log::info!("configuration: {:#?}", cfg);
         Ok(cfg)
     }
+
+    pub fn from_str(cfg: &str) -> Result<Self, GameError> {
+        use config::{File, FileFormat};
+        let mut s = config::Config::new();
+
+        s.merge(File::from_str(cfg, FileFormat::Json))
+            .map_err(|err| GameError::Config(format!("configuration error in input: {:?}", err)))?;
+
+        let cfg = s
+            .try_into()
+            .map_err(|err| GameError::Config(format!("configuration error: {:?}", err)))?;
+
+        log::info!("configuration: {:#?}", cfg);
+        Ok(cfg)
+    }
 }

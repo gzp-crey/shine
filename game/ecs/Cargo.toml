@@ -6,8 +6,7 @@ edition = "2018"
 
 [features]
 default= []
-wasm = []
-native = ["legion/par-iter", "legion/par-schedule", "legion/ffi"]
+parallel = ["legion/par-iter", "legion/par-schedule", "legion/ffi"]
 
 [dependencies]
 log = "0.4"

@@ -28,10 +28,10 @@ impl WebGame {
         WebGame { canvas_id: 0 }
     }
 
-    pub fn create_render(&mut self, element: String) -> Promise {
+    pub fn create_render(&mut self, element: String, config: String) -> Promise {
         self.canvas_id += 1;
         let id = self.canvas_id;
         log::info!("creating render: {}:{}", element, id);
-        future_to_promise(async move { WebGameRender::new(&element, id).await.map(JsValue::from) })
+        future_to_promise(async move { WebGameRender::new(&element, id, &config).await.map(JsValue::from) })
     }
 }

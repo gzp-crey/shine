@@ -7,3 +7,11 @@ members = [
     "nativegame",
     "cooker"
 ]
+
+
+[patch.crates-io]
+wasm-bindgen = { git = "https://github.com/rustwasm/wasm-bindgen" }
+wasm-bindgen-futures = { git = "https://github.com/rustwasm/wasm-bindgen" }
+wasm-bindgen-macro = { git = "https://github.com/rustwasm/wasm-bindgen" }
+web-sys = { git = "https://github.com/rustwasm/wasm-bindgen" }
+js-sys = { git = "https://github.com/rustwasm/wasm-bindgen" }

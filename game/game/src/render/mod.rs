@@ -15,8 +15,8 @@ mod pipeline;
 pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineLoader, PipelineStore, PipelineStoreRead};
 pub mod pipeline_descriptor;
 pub use self::pipeline_descriptor::*;
-mod vertex_buffer;
-pub use self::vertex_buffer::*;
+mod vertex_layout;
+pub use self::vertex_layout::*;
 
 pub mod test_tech;
 

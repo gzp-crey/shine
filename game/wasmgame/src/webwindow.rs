@@ -1,6 +1,7 @@
+use js_sys;
 use raw_window_handle::{web::WebHandle, HasRawWindowHandle, RawWindowHandle};
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::HtmlCanvasElement;
+use web_sys::{self, HtmlCanvasElement};
 
 pub struct WebWindow {
     canvas: HtmlCanvasElement,
@@ -23,6 +24,10 @@ impl WebWindow {
             .ok_or_else(|| js_sys::Error::new(&format!("html element [{}] not found", element)))?
             .dyn_into::<HtmlCanvasElement>()?;
         WebWindow::new(canvas, id)
+    }
+
+    pub fn inner_size(&self) -> (u32, u32) {
+        (self.canvas.width(), self.canvas.height())
     }
 
     fn raw_window_handle(&self) -> RawWindowHandle {
