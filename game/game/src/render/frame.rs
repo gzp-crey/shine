@@ -34,7 +34,6 @@ impl Frame {
     pub fn end(&mut self, queue: &wgpu::Queue) {
         {
             let mut buffers = self.buffers.lock().unwrap();
-            log::info!("render submit");
             queue.submit(buffers.drain(..));
         }
         self.frame = None;

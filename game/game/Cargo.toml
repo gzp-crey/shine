@@ -15,6 +15,7 @@ wasm = [
 
 native = [ 
     "tokio", 
+    "reqwest",
     "shine-ecs/parallel",
     "shine-input/native" ]
 
@@ -33,6 +34,7 @@ wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
 
 # native
 tokio = { version = "0.2", features = ["rt-core", "fs"], optional = true }
+reqwest = { version = "0.10", optional = true }
 
 # wasm support
 wasm-bindgen = { version = "0.2", optional = true }

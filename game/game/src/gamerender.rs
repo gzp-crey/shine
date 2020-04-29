@@ -90,22 +90,18 @@ impl GameRender {
     }
 
     fn start_frame(&mut self, size: (u32, u32)) -> Result<(), String> {
-        log::info!("start frame");
         let surface = &mut self.surface;
         surface.set_size(size);
         let mut context = self.resources.get_mut::<Context>().unwrap();
         let mut frame = self.resources.get_mut::<Frame>().unwrap();
         frame.start(context.create_frame(surface)?);
-        log::info!("start frame ok");
         Ok(())
     }
 
     fn end_frame(&mut self) -> Result<(), String> {
-        log::info!("end frame");
         let context = self.resources.get_mut::<Context>().unwrap();
         let mut frame = self.resources.get_mut::<Frame>().unwrap();
         frame.end(context.queue());
-        log::info!("end frame ok");
         Ok(())
     }
 

@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub enum AssetError {
-    AssetNotFound,
+    AssetProvider(String),
     UnsupportedScheme(String),
     ContentLoad(String),
     ContentSave(String),

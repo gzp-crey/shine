@@ -162,12 +162,8 @@
             "type": "shell",
             "command": "python",
             "args": [
-                "-m",
-                "http.server"
+                "assets/server/server.py",
             ],
-            "options": {
-                "cwd": "cooked_assets"
-            },
             "presentation": {
                 "echo": true, 
                 "reveal": "always",
