@@ -74,7 +74,9 @@ impl WebGameRender {
 #[wasm_bindgen]
 impl WebGameRender {
     pub fn render(&self) {
-        //log::info!("render game");
+        let inner = &mut *self.inner.borrow_mut();
+        let size = inner.window.inner_size();
+        inner.render.render(size);
     }
 
     pub fn update(&self) {

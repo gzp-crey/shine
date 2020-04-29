@@ -1,6 +1,10 @@
 use crate::{Guesture, InputState};
 use std::mem;
+
+#[cfg(feature = "native")]
 use std::time::SystemTime;
+#[cfg(feature = "wasm")]
+use wasm_timer::SystemTime;
 
 pub struct InputManager {
     time: u128,
@@ -10,11 +14,6 @@ pub struct InputManager {
 
 impl InputManager {
     fn now() -> u128 {
-        // std::time::System::now is not implemented for wasm,
-        // use a compatible layer
-        #[cfg(feature = "wasm")]
-        use wasm_timer::SystemTime;
-
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()

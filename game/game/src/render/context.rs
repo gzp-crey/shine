@@ -1,6 +1,6 @@
 use crate::render::{FrameOutput, Surface};
 use crate::wgpu;
-use crate::GameError;
+use crate::{Config, GameError};
 
 /// Thread safe rendering context.
 pub struct Context {
@@ -19,7 +19,7 @@ mod wasm_hack {
 }
 
 impl Context {
-    pub async fn new(instance: wgpu::Instance) -> Result<Context, GameError> {
+    pub async fn new(instance: wgpu::Instance, config: &Config) -> Result<Context, GameError> {
         let adapter = instance
             .request_adapter(
                 &wgpu::RequestAdapterOptions {
@@ -47,7 +47,7 @@ impl Context {
             //instance,
             device,
             queue,
-            swap_chain_format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            swap_chain_format: config.swap_chain_format,
             swap_chain: None,
         })
     }

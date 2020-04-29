@@ -91,6 +91,26 @@
             "group": "build"
         },
         {
+            "label": "start wasm server",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "dev"
+            ],
+            "options": {
+                "cwd": "wasmgame"
+            },
+            "presentation": {
+                "echo": true, 
+                "reveal": "always",
+                "focus": false,
+                "clear": true,
+            },
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
             "label": "build cooker",
             "type": "shell",
             "command": "cargo",
@@ -135,6 +155,26 @@
             "problemMatcher": [
                 "$rustc"
             ],
+            "group": "build"
+        },
+        {
+            "label": "start asset server",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "-m",
+                "http.server"
+            ],
+            "options": {
+                "cwd": "cooked_assets"
+            },
+            "presentation": {
+                "echo": true, 
+                "reveal": "always",
+                "focus": false,
+                "clear": true,
+            },
+            "problemMatcher": [],
             "group": "build"
         },
         {

@@ -47,7 +47,7 @@ pub async fn add_render_system(
 ) -> Result<(), GameError> {
     log::info!("adding render system to the world");
 
-    resources.insert(Context::new(wgpu_instance).await?);
+    resources.insert(Context::new(wgpu_instance, config).await?);
     resources.insert(Frame::new());
 
     register_store(ShaderLoader::new(&config.asset_base)?, 16, resources, runtime);

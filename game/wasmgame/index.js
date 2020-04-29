@@ -1,5 +1,9 @@
 const canvas = document.getElementById('gameCanvas');
 const webgpu = canvas.getContext("gpupresent");
+const config = {
+    "asset_base" : "file://./cooked_assets/",
+    "swap_chain_format" : "Bgra8Unorm",
+};
 
 if (!webgpu) {
     alert('Failed to initialize WebGPU');
@@ -12,7 +16,7 @@ else {
             async m => {
                 game = new m.WebGame;
                 console.log(game);
-                gameView = await game.create_render('gameCanvas');
+                gameView = await game.create_render('gameCanvas', JSON.stringify(config));
                 console.log(gameView);
             })
         .catch(

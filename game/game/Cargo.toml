@@ -10,11 +10,13 @@ wasm = [
     "js-sys",
     "wasm-bindgen",
     "wasm-bindgen-futures",
-    "wasm-bindgen-macro" ]
+    "wasm-bindgen-macro",
+    "shine-input/wasm" ]
 
 native = [ 
     "tokio", 
-    "shine-ecs/parallel" ]
+    "shine-ecs/parallel",
+    "shine-input/native" ]
 
 [dependencies]
 log = "0.4"
@@ -26,7 +28,7 @@ futures = "0.3"
 url = "2.1"
 
 # render
-wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "5c172dd4756aa152b4f3350e624d7b1b5d24ddda", features = [ "serde" ] }
+wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "5c172dd4756aa152b4f3350e624d7b1b5d24ddda", features = ["serde"] }
 wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
 
 # native
