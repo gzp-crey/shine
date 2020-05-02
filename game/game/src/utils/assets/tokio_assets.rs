@@ -10,7 +10,7 @@ pub async fn get_response(url: &Url) -> Result<Response, AssetError> {
         .map_err(|err| AssetError::AssetProvider(format!("Failed to download {}: {}", url.as_str(), err)))?;
 
     let status = response.status();
-    if status != StatusCode::OK {
+    if status.is_success() {
         let err = response.text().await.unwrap_or("".to_owned());
         Err(AssetError::AssetProvider(format!(
             "Unexpected status code ({}) for {}: {}",

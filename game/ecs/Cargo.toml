@@ -6,7 +6,8 @@ edition = "2018"
 
 [features]
 default= []
-parallel = ["legion/par-iter", "legion/par-schedule", "legion/ffi"]
+native = ["legion/par-iter", "legion/par-schedule", "legion/ffi", "tokio"]
+wasm = ["wasm-bindgen-futures"]
 
 [dependencies]
 log = "0.4"
@@ -15,6 +16,13 @@ futures = "0.3"
 downcast-rs = "1.1"
 legion = {git = "https://github.com/TomGillen/legion.git", default-features = false}
 fxhash = "0.2"
+
+# native
+tokio = { version = "0.2", features = ["rt-core"], optional = true }
+
+# wasm support
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
 
 [dev-dependencies]
 env_logger = "0.7"

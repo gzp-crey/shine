@@ -271,8 +271,8 @@ impl DataLoader<Pipeline> for PipelineLoader {
         &'a mut self,
         pipeline_key: PipelineKey,
         cancellation_token: CancellationToken<Pipeline>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Option<PipelineLoadResponse>> + Send + 'a>> {
-        self.load_from_url(cancellation_token, pipeline_key).boxed()
+    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<PipelineLoadResponse>>>> {
+        Box::pin(self.load_from_url(cancellation_token, pipeline_key))
     }
 }
 

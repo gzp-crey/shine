@@ -11,6 +11,11 @@ module.exports = (env, args) => {
             path: path.resolve(__dirname, 'dist'),
             filename: isProductionMode ? '[name].[contenthash].js' : '[name].[hash].js',
         },
+        devServer: {
+            host: "game.shine.com",
+            port: 9000,
+            https: false
+        },
         plugins: [
             new HtmlWebpackPlugin({
                 template: 'index.html'

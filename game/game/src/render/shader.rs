@@ -203,8 +203,8 @@ impl DataLoader<Shader> for ShaderLoader {
         &'a mut self,
         source_id: String,
         cancellation_token: CancellationToken<Shader>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Option<ShaderLoadResponse>> + Send + 'a>> {
-        self.load_from_url(cancellation_token, source_id).boxed()
+    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<ShaderLoadResponse>>>> {
+        Box::pin(self.load_from_url(cancellation_token, source_id))
     }
 }
 

@@ -1,7 +1,7 @@
 const canvas = document.getElementById('gameCanvas');
 const webgpu = canvas.getContext("gpupresent");
 const config = {
-    "asset_base" : "file://./cooked_assets/",
+    "asset_base" : "http://assets.shine.com:9100/assets/",
     "swap_chain_format" : "Bgra8Unorm",
 };
 

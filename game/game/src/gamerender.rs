@@ -2,7 +2,6 @@ use crate::input::{self, add_input_system};
 use crate::render::{
     self, add_render_system, test_tech, Context, Frame, PipelineKey, PipelineStore, Surface, VertexNull,
 };
-use crate::utils::runtime::Runtime;
 use crate::{Config, GameError};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
@@ -53,7 +52,6 @@ pub struct GameRender {
     pub surface: Surface,
     pub resources: Resources,
     pub world: World,
-    pub runtime: Runtime,
     schedules: ScheduleSet,
 }
 
@@ -61,10 +59,9 @@ impl GameRender {
     pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameRender, GameError> {
         let mut resources = Resources::default();
         let world = World::new();
-        let mut runtime = Runtime::new();
 
         add_input_system(&mut resources).await?;
-        add_render_system(&config, wgpu_instance, &mut resources, &mut runtime).await?;
+        add_render_system(&config, wgpu_instance, &mut resources).await?;
 
         test_tech::add_test_scene(&mut resources).await?;
 
@@ -72,7 +69,6 @@ impl GameRender {
             surface,
             resources,
             world,
-            runtime,
             schedules: ScheduleSet::new(),
         })
     }

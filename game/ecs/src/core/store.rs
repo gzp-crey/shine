@@ -259,7 +259,7 @@ pub trait DataLoader<D: Data>: 'static + Send + Sync {
         &'a mut self,
         request: D::LoadRequest,
         cancellation_token: CancellationToken<D>,
-    ) -> Pin<Box<dyn 'a + Send + std::future::Future<Output = Option<D::LoadResponse>>>>;
+    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>>;
 }
 
 struct NoDataLoader;
@@ -269,7 +269,7 @@ impl<D: Data> DataLoader<D> for NoDataLoader {
         &'a mut self,
         _request: D::LoadRequest,
         _cancellation_token: CancellationToken<D>,
-    ) -> Pin<Box<dyn 'a + Send + std::future::Future<Output = Option<D::LoadResponse>>>> {
+    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>> {
         Box::pin(futures::future::ready(None))
     }
 }
@@ -312,8 +312,16 @@ impl<D: Data> StoreLoader<D> {
         }
     }
 
-    pub async fn run(mut self) {
-        while self.handle_one().await {}
+    #[cfg(feature = "native")]
+    pub fn start(mut self) {
+        use tokio::spawn;
+        spawn(async move { while self.handle_one().await {} });
+    }
+
+    #[cfg(feature = "wasm")]
+    pub fn start(mut self) {
+        use wasm_bindgen_futures::spawn_local;
+        spawn_local(async move { while self.handle_one().await {} });
     }
 }
 

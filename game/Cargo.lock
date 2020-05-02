@@ -1916,6 +1916,9 @@ dependencies = [
  "log",
  "permutohedron",
  "rand",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
