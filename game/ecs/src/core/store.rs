@@ -305,7 +305,7 @@ impl<D: Data> StoreLoader<D> {
 
         match self.load_response_sender.send((output, cancellation_token)).await {
             Ok(_) => true,
-            Err(err) => {
+            Err(err) => { 
                 log::info!("Loader response failed {:?}: {:?}", TypeId::of::<D>(), err);
                 false
             }
@@ -314,8 +314,18 @@ impl<D: Data> StoreLoader<D> {
 
     #[cfg(feature = "native")]
     pub fn start(mut self) {
-        use tokio::spawn;
-        spawn(async move { while self.handle_one().await {} });
+        use tokio::{runtime::Handle, task};
+        task::spawn_blocking(move || {
+            Handle::current().block_on(
+                task::LocalSet::new()
+                    .run_until(async move {
+                        task::spawn_local(async move { while self.handle_one().await {} })
+                            .await
+                            .unwrap()
+                    })
+                    
+            )
+        });
     }
 
     #[cfg(feature = "wasm")]

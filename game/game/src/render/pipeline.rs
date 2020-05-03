@@ -6,7 +6,6 @@ use crate::{
     },
     utils, wgpu, GameError,
 };
-use futures::future::FutureExt;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
