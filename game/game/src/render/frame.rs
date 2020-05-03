@@ -1,5 +1,4 @@
 use std::sync::Mutex;
-use wgpu;
 
 pub struct FrameOutput {
     pub frame: wgpu::SwapChainOutput,
@@ -54,5 +53,11 @@ impl Frame {
     pub fn add_command(&self, commands: wgpu::CommandBuffer) {
         let mut buffers = self.buffers.lock().unwrap();
         buffers.push(commands);
+    }
+}
+
+impl Default for Frame {
+    fn default() -> Frame {
+        Frame::new()
     }
 }

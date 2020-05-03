@@ -25,7 +25,7 @@ pub enum VertexAttribute {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VertexBufferLayout {
     pub stride: wgpu::BufferAddress,
-    pub attributes: Vec<VertexAttribute>,
+    pub attributes: Vec<Vec<VertexAttribute>>,
 }
 
 impl VertexBufferLayout {
@@ -33,7 +33,7 @@ impl VertexBufferLayout {
         bincode::deserialize(&id.0).unwrap()
     }
 
-    pub fn into_id(&self) -> VertexTypeId {
+    pub fn to_id(&self) -> VertexTypeId {
         VertexTypeId(bincode::serialize(self).unwrap())
     }
 }
@@ -45,7 +45,7 @@ pub trait Vertex: 'static {
     where
         Self: Sized,
     {
-        Self::buffer_layout().into_id()
+        Self::buffer_layout().to_id()
     }
 }
 
@@ -63,19 +63,24 @@ impl Vertex for VertexNull {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct VertexP2C3 {
     pos: (f32, f32),
     color: (f32, f32, f32),
 }
 
+unsafe impl bytemuck::Pod for VertexP2C3 {}
+unsafe impl bytemuck::Zeroable for VertexP2C3 {}
+
 impl Vertex for VertexP2C3 {
+    #[allow(clippy::fn_to_numeric_cast)]
     fn buffer_layout() -> VertexBufferLayout {
         VertexBufferLayout {
             stride: mem::size_of::<Self> as wgpu::BufferAddress,
-            attributes: vec![
+            attributes: vec![vec![
                 VertexAttribute::Position(0, wgpu::VertexFormat::Float2),
                 VertexAttribute::Color(16, wgpu::VertexFormat::Float3),
-            ],
+            ]],
         }
     }
 }

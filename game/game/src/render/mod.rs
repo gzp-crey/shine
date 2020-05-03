@@ -8,18 +8,27 @@ mod context;
 pub use self::context::*;
 mod frame;
 pub use self::frame::*;
-mod shader;
-pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderLoader, ShaderStore, ShaderStoreRead, ShaderType};
-mod pipeline;
-pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineLoader, PipelineStore, PipelineStoreRead};
+
 pub mod pipeline_descriptor;
 pub use self::pipeline_descriptor::*;
 mod vertex_layout;
 pub use self::vertex_layout::*;
+mod vertex_data;
+pub use self::vertex_data::*;
+mod index_data;
+pub use self::index_data::*;
+mod model_data;
+pub use self::model_data::*;
 
+mod shader;
+pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderLoader, ShaderStore, ShaderStoreRead, ShaderType};
+mod pipeline;
+pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineLoader, PipelineStore, PipelineStoreRead};
+mod model;
+pub use self::model::{Model, ModelIndex, ModelLoader, ModelStore, ModelStoreRead};
+
+pub mod gltf;
 pub mod test_tech;
-
-pub mod systems;
 
 fn register_store<D: Data, L: DataLoader<D>>(loader: L, store_page_size: usize, resources: &mut Resources) {
     let (store, loader) = Store::<D>::new_with_loader(store_page_size, loader);
@@ -45,6 +54,13 @@ pub async fn add_render_system(
 
     register_store(ShaderLoader::new(&config.asset_base)?, 16, resources);
     register_store(PipelineLoader::new(&config.asset_base)?, 16, resources);
+    register_store(ModelLoader::new(&config.asset_base)?, 16, resources);
 
     Ok(())
+}
+
+pub mod systems {
+    pub use super::model::systems::*;
+    pub use super::pipeline::systems::*;
+    pub use super::shader::systems::*;
 }

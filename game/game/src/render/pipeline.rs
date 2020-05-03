@@ -14,7 +14,7 @@ use std::ops::Range;
 use std::pin::Pin;
 
 pub struct Dependecy {
-    descriptor: PipelineDescriptor,
+    descriptor: Box<PipelineDescriptor>,
     vertex_shader: ShaderDependency,
     fragment_shader: ShaderDependency,
 }
@@ -22,7 +22,7 @@ pub struct Dependecy {
 impl Dependecy {
     fn from_descriptor(
         load_context: &LoadContext<'_, Pipeline>,
-        descriptor: PipelineDescriptor,
+        descriptor: Box<PipelineDescriptor>,
         shaders: &mut ShaderStoreRead<'_>,
     ) -> Dependecy {
         let vertex_shader = ShaderDependency::new(
@@ -195,7 +195,7 @@ pub type PipelineLoadRequest = PipelineKey;
 
 pub enum PipelineLoadResponse {
     Error(String),
-    Descriptor(PipelineDescriptor),
+    Descriptor(Box<PipelineDescriptor>),
     ShaderReady(ShaderType),
 }
 
@@ -261,7 +261,7 @@ impl PipelineLoader {
             return Some(PipelineLoadResponse::Error(err));
         }
 
-        Some(PipelineLoadResponse::Descriptor(descriptor))
+        Some(PipelineLoadResponse::Descriptor(Box::new(descriptor)))
     }
 }
 
@@ -311,3 +311,24 @@ impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
 pub type PipelineStore = Store<Pipeline>;
 pub type PipelineStoreRead<'a> = ReadGuard<'a, Pipeline>;
 pub type PipelineIndex = Index<Pipeline>;
+
+pub mod systems {
+    use super::*;
+    use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
+
+    pub fn update_pipeline() -> Box<dyn Schedulable> {
+        SystemBuilder::new("update_pipeline")
+            .read_resource::<Context>()
+            .read_resource::<ShaderStore>()
+            .write_resource::<PipelineStore>()
+            .build(move |_, _, (context, shaders, pipeline), _| {
+                //log::info!("pipeline");
+                let mut pipeline = pipeline.write();
+                let context: &Context = &*context;
+                let shaders: &ShaderStore = &*shaders;
+                //shaders.drain_unused();
+                pipeline.update(&mut (context, shaders));
+                pipeline.finalize_requests();
+            })
+    }
+}

@@ -11,8 +11,8 @@ enum Entry<T> {
 
 impl<T> Entry<T> {
     fn is_vacant(&self) -> bool {
-        match self {
-            &Entry::Vacant(_) => true,
+        match *self {
+            Entry::Vacant(_) => true,
             _ => false,
         }
     }

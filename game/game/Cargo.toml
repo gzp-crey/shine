@@ -30,8 +30,10 @@ futures = "0.3"
 url = "2.1"
 
 # render
-wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "5c172dd4756aa152b4f3350e624d7b1b5d24ddda", features = ["serde"] }
+wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "f64b2dd3bb9e11c1dfc0eb3be44fbaae81b18c7b", features = ["trace", "replay"] }
 wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
+bytemuck = "1.2"
+gltf = "0.15"
 
 # native
 tokio = { version = "0.2", features = ["rt-core", "fs"], optional = true }

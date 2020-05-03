@@ -6,13 +6,16 @@ mod content_hash;
 mod cook_pipeline;
 mod cook_shader;
 
+use cook_pipeline::cook_pipeline;
+
 async fn run() {
     let config = config::Config::new().unwrap();
     let asset_source_base = Url::parse(&config.asset_source_base).unwrap();
     let asset_target_base = Url::parse(&config.asset_target_base).unwrap();
 
-    let pipeline = "pipeline/hello.pl";
-    match cook_pipeline::cook(&asset_source_base, &asset_target_base, pipeline).await {
+    let pipeline = "pipelines/hello/hello.pl";
+    let pipeline_url = asset_source_base.join(pipeline).unwrap();
+    match cook_pipeline(&asset_source_base, &asset_target_base, &pipeline_url).await {
         Ok(t) => log::info!("Cooking pipeline done: [{}] -> [{}]", pipeline, t),
         Err(err) => log::error!("Cooking pipeline {} failed: {}", pipeline, err),
     }

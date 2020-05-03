@@ -1,6 +1,6 @@
 use crate::utils::assets::AssetError;
 use crate::utils::url::Url;
-use reqwest::{self, Response, StatusCode};
+use reqwest::{self, Response};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
 
@@ -11,7 +11,7 @@ pub async fn get_response(url: &Url) -> Result<Response, AssetError> {
 
     let status = response.status();
     if !status.is_success() {
-        let err = response.text().await.unwrap_or("".to_owned());
+        let err = response.text().await.unwrap_or_else(|_| "".to_owned());
         Err(AssetError::AssetProvider(format!(
             "Unexpected status code ({}) for {}: {}",
             status,

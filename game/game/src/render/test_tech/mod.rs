@@ -4,7 +4,6 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::{resource::Resources, SystemBuilder},
 };
-use wgpu;
 
 struct TestScene {
     pipeline: Option<PipelineIndex>,

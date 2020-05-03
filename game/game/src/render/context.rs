@@ -29,17 +29,20 @@ impl Context {
                 wgpu::BackendBit::PRIMARY,
             )
             .await
-            .ok_or(GameError::RenderContext("Adapter not found".to_owned()))?;
+            .ok_or_else(|| GameError::RenderContext("Adapter not found".to_owned()))?;
 
         //log::info!("Graphics adapter: {:?}", adapter.get_info());
 
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                extensions: wgpu::Extensions {
-                    anisotropic_filtering: false,
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    extensions: wgpu::Extensions {
+                        anisotropic_filtering: false,
+                    },
+                    limits: wgpu::Limits::default(),
                 },
-                limits: wgpu::Limits::default(),
-            })
+                None,
+            )
             .await
             .map_err(|err| GameError::RenderContext(format!("Failed to create device: {:?}", err)))?;
 

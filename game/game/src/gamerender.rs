@@ -114,12 +114,12 @@ impl GameRender {
     }
 
     pub fn test(&mut self) {
-        self.resources.get_mut::<PipelineStore>().map(|mut store| {
+        if let Some(mut store) = self.resources.get_mut::<PipelineStore>() {
             log::info!("test");
             let mut store = store.write();
             store.get_or_add(&PipelineKey::new::<VertexNull>(
                 "a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl",
             ));
-        });
+        }
     }
 }

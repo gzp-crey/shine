@@ -102,6 +102,7 @@ impl<D: Data> Index<D> {
         &*self.0
     }
 
+    #[allow(clippy::mut_from_ref)]
     unsafe fn entry_mut(&self) -> &mut Entry<D> {
         &mut *(self.0 as *mut _)
     }
@@ -283,7 +284,7 @@ pub struct StoreLoader<D: Data> {
 unsafe impl<D: Data> Send for StoreLoader<D> {}
 
 impl<D: Data> StoreLoader<D> {
-    pub async fn handle_one(&mut self) -> bool {
+    async fn handle_one(&mut self) -> bool {
         let (data, cancellation_token) = match self.load_request_receiver.next().await {
             Some((data, cancellation_token)) => (data, cancellation_token),
             None => {
@@ -305,33 +306,37 @@ impl<D: Data> StoreLoader<D> {
 
         match self.load_response_sender.send((output, cancellation_token)).await {
             Ok(_) => true,
-            Err(err) => { 
+            Err(err) => {
                 log::info!("Loader response failed {:?}: {:?}", TypeId::of::<D>(), err);
                 false
             }
         }
     }
 
+    async fn run(&mut self) {
+        while self.handle_one().await {}
+    }
+
     #[cfg(feature = "native")]
     pub fn start(mut self) {
         use tokio::{runtime::Handle, task};
         task::spawn_blocking(move || {
-            Handle::current().block_on(
-                task::LocalSet::new()
-                    .run_until(async move {
-                        task::spawn_local(async move { while self.handle_one().await {} })
-                            .await
-                            .unwrap()
-                    })
-                    
-            )
+            Handle::current().block_on(task::LocalSet::new().run_until(async move {
+                task::spawn_local(async move {
+                    self.run().await;
+                })
+                .await
+                .unwrap()
+            }))
         });
     }
 
     #[cfg(feature = "wasm")]
     pub fn start(mut self) {
         use wasm_bindgen_futures::spawn_local;
-        spawn_local(async move { while self.handle_one().await {} });
+        spawn_local(async move {
+            self.run().await;
+        });
     }
 }
 
@@ -368,19 +373,19 @@ impl<D: Data> Store<D> {
                     entries: HashMap::new(),
                     load_request_sender: load_request_sender.clone(),
                     load_response_sender: load_response_sender.clone(),
-                    load_respons_receiver: load_respons_receiver,
+                    load_respons_receiver,
                 }),
                 exclusive: Mutex::new(ExclusiveData {
                     arena: Arena::new(page_size),
                     entries: HashMap::new(),
                     unnamed_id: 0,
-                    load_request_sender: load_request_sender.clone(),
+                    load_request_sender,
                     //load_response_sender: load_response_sender.clone(),
                 }),
             },
             StoreLoader {
-                load_request_receiver: load_request_receiver,
-                load_response_sender: load_response_sender,
+                load_request_receiver,
+                load_response_sender,
                 data_loader: Box::new(data_loader),
             },
         )
@@ -609,12 +614,7 @@ impl<'a, D: Data> WriteGuard<'a, D> {
     }
 
     pub fn update<'u, U: DataUpdater<'u, D>>(&mut self, updater: &mut U) {
-        loop {
-            let (response, cancellation_token) = match self.shared.load_respons_receiver.try_next() {
-                Ok(Some((response, cancellation_token))) => (response, cancellation_token),
-                _ => break,
-            };
-
+        while let Ok(Some((response, cancellation_token))) = self.shared.load_respons_receiver.try_next() {
             if cancellation_token.is_canceled() {
                 continue;
             }
@@ -800,5 +800,11 @@ impl LoadListeners {
                 listener.notify();
             }
         }
+    }
+}
+
+impl Default for LoadListeners {
+    fn default() -> LoadListeners {
+        LoadListeners::new()
     }
 }
