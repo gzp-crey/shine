@@ -98,6 +98,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
 
 [[package]]
+name = "base64"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d5ca2cd0adc3f48f9e9ea5a6bbdf9ccc0bfade884847e484d452414c7ccffb3"
+
+[[package]]
 name = "bincode"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -783,7 +789,7 @@ version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6fb0d1d772daf10ea74528c3aeb12215f6d5b820adf2ecfc93a6578d6779c3c"
 dependencies = [
- "base64",
+ "base64 0.11.0",
  "byteorder",
  "gltf-json",
  "image",
@@ -999,6 +1005,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1061,7 +1076,7 @@ dependencies = [
  "derivative",
  "downcast-rs",
  "fxhash",
- "itertools",
+ "itertools 0.8.2",
  "parking_lot 0.10.2",
  "rayon",
  "smallvec 1.4.0",
@@ -1080,7 +1095,7 @@ dependencies = [
  "derivative",
  "downcast-rs",
  "fxhash",
- "itertools",
+ "itertools 0.8.2",
  "legion-core",
  "paste",
  "rayon",
@@ -1800,7 +1815,7 @@ version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b81e49ddec5109a9dcfc5f2a317ff53377c915e9ae9d4f2fb50914b85614e2"
 dependencies = [
- "base64",
+ "base64 0.11.0",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -2052,6 +2067,8 @@ dependencies = [
  "config",
  "data-encoding",
  "env_logger",
+ "gltf",
+ "gltf-json",
  "log",
  "ring",
  "serde 1.0.106",
@@ -2082,11 +2099,13 @@ dependencies = [
 name = "shine-game"
 version = "0.1.0"
 dependencies = [
+ "base64 0.12.0",
  "bincode",
  "bytemuck",
  "config",
  "futures",
  "gltf",
+ "itertools 0.9.0",
  "js-sys",
  "log",
  "permutohedron",

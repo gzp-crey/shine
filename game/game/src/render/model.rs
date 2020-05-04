@@ -24,7 +24,7 @@ impl Model {
         }
     }
 
-    fn on_load(
+    fn on_update(
         &mut self,
         load_context: LoadContext<'_, Model>,
         context: &Context,
@@ -103,7 +103,7 @@ impl ModelLoader {
 
         log::debug!("Model loading: [{}]", url.as_str());
         match url.extension() {
-            "gltf" => match gltf::load_from_url(&url) {
+            "gltf" | "glb" => match gltf::load_from_url(&url).await {
                 Err(err) => {
                     let err = format!("Failed to load model from ({}): {:?}", source_id, err);
                     log::warn!("{}", err);
@@ -139,7 +139,7 @@ impl<'a> DataUpdater<'a, Model> for ModelUpdater<'a> {
         data: &mut Model,
         load_response: ModelLoadResponse,
     ) -> Option<ModelLoadRequest> {
-        data.on_load(load_context, self.0, &mut self.1.read(), load_response)
+        data.on_update(load_context, self.0, &mut self.1.read(), load_response)
     }
 }
 

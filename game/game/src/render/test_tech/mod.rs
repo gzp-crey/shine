@@ -1,4 +1,7 @@
-use crate::render::{Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead, VertexNull};
+use crate::render::{
+    vertex, Context, Frame, ModelIndex, ModelStore, ModelStoreRead, PipelineIndex, PipelineKey, PipelineStore,
+    PipelineStoreRead,
+};
 use crate::GameError;
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -7,11 +10,15 @@ use shine_ecs::legion::{
 
 struct TestScene {
     pipeline: Option<PipelineIndex>,
+    model: Option<ModelIndex>,
 }
 
 impl TestScene {
     fn new() -> TestScene {
-        TestScene { pipeline: None }
+        TestScene {
+            pipeline: None,
+            model: None,
+        }
     }
 
     pub fn render(
@@ -19,11 +26,18 @@ impl TestScene {
         encoder: &mut wgpu::CommandEncoder,
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
         pipelines: &mut PipelineStoreRead<'_>,
+        models: &mut ModelStoreRead<'_>,
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
-            pipelines.get_or_add_blocking(&PipelineKey::new::<VertexNull>(
+            pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Null>(
                 "fe89/b2406e97285d2964831bc4914375778a9051cb3320bab7f5fc92444ce1ed.pl",
             ))
+        });
+
+        let model = self.model.get_or_insert_with(|| {
+            models.get_or_add_blocking(
+                &"8070/7e46ce08f84d3235d50029105864ea734535afccb037ac813173a4c5f968.glb".to_owned(),
+            )
         });
 
         let pipeline = pipelines.at(pipeline);
@@ -47,10 +61,12 @@ fn render_test() -> Box<dyn Schedulable> {
     SystemBuilder::new("test_render")
         .read_resource::<Context>()
         .read_resource::<Frame>()
-        .write_resource::<PipelineStore>()
+        .read_resource::<PipelineStore>()
+        .read_resource::<ModelStore>()
         .write_resource::<TestScene>()
-        .build(move |_, _, (context, frame, pipelines, scene), _| {
+        .build(move |_, _, (context, frame, pipelines, models, scene), _| {
             let mut pipelines = pipelines.read();
+            let mut models = models.read();
 
             let mut encoder = context
                 .device()
@@ -75,7 +91,7 @@ fn render_test() -> Box<dyn Schedulable> {
 
                 //log::info!("render pass");
                 //let mut render_pass = encoder.begin_render_pass(&pass_descriptor);
-                scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
+                scene.render(&mut encoder, &pass_descriptor, &mut pipelines, &mut models);
             }
 
             frame.add_command(encoder.finish());

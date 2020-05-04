@@ -1,30 +1,31 @@
-use crate::render::{Vertex, VertexBufferLayout, VertexP2C3};
+use crate::render::{Vertex, VertexBufferLayout};
 
-pub enum VertexData {
-    Pos2Col3(Vec<VertexP2C3>),
+pub struct VertexData {
+    raw: Vec<u8>,
+    layout: VertexBufferLayout,
+    count: usize,
 }
 
 impl VertexData {
-    pub fn from_p2c3(data: Vec<VertexP2C3>) -> Self {
-        VertexData::Pos2Col3(data)
-    }
-
-    pub fn len(&self) -> usize {
-        match *self {
-            VertexData::Pos2Col3(ref data) => data.len(),
+    pub fn from_vec<V: Vertex>(data: Vec<V>) -> Self {
+        let count = data.len();
+        VertexData {
+            raw: bytemuck::cast_slice(&data).to_vec(),
+            layout: V::buffer_layout(),
+            count,
         }
     }
 
     pub fn get_raw_buffer(&self) -> &[u8] {
-        match *self {
-            VertexData::Pos2Col3(ref data) => bytemuck::cast_slice(data),
-        }
+        &self.raw
     }
 
-    pub fn get_vertex_layout(&self) -> VertexBufferLayout {
-        match *self {
-            VertexData::Pos2Col3(_) => VertexP2C3::buffer_layout(),
-        }
+    pub fn get_vertex_layout(&self) -> &VertexBufferLayout {
+        &self.layout
+    }
+
+    pub fn count(&self) -> usize {
+        self.count
     }
 
     pub fn to_vertex_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {

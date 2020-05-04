@@ -1,7 +1,5 @@
 use crate::input::{self, add_input_system};
-use crate::render::{
-    self, add_render_system, test_tech, Context, Frame, PipelineKey, PipelineStore, Surface, VertexNull,
-};
+use crate::render::{self, add_render_system, test_tech, vertex, Context, Frame, PipelineKey, PipelineStore, Surface};
 use crate::{Config, GameError};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
@@ -30,6 +28,7 @@ impl ScheduleSet {
             Schedule::builder()
                 .add_system(render::systems::update_shaders())
                 .add_system(render::systems::update_pipeline())
+                .add_system(render::systems::update_models())
                 .flush()
                 .build(),
         );
@@ -117,7 +116,7 @@ impl GameRender {
         if let Some(mut store) = self.resources.get_mut::<PipelineStore>() {
             log::info!("test");
             let mut store = store.write();
-            store.get_or_add(&PipelineKey::new::<VertexNull>(
+            store.get_or_add(&PipelineKey::new::<vertex::Null>(
                 "a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl",
             ));
         }

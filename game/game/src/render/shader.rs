@@ -86,7 +86,7 @@ impl Shader {
         }
     }
 
-    fn on_load(
+    fn on_update(
         &mut self,
         load_context: LoadContext<'_, Shader>,
         context: &Context,
@@ -214,7 +214,7 @@ impl<'a> DataUpdater<'a, Shader> for (&Context,) {
         data: &mut Shader,
         load_response: ShaderLoadResponse,
     ) -> Option<ShaderLoadRequest> {
-        data.on_load(load_context, self.0, load_response)
+        data.on_update(load_context, self.0, load_response)
     }
 }
 

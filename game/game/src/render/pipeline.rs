@@ -120,7 +120,7 @@ impl Pipeline {
         }
     }
 
-    fn on_load(
+    fn on_update(
         &mut self,
         load_context: LoadContext<'_, Pipeline>,
         context: &Context,
@@ -282,7 +282,7 @@ impl<'a> DataUpdater<'a, Pipeline> for (&Context, &ShaderStore) {
         data: &mut Pipeline,
         load_response: PipelineLoadResponse,
     ) -> Option<PipelineLoadRequest> {
-        data.on_load(load_context, self.0, &mut self.1.read(), load_response)
+        data.on_update(load_context, self.0, &mut self.1.read(), load_response)
     }
 }
 

@@ -10,12 +10,12 @@ env_logger = "0.7"
 config ="0.10"
 serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
 ring = "0.16"
 data-encoding = "2.2"
-
 tokio = {version = "0.2", features = ["time", "blocking", "rt-threaded", "rt-util"]}
 
 shaderc = {version = "0.6", features = ["build-from-source"] }
+gltf = "0.15"
+gltf-json = "0.15"
 
 shine-game = {path = "../game", version = "0.1.0", features = ["native"]}

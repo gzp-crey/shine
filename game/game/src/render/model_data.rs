@@ -17,7 +17,7 @@ pub struct MeshData {
 
 impl MeshData {
     pub fn with_vertices(vertices: VertexData) -> MeshData {
-        let cnt = vertices.len();
+        let cnt = vertices.count();
         MeshData {
             vertices,
             indices: None,

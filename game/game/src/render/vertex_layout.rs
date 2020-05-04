@@ -15,14 +15,14 @@ impl fmt::Debug for VertexTypeId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum VertexAttribute {
     Position(wgpu::BufferAddress, wgpu::VertexFormat),
     Color(wgpu::BufferAddress, wgpu::VertexFormat),
     Custom(String, wgpu::BufferAddress, wgpu::VertexFormat),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct VertexBufferLayout {
     pub stride: wgpu::BufferAddress,
     pub attributes: Vec<Vec<VertexAttribute>>,
@@ -38,7 +38,7 @@ impl VertexBufferLayout {
     }
 }
 
-pub trait Vertex: 'static {
+pub trait Vertex: 'static + bytemuck::Pod + bytemuck::Zeroable {
     fn buffer_layout() -> VertexBufferLayout;
 
     fn id() -> VertexTypeId
@@ -49,38 +49,69 @@ pub trait Vertex: 'static {
     }
 }
 
-/// Vertex without atributes.
-#[repr(C)]
-pub struct VertexNull {}
+pub mod vertex {
+    use super::*;
 
-impl Vertex for VertexNull {
-    fn buffer_layout() -> VertexBufferLayout {
-        VertexBufferLayout {
-            stride: 0,
-            attributes: Vec::new(),
+    /// Vertex without atributes.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Null {}
+
+    unsafe impl bytemuck::Pod for Null {}
+    unsafe impl bytemuck::Zeroable for Null {}
+
+    impl Vertex for Null {
+        fn buffer_layout() -> VertexBufferLayout {
+            VertexBufferLayout {
+                stride: 0,
+                attributes: Vec::new(),
+            }
         }
     }
-}
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct VertexP2C3 {
-    pos: (f32, f32),
-    color: (f32, f32, f32),
-}
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Pos3fCol3f {
+        pub position: (f32, f32, f32),
+        pub color: (f32, f32, f32),
+    }
 
-unsafe impl bytemuck::Pod for VertexP2C3 {}
-unsafe impl bytemuck::Zeroable for VertexP2C3 {}
+    unsafe impl bytemuck::Pod for Pos3fCol3f {}
+    unsafe impl bytemuck::Zeroable for Pos3fCol3f {}
 
-impl Vertex for VertexP2C3 {
-    #[allow(clippy::fn_to_numeric_cast)]
-    fn buffer_layout() -> VertexBufferLayout {
-        VertexBufferLayout {
-            stride: mem::size_of::<Self> as wgpu::BufferAddress,
-            attributes: vec![vec![
-                VertexAttribute::Position(0, wgpu::VertexFormat::Float2),
-                VertexAttribute::Color(16, wgpu::VertexFormat::Float3),
-            ]],
+    impl Vertex for Pos3fCol3f {
+        #[allow(clippy::fn_to_numeric_cast)]
+        fn buffer_layout() -> VertexBufferLayout {
+            VertexBufferLayout {
+                stride: mem::size_of::<Self> as wgpu::BufferAddress,
+                attributes: vec![vec![
+                    VertexAttribute::Position(0, wgpu::VertexFormat::Float3),
+                    VertexAttribute::Color(24, wgpu::VertexFormat::Float3),
+                ]],
+            }
+        }
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Pos3fCol4f {
+        pub position: (f32, f32, f32),
+        pub color: (f32, f32, f32, f32),
+    }
+
+    unsafe impl bytemuck::Pod for Pos3fCol4f {}
+    unsafe impl bytemuck::Zeroable for Pos3fCol4f {}
+
+    impl Vertex for Pos3fCol4f {
+        #[allow(clippy::fn_to_numeric_cast)]
+        fn buffer_layout() -> VertexBufferLayout {
+            VertexBufferLayout {
+                stride: mem::size_of::<Self> as wgpu::BufferAddress,
+                attributes: vec![vec![
+                    VertexAttribute::Position(0, wgpu::VertexFormat::Float3),
+                    VertexAttribute::Color(24, wgpu::VertexFormat::Float4),
+                ]],
+            }
         }
     }
 }

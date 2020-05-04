@@ -8,6 +8,14 @@ use winit::{
 };
 
 async fn run() {
+    use shine_game::render::gltf;
+    use shine_game::utils::url::Url;
+    //let url = Url::parse("file://./assets/models/SimpleMeshes.gltf").unwrap();
+    //let url = Url::parse("https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/MultiUVTest/glTF-Embedded/MultiUVTest.gltf").unwrap();
+    //let url = Url::parse("https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/VertexColorTest/glTF-Embedded/VertexColorTest.gltf").unwrap();
+    let url = Url::parse("https://github.com/KhronosGroup/glTF-Sample-Models/raw/master/2.0/VertexColorTest/glTF-Binary/VertexColorTest.glb").unwrap();
+    gltf::load_from_url(&url).await.unwrap();
+
     let event_loop = EventLoop::new();
     let window = {
         let mut builder = winit::window::WindowBuilder::new();

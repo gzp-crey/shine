@@ -43,12 +43,12 @@ impl Url {
         PathBuf::from(&self.inner[url::Position::BeforeHost..url::Position::AfterPath])
     }
 
-    pub fn to_file_folder(&self) -> PathBuf {     
+    pub fn to_file_folder(&self) -> PathBuf {
         let path = &self.inner[url::Position::BeforeHost..url::Position::AfterPath];
         let mut parts = path.rsplitn(2, '/');
         let first = parts.next();
         let second = parts.next();
-        let folder = first.and(second).unwrap_or("");  
+        let folder = first.and(second).unwrap_or("");
         PathBuf::from(folder)
     }
 
