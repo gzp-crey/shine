@@ -1,5 +1,6 @@
 use crate::render::{
-    vertex, Context, Frame, ModelIndex, ModelStore, ModelStoreRead, PipelineIndex, PipelineKey, PipelineStore,
+    vertex::{self, Pos3fCol4f},
+    Context, Frame, PipelineIndex, PipelineKey, PipelineStore,
     PipelineStoreRead,
 };
 use crate::GameError;
@@ -8,42 +9,61 @@ use shine_ecs::legion::{
     systems::{resource::Resources, SystemBuilder},
 };
 
+const VERTICES: &[Pos3fCol4f] = &[
+    Pos3fCol4f { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.0, 1.0] },
+    Pos3fCol4f { position: [-0.49513406, 0.06958647, 0.0], color: [0.0, 0.5, 0.0, 1.0] },
+    Pos3fCol4f { position: [-0.21918549, -0.44939706, 0.0], color: [0.0, 0.0, 0.5, 1.0] },
+    Pos3fCol4f { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.5, 0.0, 1.0] },
+    Pos3fCol4f { position: [0.44147372, 0.2347359, 0.0],color: [0.0, 0.5, 0.5, 1.0] },
+];
+
+const INDICES: &[u16] = &[
+    0, 1, 4,
+    1, 2, 4,
+    2, 3, 4,
+];
+
 struct TestScene {
     pipeline: Option<PipelineIndex>,
-    model: Option<ModelIndex>,
+    buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 impl TestScene {
     fn new() -> TestScene {
         TestScene {
             pipeline: None,
-            model: None,
+            buffers: None,
         }
+    }
+
+    pub fn prepare(&mut self, device: &wgpu::Device) {
+        self.buffers.get_or_insert_with(|| (
+            device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
+            device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
+            INDICES.len() as u32,            
+        ));
     }
 
     pub fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
-        pipelines: &mut PipelineStoreRead<'_>,
-        models: &mut ModelStoreRead<'_>,
+        pipelines: &mut PipelineStoreRead<'_>
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
-            pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Null>(
-                "fe89/b2406e97285d2964831bc4914375778a9051cb3320bab7f5fc92444ce1ed.pl",
+            pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Pos3fCol4f>(
+                "4c75/7a71a585f899862fbb48a51968f11dd58ceb7f379ab5d6539599ed890c5c.pl",
             ))
         });
 
-        let model = self.model.get_or_insert_with(|| {
-            models.get_or_add_blocking(
-                &"8070/7e46ce08f84d3235d50029105864ea734535afccb037ac813173a4c5f968.glb".to_owned(),
-            )
-        });
-
-        let pipeline = pipelines.at(pipeline);
-        //let pipeline = &pipelines[pipeline];
-        if let Some(mut pipeline) = pipeline.bind(encoder, pass_descriptor) {
-            pipeline.draw(0..3, 0..1);
+        if let Some(ref buffers) = self.buffers {
+            let pipeline = pipelines.at(pipeline);
+            //let pipeline = &pipelines[pipeline];
+            if let Some(mut pipeline) = pipeline.bind(encoder, pass_descriptor) {
+                pipeline.set_vertex_buffer(0, &buffers.0, 0, 0);
+                pipeline.set_index_buffer(&buffers.1, 0, 0);
+                pipeline.draw_indexed(0..buffers.2, 0, 0..1);
+            }
         }
     }
 }
@@ -62,11 +82,13 @@ fn render_test() -> Box<dyn Schedulable> {
         .read_resource::<Context>()
         .read_resource::<Frame>()
         .read_resource::<PipelineStore>()
-        .read_resource::<ModelStore>()
         .write_resource::<TestScene>()
-        .build(move |_, _, (context, frame, pipelines, models, scene), _| {
+        .build(move |_, _, (context, frame, pipelines, scene), _| {
             let mut pipelines = pipelines.read();
-            let mut models = models.read();
+
+            {
+                scene.prepare(&context.device());
+            }
 
             let mut encoder = context
                 .device()
@@ -91,7 +113,7 @@ fn render_test() -> Box<dyn Schedulable> {
 
                 //log::info!("render pass");
                 //let mut render_pass = encoder.begin_render_pass(&pass_descriptor);
-                scene.render(&mut encoder, &pass_descriptor, &mut pipelines, &mut models);
+                scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
             }
 
             frame.add_command(encoder.finish());

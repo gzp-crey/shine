@@ -1,5 +1,5 @@
 use crate::input::{self, add_input_system};
-use crate::render::{self, add_render_system, test_tech, vertex, Context, Frame, PipelineKey, PipelineStore, Surface};
+use crate::render::{self, add_render_system, tech, Context, Frame, Surface};
 use crate::{Config, GameError};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
@@ -33,7 +33,8 @@ impl ScheduleSet {
                 .build(),
         );
 
-        logics.insert("test_render".to_owned(), test_tech::create_schedule());
+        logics.insert("test1".to_owned(), tech::test1::create_schedule());
+        logics.insert("test2".to_owned(), tech::test2::create_schedule());
 
         ScheduleSet { logics }
     }
@@ -62,7 +63,8 @@ impl GameRender {
         add_input_system(&mut resources).await?;
         add_render_system(&config, wgpu_instance, &mut resources).await?;
 
-        test_tech::add_test_scene(&mut resources).await?;
+        tech::test1::add_test_scene(&mut resources).await?;
+        tech::test2::add_test_scene(&mut resources).await?;
 
         Ok(GameRender {
             surface,
@@ -104,21 +106,11 @@ impl GameRender {
         self.run_logic("update_render");
 
         self.start_frame(size)?;
-        self.run_logic("test_render");
+        self.run_logic("test2");
         self.end_frame()
     }
 
     pub fn gc_all(&mut self) {
         self.run_logic("gc_all");
-    }
-
-    pub fn test(&mut self) {
-        if let Some(mut store) = self.resources.get_mut::<PipelineStore>() {
-            log::info!("test");
-            let mut store = store.write();
-            store.get_or_add(&PipelineKey::new::<vertex::Null>(
-                "a515/fa1e8ec89235d77202d2f4f7130da22e8e92fb1a2ee91cad7ce6d915686e.pl",
-            ));
-        }
     }
 }

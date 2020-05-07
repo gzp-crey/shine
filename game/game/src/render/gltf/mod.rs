@@ -51,8 +51,8 @@ pub fn create_vertex_p3c4(buffers: &Vec<buffer::Data>, primitive: &Primitive<'_>
 
     for (position, color) in izip!(positions, colors) {
         vertices.push(vertex::Pos3fCol4f {
-            position: (position[0], position[1], position[2]),
-            color: (color[0], color[1], color[2], color[3]),
+            position,
+            color,
         })
     }
 

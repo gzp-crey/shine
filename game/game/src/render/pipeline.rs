@@ -1,7 +1,7 @@
 use crate::utils::url::Url;
 use crate::{
     render::{
-        Context, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType, Vertex,
+        Context, IntoVertexTypeId, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType,
         VertexBufferLayout, VertexTypeId,
     },
     utils, wgpu, GameError,
@@ -10,11 +10,12 @@ use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
 use std::fmt;
-use std::ops::Range;
+use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 
 pub struct Dependecy {
     descriptor: Box<PipelineDescriptor>,
+    vertex_layouts: Vec<VertexBufferLayout>,
     vertex_shader: ShaderDependency,
     fragment_shader: ShaderDependency,
 }
@@ -23,6 +24,7 @@ impl Dependecy {
     fn from_descriptor(
         load_context: &LoadContext<'_, Pipeline>,
         descriptor: Box<PipelineDescriptor>,
+        vertex_layouts: Vec<VertexBufferLayout>,
         shaders: &mut ShaderStoreRead<'_>,
     ) -> Dependecy {
         let vertex_shader = ShaderDependency::new(
@@ -42,6 +44,7 @@ impl Dependecy {
 
         Dependecy {
             descriptor,
+            vertex_layouts,
             vertex_shader,
             fragment_shader,
         }
@@ -84,7 +87,7 @@ impl Dependecy {
                 listeners.notify_all();
                 let vs = shaders.at(&vs).shadere_module().unwrap();
                 let fs = shaders.at(&fs).shadere_module().unwrap();
-                match self.descriptor.compile(context, (vs, fs)) {
+                match self.descriptor.compile(context, &self.vertex_layouts, (vs, fs)) {
                     Ok(pipeline) => Pipeline::Compiled(pipeline),
                     Err(err) => Pipeline::Error(err),
                 }
@@ -134,8 +137,8 @@ impl Pipeline {
                 Pipeline::Error(err)
             }
 
-            (Pipeline::Pending(listeners), PipelineLoadResponse::Descriptor(descriptor)) => {
-                let dependency = Dependecy::from_descriptor(&load_context, descriptor, shaders);
+            (Pipeline::Pending(listeners), PipelineLoadResponse::Descriptor(descriptor, vertex_layouts)) => {
+                let dependency = Dependecy::from_descriptor(&load_context, descriptor, vertex_layouts, shaders);
                 dependency.into_pipeline(&load_context, context, shaders, listeners)
             }
 
@@ -165,10 +168,10 @@ pub struct PipelineKey {
 }
 
 impl PipelineKey {
-    pub fn new<V: Vertex>(name: &str) -> PipelineKey {
+    pub fn new<V: IntoVertexTypeId>(name: &str) -> PipelineKey {
         PipelineKey {
             name: name.to_owned(),
-            vertex_type: <V as Vertex>::id(),
+            vertex_type: <V as IntoVertexTypeId>::into_id(),
         }
     }
 }
@@ -195,7 +198,7 @@ pub type PipelineLoadRequest = PipelineKey;
 
 pub enum PipelineLoadResponse {
     Error(String),
-    Descriptor(Box<PipelineDescriptor>),
+    Descriptor(Box<PipelineDescriptor>, Vec<VertexBufferLayout>),
     ShaderReady(ShaderType),
 }
 
@@ -221,8 +224,8 @@ impl PipelineLoader {
         }
 
         let source_id = &pipeline_key.name;
-        let vertex_attributes = VertexBufferLayout::from_id(&pipeline_key.vertex_type);
-        log::trace!("Vertex attributes: {:#?}", vertex_attributes);
+        let vertex_layouts = pipeline_key.vertex_type.to_layout();
+        log::trace!("Vertex attributes: {:#?}", vertex_layouts);
 
         let url = match self.base_url.join(&source_id) {
             Err(err) => {
@@ -252,16 +255,16 @@ impl PipelineLoader {
             Ok(descriptor) => descriptor,
         };
 
-        if let Err(err) = descriptor.vertex_stage.check_vertex_layout(&vertex_attributes) {
+        if let Err(err) = descriptor.vertex_stage.check_vertex_layouts(&vertex_layouts) {
             let err = format!(
-                "Pipeline and vertex layouts are not matching [{}]: {:?}",
+                "Pipeline and vertex layouts are not compatible [{}]: {:?}",
                 source_id, err
             );
             log::warn!("{}", err);
             return Some(PipelineLoadResponse::Error(err));
         }
 
-        Some(PipelineLoadResponse::Descriptor(Box::new(descriptor)))
+        Some(PipelineLoadResponse::Descriptor(Box::new(descriptor), vertex_layouts))
     }
 }
 
@@ -296,15 +299,18 @@ impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
     fn bind_pipeline(&mut self) {
         self.render_pass.set_pipeline(self.pipeline);
     }
+}
 
-    #[inline]
-    pub fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
-        self.render_pass.draw(vertices, instances)
+impl<'a: 'pass, 'pass> Deref for BoundPipeline<'a, 'pass> {
+    type Target = wgpu::RenderPass<'pass>;
+    fn deref(&self) -> &Self::Target {
+        &self.render_pass
     }
+}
 
-    #[inline]
-    pub fn draw_indexed(&mut self, indices: Range<u32>, base_vertex: i32, instances: Range<u32>) {
-        self.render_pass.draw_indexed(indices, base_vertex, instances);
+impl<'a: 'pass, 'pass> DerefMut for BoundPipeline<'a, 'pass> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.render_pass
     }
 }
 

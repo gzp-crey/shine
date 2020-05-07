@@ -28,7 +28,7 @@ mod model;
 pub use self::model::{Model, ModelIndex, ModelLoader, ModelStore, ModelStoreRead};
 
 pub mod gltf;
-pub mod test_tech;
+pub mod tech;
 
 fn register_store<D: Data, L: DataLoader<D>>(loader: L, store_page_size: usize, resources: &mut Resources) {
     let (store, loader) = Store::<D>::new_with_loader(store_page_size, loader);

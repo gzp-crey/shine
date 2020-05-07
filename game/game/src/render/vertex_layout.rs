@@ -1,3 +1,4 @@
+use crate::render::VertexSemantic;
 use crate::wgpu;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -15,37 +16,61 @@ impl fmt::Debug for VertexTypeId {
     }
 }
 
+impl VertexTypeId {
+    pub fn from_layout(layout: &VertexBufferLayout) -> Self {
+        VertexTypeId(bincode::serialize(&vec![layout]).unwrap())
+    }
+
+    pub fn from_layouts(layouts: &Vec<VertexBufferLayout>) -> Self {
+        VertexTypeId(bincode::serialize(layouts).unwrap())
+    }
+
+    pub fn to_layout(&self) -> Vec<VertexBufferLayout> {
+        bincode::deserialize(&self.0).unwrap()
+    }
+}
+
+pub trait IntoVertexTypeId {
+    fn into_id() -> VertexTypeId;
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum VertexAttribute {
-    Position(wgpu::BufferAddress, wgpu::VertexFormat),
-    Color(wgpu::BufferAddress, wgpu::VertexFormat),
-    Custom(String, wgpu::BufferAddress, wgpu::VertexFormat),
+pub struct VertexAttribute(VertexSemantic, wgpu::BufferAddress, wgpu::VertexFormat);
+
+impl VertexAttribute {
+    pub fn new(semantic: VertexSemantic, offset: wgpu::BufferAddress, format: wgpu::VertexFormat) -> VertexAttribute {
+        VertexAttribute(semantic, offset, format)
+    }
+
+    pub fn semantic(&self) -> &VertexSemantic {
+        &self.0
+    }
+
+    pub fn offset(&self) -> wgpu::BufferAddress {
+        self.1
+    }
+
+    pub fn format(&self) -> wgpu::VertexFormat {
+        self.2
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct VertexBufferLayout {
     pub stride: wgpu::BufferAddress,
-    pub attributes: Vec<Vec<VertexAttribute>>,
-}
-
-impl VertexBufferLayout {
-    pub fn from_id(id: &VertexTypeId) -> VertexBufferLayout {
-        bincode::deserialize(&id.0).unwrap()
-    }
-
-    pub fn to_id(&self) -> VertexTypeId {
-        VertexTypeId(bincode::serialize(self).unwrap())
-    }
+    pub attributes: Vec<VertexAttribute>,
 }
 
 pub trait Vertex: 'static + bytemuck::Pod + bytemuck::Zeroable {
     fn buffer_layout() -> VertexBufferLayout;
+}
 
-    fn id() -> VertexTypeId
-    where
-        Self: Sized,
-    {
-        Self::buffer_layout().to_id()
+impl<T> IntoVertexTypeId for T
+where
+    T: Vertex,
+{
+    fn into_id() -> VertexTypeId {
+        VertexTypeId::from_layout(&Self::buffer_layout())
     }
 }
 
@@ -72,8 +97,8 @@ pub mod vertex {
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct Pos3fCol3f {
-        pub position: (f32, f32, f32),
-        pub color: (f32, f32, f32),
+        pub position: [f32;3],
+        pub color: [f32;3],
     }
 
     unsafe impl bytemuck::Pod for Pos3fCol3f {}
@@ -82,12 +107,14 @@ pub mod vertex {
     impl Vertex for Pos3fCol3f {
         #[allow(clippy::fn_to_numeric_cast)]
         fn buffer_layout() -> VertexBufferLayout {
+            use wgpu::VertexFormat::*;
+            use VertexSemantic::*;
             VertexBufferLayout {
-                stride: mem::size_of::<Self> as wgpu::BufferAddress,
-                attributes: vec![vec![
-                    VertexAttribute::Position(0, wgpu::VertexFormat::Float3),
-                    VertexAttribute::Color(24, wgpu::VertexFormat::Float3),
-                ]],
+                stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+                attributes: vec![
+                    VertexAttribute(Position, 0, Float3),
+                    VertexAttribute(Color(0), 12, Float3),
+                ],
             }
         }
     }
@@ -95,8 +122,8 @@ pub mod vertex {
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct Pos3fCol4f {
-        pub position: (f32, f32, f32),
-        pub color: (f32, f32, f32, f32),
+        pub position: [f32;3],
+        pub color: [f32;4],
     }
 
     unsafe impl bytemuck::Pod for Pos3fCol4f {}
@@ -105,12 +132,14 @@ pub mod vertex {
     impl Vertex for Pos3fCol4f {
         #[allow(clippy::fn_to_numeric_cast)]
         fn buffer_layout() -> VertexBufferLayout {
+            use wgpu::VertexFormat::*;
+            use VertexSemantic::*;
             VertexBufferLayout {
-                stride: mem::size_of::<Self> as wgpu::BufferAddress,
-                attributes: vec![vec![
-                    VertexAttribute::Position(0, wgpu::VertexFormat::Float3),
-                    VertexAttribute::Color(24, wgpu::VertexFormat::Float4),
-                ]],
+                stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+                attributes: vec![
+                    VertexAttribute(Position, 0, Float3),
+                    VertexAttribute(Color(0), 12, Float4),
+                ],
             }
         }
     }

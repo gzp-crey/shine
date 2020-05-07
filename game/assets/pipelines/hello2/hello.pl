@@ -2,7 +2,7 @@
     "primitive_topology": "TriangleList",
     "vertex_stage": {
         "shader": "./hello.vs",
-        "attributes": [],
+        "attributes": [[0,"Position","Float3"],[1,{"Color":0},"Float4"]],
         "global_uniforms": {},
         "local_uniforms": {}
     },
