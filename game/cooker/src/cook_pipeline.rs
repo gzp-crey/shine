@@ -1,4 +1,4 @@
-use crate::content_hash;
+use crate::content_hash::upload_cooked_binary;
 use crate::cook_shader::cook_shader;
 use serde_json;
 use shine_game::render::PipelineDescriptor;
@@ -21,7 +21,7 @@ pub async fn cook_pipeline(source_base: &Url, target_base: &Url, pipeline_url: &
             err
         )
     })?;
-    log::trace!("Pipeline: {:#?}", pipeline);
+    log::trace!("Pipeline [{}]: {:#?}", pipeline_url.as_str(), pipeline);
 
     let vertex_shader_url = Url::from_base_or_current(&source_base, &pipeline_url, &pipeline.vertex_stage.shader)
         .map_err(|err| {
@@ -65,19 +65,9 @@ pub async fn cook_pipeline(source_base: &Url, target_base: &Url, pipeline_url: &
         })?;
     pipeline.fragment_stage.shader = fragment_shader_id.to_owned();
 
-    let cooked_pipeline = serde_json::to_string(&pipeline)
+    let cooked_pipeline = bincode::serialize(&pipeline)
         .map_err(|err| format!("Failed to serialize pipeline [{}]: {:?}", pipeline_url.as_str(), err))?;
 
-    let hash = content_hash::sha256_bytes(cooked_pipeline.as_bytes());
-    let hash = content_hash::hash_to_path(&hash);
-    let target_id = format!("{}.pl", hash);
-    let target_url = target_base
-        .join(&target_id)
-        .map_err(|err| format!("Invalid target url: {:?}", err))?;
-    log::trace!("Uploading pipeline binary [{}]", target_url.as_str());
-    assets::upload_string(&target_url, &cooked_pipeline)
-        .await
-        .map_err(|err| format!("Failed to upload [{}]: {:?}", target_url.as_str(), err))?;
-
+    let target_id = upload_cooked_binary(&target_base, "pl", &cooked_pipeline).await?;
     Ok(target_id)
 }

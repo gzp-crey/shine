@@ -71,12 +71,14 @@ impl Url {
     pub fn set_extension(&self, ext: &str) -> Result<Url, ParseError> {
         let path = &self.inner[url::Position::BeforeHost..url::Position::AfterPath];
         let mut parts = path.rsplitn(2, '.');
-        let first = parts.next().unwrap_or("");
+        let first = parts.next();
+        let second = parts.next();
+        let base = second.or(first).unwrap_or("");
 
         Url::parse(&format!(
             "{}{}.{}{}",
             &self.inner[..url::Position::BeforeHost],
-            first,
+            base,
             ext,
             &self.inner[url::Position::AfterPath..]
         ))

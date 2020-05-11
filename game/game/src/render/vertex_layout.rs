@@ -97,8 +97,8 @@ pub mod vertex {
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct Pos3fCol3f {
-        pub position: [f32;3],
-        pub color: [f32;3],
+        pub position: [f32; 3],
+        pub color: [f32; 3],
     }
 
     unsafe impl bytemuck::Pod for Pos3fCol3f {}
@@ -122,8 +122,8 @@ pub mod vertex {
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct Pos3fCol4f {
-        pub position: [f32;3],
-        pub color: [f32;4],
+        pub position: [f32; 3],
+        pub color: [f32; 4],
     }
 
     unsafe impl bytemuck::Pod for Pos3fCol4f {}

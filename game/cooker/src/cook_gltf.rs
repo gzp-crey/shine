@@ -1,4 +1,4 @@
-use crate::content_hash;
+use crate::content_hash::upload_cooked_binary;
 use gltf::{binary, Document, Gltf};
 use shine_game::utils::{assets, url::Url};
 use std::borrow::Cow;
@@ -41,16 +41,6 @@ pub async fn cook_gltf(source_base: &Url, target_base: &Url, gltf_url: &Url) -> 
 
     let cooked_gltf = serialize_gltf(document, blob)?;
 
-    let hash = content_hash::sha256_bytes(&cooked_gltf);
-    let hash = content_hash::hash_to_path(&hash);
-    let target_id = format!("{}.glb", hash);
-    let target_url = target_base
-        .join(&target_id)
-        .map_err(|err| format!("Invalid target url: {:?}", err))?;
-    log::trace!("Uploading gltf binary [{}]", target_url.as_str());
-    assets::upload_binary(&target_url, &cooked_gltf)
-        .await
-        .map_err(|err| format!("Failed to upload [{}]: {:?}", target_url.as_str(), err))?;
-
+    let target_id = upload_cooked_binary(&target_base, "glb", &cooked_gltf).await?;
     Ok(target_id)
 }

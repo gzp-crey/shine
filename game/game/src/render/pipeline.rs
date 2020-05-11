@@ -236,7 +236,7 @@ impl PipelineLoader {
             Ok(url) => url,
         };
 
-        let data = match utils::assets::download_string(&url).await {
+        let data = match utils::assets::download_binary(&url).await {
             Err(err) => {
                 let err = format!("Failed to get pipeline({}): {:?}", source_id, err);
                 log::warn!("{}", err);
@@ -244,9 +244,8 @@ impl PipelineLoader {
             }
             Ok(data) => data,
         };
-        log::trace!("pipeline [{}]: {}", source_id, data);
 
-        let descriptor: PipelineDescriptor = match serde_json::from_str(&data) {
+        let descriptor: PipelineDescriptor = match bincode::deserialize(&data) {
             Err(err) => {
                 let err = format!("Failed to parse pipeline({}): {:?}", source_id, err);
                 log::warn!("{}", err);
@@ -254,6 +253,7 @@ impl PipelineLoader {
             }
             Ok(descriptor) => descriptor,
         };
+        log::trace!("pipeline [{}]: {:#?}", source_id, descriptor);
 
         if let Err(err) = descriptor.vertex_stage.check_vertex_layouts(&vertex_layouts) {
             let err = format!(

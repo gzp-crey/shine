@@ -1,7 +1,6 @@
 use crate::render::{
     vertex::{self, Pos3fCol4f},
-    Context, Frame, PipelineIndex, PipelineKey, PipelineStore,
-    PipelineStoreRead,
+    Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead,
 };
 use crate::GameError;
 use shine_ecs::legion::{
@@ -10,18 +9,29 @@ use shine_ecs::legion::{
 };
 
 const VERTICES: &[Pos3fCol4f] = &[
-    Pos3fCol4f { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.0, 1.0] },
-    Pos3fCol4f { position: [-0.49513406, 0.06958647, 0.0], color: [0.0, 0.5, 0.0, 1.0] },
-    Pos3fCol4f { position: [-0.21918549, -0.44939706, 0.0], color: [0.0, 0.0, 0.5, 1.0] },
-    Pos3fCol4f { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.5, 0.0, 1.0] },
-    Pos3fCol4f { position: [0.44147372, 0.2347359, 0.0],color: [0.0, 0.5, 0.5, 1.0] },
+    Pos3fCol4f {
+        position: [-0.0868241, 0.49240386, 0.0],
+        color: [0.5, 0.0, 0.0, 1.0],
+    },
+    Pos3fCol4f {
+        position: [-0.49513406, 0.06958647, 0.0],
+        color: [0.0, 0.5, 0.0, 1.0],
+    },
+    Pos3fCol4f {
+        position: [-0.21918549, -0.44939706, 0.0],
+        color: [0.0, 0.0, 0.5, 1.0],
+    },
+    Pos3fCol4f {
+        position: [0.35966998, -0.3473291, 0.0],
+        color: [0.5, 0.5, 0.0, 1.0],
+    },
+    Pos3fCol4f {
+        position: [0.44147372, 0.2347359, 0.0],
+        color: [0.0, 0.5, 0.5, 1.0],
+    },
 ];
 
-const INDICES: &[u16] = &[
-    0, 1, 4,
-    1, 2, 4,
-    2, 3, 4,
-];
+const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
 struct TestScene {
     pipeline: Option<PipelineIndex>,
@@ -37,18 +47,20 @@ impl TestScene {
     }
 
     pub fn prepare(&mut self, device: &wgpu::Device) {
-        self.buffers.get_or_insert_with(|| (
-            device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
-            device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
-            INDICES.len() as u32,            
-        ));
+        self.buffers.get_or_insert_with(|| {
+            (
+                device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
+                device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
+                INDICES.len() as u32,
+            )
+        });
     }
 
     pub fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
-        pipelines: &mut PipelineStoreRead<'_>
+        pipelines: &mut PipelineStoreRead<'_>,
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
             pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Pos3fCol4f>(

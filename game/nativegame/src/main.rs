@@ -8,7 +8,7 @@ use winit::{
 };
 
 async fn run() {
-    shine_game::render::pipeline_descriptor::foo();
+    //shine_game::render::foo();
 
     let event_loop = EventLoop::new();
     let window = {

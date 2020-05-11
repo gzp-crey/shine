@@ -50,10 +50,7 @@ pub fn create_vertex_p3c4(buffers: &Vec<buffer::Data>, primitive: &Primitive<'_>
     let colors = reader.read_colors(0).unwrap().into_rgba_f32();
 
     for (position, color) in izip!(positions, colors) {
-        vertices.push(vertex::Pos3fCol4f {
-            position,
-            color,
-        })
+        vertices.push(vertex::Pos3fCol4f { position, color })
     }
 
     VertexData::from_vec(vertices)

@@ -6,6 +6,7 @@ mod content_hash;
 mod cook_gltf;
 mod cook_pipeline;
 mod cook_shader;
+mod cook_texture;
 
 async fn run(asset: String) {
     let config = config::Config::new().unwrap();
@@ -15,8 +16,10 @@ async fn run(asset: String) {
     let asset_url = asset_source_base.join(&asset).unwrap();
 
     let result = match asset_url.extension() {
+        "vs" | "fs" | "cs" => cook_shader::cook_shader(&asset_source_base, &asset_target_base, &asset_url).await,
         "pl" => cook_pipeline::cook_pipeline(&asset_source_base, &asset_target_base, &asset_url).await,
         "glb" | "gltf" => cook_gltf::cook_gltf(&asset_source_base, &asset_target_base, &asset_url).await,
+        "jpg" | "png" => cook_texture::cook_texture(&asset_source_base, &asset_target_base, &asset_url).await,
         e => Err(format!("Unknown asset type: {}", e)),
     };
 
@@ -36,8 +39,10 @@ fn main() {
         .try_init();
     let mut rt = Runtime::new().unwrap();
 
+    //let asset = "pipelines/hello/hello.vs".to_owned();
     //let asset = "pipelines/hello/hello.pl".to_owned();
-    let asset = "pipelines/hello2/hello.pl".to_owned();
+    //let asset = "pipelines/hello2/hello.pl".to_owned();
+    let asset = "tex/checker.png".to_owned();
     rt.block_on(run(asset));
 }
 

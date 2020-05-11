@@ -9,7 +9,7 @@ pub use self::context::*;
 mod frame;
 pub use self::frame::*;
 
-pub mod pipeline_descriptor;
+mod pipeline_descriptor;
 pub use self::pipeline_descriptor::*;
 mod vertex_layout;
 pub use self::vertex_layout::*;
@@ -19,6 +19,8 @@ mod index_data;
 pub use self::index_data::*;
 mod model_data;
 pub use self::model_data::*;
+mod texture_descriptor;
+pub use self::texture_descriptor::*;
 
 mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderLoader, ShaderStore, ShaderStoreRead, ShaderType};
