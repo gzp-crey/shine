@@ -68,10 +68,8 @@ pub async fn cook_texture(_source_base: &Url, target_base: &Url, texture_url: &U
     let image = task::spawn_blocking(move || {
         let mut image_data = Vec::new();
         match encoding {
-            TextureImageEncoding::Png => image
-                .write_to(&mut image_data, ImageOutputFormat::Png)
-                .unwrap(),
-                //.map_err(|err| format!("{:?}", err))?,
+            TextureImageEncoding::Png => image.write_to(&mut image_data, ImageOutputFormat::Png).unwrap(),
+            //.map_err(|err| format!("{:?}", err))?,
         };
         image_data
     })

@@ -22,7 +22,7 @@ impl TestScene {
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
             pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Null>(
-                "0657/4da2a8f62ddf9816a7a6cf8f2c0395adfe79b761cbf6a52e631049314390.pl",
+                "2efe/c9dbb5a6c535f3cddca3472280f53eff60f4bdd99f131383cfe45c67e99f.pl",
             ))
         });
 

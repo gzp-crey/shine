@@ -28,6 +28,8 @@ mod pipeline;
 pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineLoader, PipelineStore, PipelineStoreRead};
 mod model;
 pub use self::model::{Model, ModelIndex, ModelLoader, ModelStore, ModelStoreRead};
+mod texture;
+pub use self::texture::{Texture, TextureIndex, TextureLoader, TextureStore, TextureStoreRead};
 
 pub mod gltf;
 pub mod tech;

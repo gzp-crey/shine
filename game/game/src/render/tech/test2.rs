@@ -64,7 +64,7 @@ impl TestScene {
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
             pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Pos3fCol4f>(
-                "4c75/7a71a585f899862fbb48a51968f11dd58ceb7f379ab5d6539599ed890c5c.pl",
+                "63b0/81805928a06463d7d2cb05aad27312036f15fe7d2b90a272b95ce21a2a91.pl",
             ))
         });
 
