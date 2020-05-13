@@ -1,24 +1,80 @@
-use crate::content_hash::upload_cooked_binary;
-use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageOutputFormat};
+use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
 use shine_game::render::{TextureDescriptor, TextureImage, TextureImageEncoding};
-use shine_game::utils::{assets, url::Url};
-use std::io::Write;
+use shine_game::utils::{
+    assets,
+    url::{self, Url},
+};
+use std::{error, fmt};
 use tokio::task;
 
-pub async fn load_image(image_url: &Url) -> Result<DynamicImage, String> {
-    log::trace!("Downloading image [{}]", image_url.as_str());
-    let data = assets::download_binary(&image_url)
-        .await
-        .map_err(|err| format!("Failed to get texture image [{}]: {:?}", image_url.as_str(), err))?;
+#[derive(Debug)]
+pub enum Error {
+    Asset(assets::AssetError),
+    Json(serde_json::Error),
+    Bincode(bincode::Error),
+    Image(ImageError),
+    Runtime(task::JoinError),
+}
 
-    log::trace!("Docompressing image [{}]", image_url.as_str());
-    let image = task::spawn_blocking(move || image::load_from_memory(&data))
-        .await
-        .map_err(|err| format!("Failed spawn decode image [{}] task: {:?}", image_url.as_str(), err))?
-        .map_err(|err| format!("Failed to decode image [{}]: {:?}", image_url.as_str(), err))?;
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Asset(ref err) => write!(f, "Asset error: {}", err),
+            Error::Json(ref err) => write!(f, "Json error: {}", err),
+            Error::Bincode(ref err) => write!(f, "Binary serialize error: {}", err),
+            Error::Image(ref err) => write!(f, "Image processing error: {}", err),
+            Error::Runtime(ref err) => write!(f, "Runtime error: {}", err),
+        }
+    }
+}
+
+impl error::Error for Error {}
+
+impl From<assets::AssetError> for Error {
+    fn from(err: assets::AssetError) -> Error {
+        Error::Asset(err)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Error {
+        Error::Json(err)
+    }
+}
+
+impl From<bincode::Error> for Error {
+    fn from(err: bincode::Error) -> Error {
+        Error::Bincode(err)
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(err: url::ParseError) -> Error {
+        Error::Asset(assets::AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<task::JoinError> for Error {
+    fn from(err: task::JoinError) -> Error {
+        Error::Runtime(err)
+    }
+}
+
+impl From<ImageError> for Error {
+    fn from(err: ImageError) -> Error {
+        Error::Image(err)
+    }
+}
+
+pub async fn load_image(image_url: &Url) -> Result<DynamicImage, Error> {
+    log::trace!("[{}] Downloading image...", image_url.as_str());
+    let data = assets::download_binary(&image_url).await?;
+
+    log::trace!("[{}] Docompressing image...", image_url.as_str());
+    let image = task::spawn_blocking(move || image::load_from_memory(&data)).await??;
 
     log::trace!(
-        "Image loaded from [{}]: {:?}({:?})",
+        "[{}] Image:\n  size: {:?}\n  color: {:?}",
         image_url.as_str(),
         image.dimensions(),
         image.color()
@@ -26,67 +82,46 @@ pub async fn load_image(image_url: &Url) -> Result<DynamicImage, String> {
     Ok(image)
 }
 
-pub async fn load_descriptor(meta_url: &Url) -> Result<TextureDescriptor, String> {
-    log::trace!("Downloading image [{}]", meta_url.as_str());
+pub async fn load_descriptor(meta_url: &Url) -> Result<TextureDescriptor, Error> {
+    log::trace!("[{}] Downloading descriptor...", meta_url.as_str());
     match assets::download_string(&meta_url).await {
-        Ok(data) => serde_json::from_str(&data)
-            .map_err(|err| format!("Failed to load texture descriptor [{}]: {:?}", meta_url.as_str(), err)),
+        Ok(data) => Ok(serde_json::from_str(&data)?),
         Err(assets::AssetError::AssetProvider(_)) => {
-            log::warn!("No texture descriptor: [{}]", meta_url.as_str());
+            log::warn!("[{}] Missing  texture descriptor", meta_url.as_str());
             Ok(TextureDescriptor::new())
         }
-        Err(err) => Err(format!(
-            "Failed to get texture descriptor [{}]: {:?}",
-            meta_url.as_str(),
-            err
-        )),
+        Err(err) => Err(err.into()),
     }
 }
 
-pub async fn cook_texture(_source_base: &Url, target_base: &Url, texture_url: &Url) -> Result<String, String> {
+pub async fn cook_texture(_source_base: &Url, target_base: &Url, texture_url: &Url) -> Result<String, Error> {
     let mut image = load_image(texture_url).await?;
-    let mut descriptor = load_descriptor(&texture_url.set_extension("tex").unwrap()).await?;
+    let mut descriptor = load_descriptor(&texture_url.set_extension("tex")?).await?;
 
     if descriptor.size != (0, 0) {
-        let size = descriptor.size;
-        image = task::spawn_blocking(move || image.resize_exact(size.0, size.1, FilterType::CatmullRom))
-            .await
-            .map_err(|err| {
-                format!(
-                    "Failed spawn resize image task for [{}]: {:?}",
-                    texture_url.as_str(),
-                    err
-                )
-            })?;
+        let (w,h) = descriptor.size;
+        log::trace!("[{}] Resizing texture to ({},{})...", texture_url.as_str(), w, h);
+        image = task::spawn_blocking(move || image.resize_exact(w, h, FilterType::CatmullRom)).await?;
     } else {
         descriptor.size = image.dimensions();
     }
-    log::trace!("Texture [{}]: ({:#?})", texture_url.as_str(), descriptor);
+    log::trace!("[{}] Texture descriptor:\n{:#?}", texture_url.as_str(), descriptor);
 
-    log::trace!("Compressing texture [{}]...", texture_url.as_str());
+    log::trace!("[{}] Compressing texture...", texture_url.as_str());
     let encoding = descriptor.encoding;
-    let image = task::spawn_blocking(move || {
-        let mut image_data = Vec::new();
-        match encoding {
-            TextureImageEncoding::Png => image.write_to(&mut image_data, ImageOutputFormat::Png).unwrap(),
-            //.map_err(|err| format!("{:?}", err))?,
-        };
-        image_data
+    let image = task::spawn_blocking(move || match encoding {
+        TextureImageEncoding::Png => {
+            let mut image_data = Vec::new();
+            image.write_to(&mut image_data, ImageOutputFormat::Png)?;
+            Ok::<_, Error>(image_data)
+        }
     })
-    .await
-    .map_err(|err| {
-        format!(
-            "Failed spawn compress image task for [{}]: {:?}",
-            texture_url.as_str(),
-            err
-        )
-    })?;
-    //.map_err(|err| format!("Failed to compress image [{}]: {:?}", texture_url.as_str(), err))?;
+    .await??;
 
-    let texture_image = TextureImage { descriptor, image };
-    let cooked_texture =
-        bincode::serialize(&texture_image).map_err(|err| format!("Failed to compose texture image: {:?}", err))?;
+    log::trace!("{}", serde_json::to_string(&descriptor).unwrap());
 
-    let target_id = upload_cooked_binary(&target_base, "tex", &cooked_texture).await?;
+    log::trace!("[{}] Uploading...", texture_url.as_str());
+    let cooked_texture = bincode::serialize(&TextureImage { descriptor, image })?;
+    let target_id = assets::upload_cooked_binary(&target_base, "tex", &cooked_texture).await?;
     Ok(target_id)
 }

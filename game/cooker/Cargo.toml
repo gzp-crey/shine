@@ -11,8 +11,6 @@ config ="0.10"
 serde = {version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 bincode = "1.2"
-ring = "0.16"
-data-encoding = "2.2"
 tokio = {version = "0.2", features = ["time", "blocking", "rt-threaded", "rt-util"]}
 
 image = "0.23"

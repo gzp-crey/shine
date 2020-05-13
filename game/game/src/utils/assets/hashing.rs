@@ -1,7 +1,7 @@
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA256};
-use shine_game::utils::{assets, url::Url};
 
+/// Helper to construct hash for content
 pub fn sha256_bytes(data: &[u8]) -> String {
     let mut context = Context::new(&SHA256);
     context.update(data);
@@ -9,6 +9,7 @@ pub fn sha256_bytes(data: &[u8]) -> String {
     HEXLOWER.encode(hash.as_ref())
 }
 
+/// Helper to hash multi-part content
 pub struct ContentHasher(Context);
 
 impl ContentHasher {
@@ -27,22 +28,31 @@ impl ContentHasher {
     }
 }
 
+/// Create a storage compatible path from a hash
 pub fn hash_to_path(hash: &str) -> String {
     format!("{}/{}", &hash[..4], &hash[4..])
 }
 
-pub async fn upload_cooked_binary(target_base: &Url, ext: &str, content: &[u8]) -> Result<String, String> {
-    let hash = sha256_bytes(&content);
-    let hash = hash_to_path(&hash);
-    let target_id = format!("{}.{}", hash, ext);
-    let target_url = target_base
-        .join(&target_id)
-        .map_err(|err| format!("Invalid target url: {:?}", err))?;
+/// Implement the trait to generate hash-ed content path
+pub trait HashableContent {
+    fn hash(self) -> String;
 
-    log::trace!("Uploading binary [{}]", target_url.as_str());
-    assets::upload_binary(&target_url, &content)
-        .await
-        .map_err(|err| format!("Failed to upload [{}]: {:?}", target_url.as_str(), err))?;
+    fn hashed_path(self) -> String
+    where
+        Self: Sized,
+    {
+        hash_to_path(&self.hash())
+    }
+}
 
-    Ok(target_id)
+impl HashableContent for &[u8] {
+    fn hash(self) -> String {
+        sha256_bytes(self)
+    }
+}
+
+impl HashableContent for ContentHasher {
+    fn hash(self) -> String {
+        ContentHasher::hash(self)
+    }
 }

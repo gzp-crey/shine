@@ -7,7 +7,7 @@ use tokio::io::AsyncReadExt;
 pub async fn get_response(url: &Url) -> Result<Response, AssetError> {
     let response = reqwest::get(url.as_str())
         .await
-        .map_err(|err| AssetError::AssetProvider(format!("Failed to download {}: {}", url.as_str(), err)))?;
+        .map_err(|err| AssetError::AssetProvider(format!("{}", err)))?;
 
     let status = response.status();
     if !status.is_success() {

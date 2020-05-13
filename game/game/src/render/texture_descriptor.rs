@@ -79,8 +79,8 @@ impl TextureImage {
                 self.image = img.as_rgba8().unwrap().to_vec();
                 self
             }
-            _ => self
-        }        
+            _ => self,
+        }
     }
 
     pub fn to_texture_buffer(&self, device: &wgpu::Device) -> TextureBuffer {
@@ -107,7 +107,7 @@ impl TextureImage {
         });
 
         let buffer = device.create_buffer_with_data(
-            &rgba, 
+            &rgba,
             wgpu::BufferUsage::COPY_SRC,
         );
 
@@ -121,13 +121,13 @@ impl TextureImage {
                 offset: 0,
                 bytes_per_row: 4 * dimensions.0,
                 rows_per_image: dimensions.1,
-            }, 
+            },
             wgpu::TextureCopyView {
                 texture: &texture,
                 mip_level: 0,
                 array_layer: 0,
                 origin: wgpu::Origin3d::ZERO,
-            }, 
+            },
             size,
         );
 
@@ -145,7 +145,7 @@ impl TextureImage {
             lod_max_clamp: 100.0,
             compare_function: wgpu::CompareFunction::Always,
         });
-        
+
         Ok((Self { texture, view, sampler }, cmd_buffer))
     }*/
 }
