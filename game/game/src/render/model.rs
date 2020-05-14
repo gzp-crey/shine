@@ -1,17 +1,36 @@
-use crate::utils::url::Url;
 use crate::{
     render::{gltf, Context, ModelBuffer, ModelData, PipelineStore, PipelineStoreRead},
-    GameError,
+    utils::assets::AssetError,
+    utils::url::{Url, UrlError},
 };
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
 use std::pin::Pin;
 
+/// Error during model loading.
+#[derive(Debug)]
+pub enum ModelLoadError {
+    Asset(AssetError),
+    Canceled,
+}
+
+impl From<UrlError> for ModelLoadError {
+    fn from(err: UrlError) -> ModelLoadError {
+        ModelLoadError::Asset(AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<AssetError> for ModelLoadError {
+    fn from(err: AssetError) -> ModelLoadError {
+        ModelLoadError::Asset(err)
+    }
+}
+
 pub enum Model {
     Pending(LoadListeners),
     Compiled(ModelBuffer),
-    Error(String),
+    Error,
     None,
 }
 
@@ -32,20 +51,20 @@ impl Model {
         load_response: ModelLoadResponse,
     ) -> Option<String> {
         *self = match (std::mem::replace(self, Model::None), load_response) {
-            (Model::Pending(listeners), ModelLoadResponse::Error(err)) => {
-                log::debug!("Model compilation failed [{:?}]: {:?}", load_context, err);
+            (Model::Pending(listeners), Err(err)) => {
+                log::debug!("Model[{:?}] compilation failed: {:?}", load_context, err);
                 listeners.notify_all();
-                Model::Error(err)
+                Model::Error
             }
 
-            (Model::Pending(listeners), ModelLoadResponse::ModelData(model_data)) => {
-                log::debug!("Model compilation completed for [{:?}]", load_context);
+            (Model::Pending(listeners), Ok(model_data)) => {
+                log::debug!("Model[{:?}] compilation completed", load_context);
                 listeners.notify_all();
                 Model::Compiled(model_data.to_model_buffer(context.device()))
             }
 
             (Model::Compiled(_), _) => unreachable!(),
-            (Model::Error(_), _) => unreachable!(),
+            (Model::Error, _) => unreachable!(),
             (Model::None, _) => unreachable!(),
         };
         None
@@ -65,57 +84,41 @@ impl FromKey for Model {
 }
 
 pub type ModelLoadRequest = String;
-
-pub enum ModelLoadResponse {
-    ModelData(ModelData),
-    Error(String),
-}
+pub type ModelLoadResponse = Result<ModelData, ModelLoadError>;
 
 pub struct ModelLoader {
     base_url: Url,
 }
 
 impl ModelLoader {
-    pub fn new(base_url: &str) -> Result<ModelLoader, GameError> {
-        let base_url = Url::parse(base_url)
-            .map_err(|err| GameError::Config(format!("Failed to parse base url for model: {:?}", err)))?;
-
-        Ok(ModelLoader { base_url })
+    pub fn new(base_url: Url) -> ModelLoader {
+        ModelLoader { base_url }
     }
 
     async fn load_from_url(
         &mut self,
         cancellation_token: CancellationToken<Model>,
         source_id: String,
-    ) -> Option<ModelLoadResponse> {
+    ) -> ModelLoadResponse {
         if cancellation_token.is_canceled() {
-            return None;
+            return Err(ModelLoadError::Canceled);
         }
-
-        let url = match self.base_url.join(&source_id) {
-            Err(err) => {
-                let err = format!("Invalid model url ({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(ModelLoadResponse::Error(err));
-            }
-            Ok(url) => url,
-        };
-
-        log::debug!("Model loading: [{}]", url.as_str());
+        let url = self.base_url.join(&source_id)?;
+        log::debug!("[{}] Loading model...", url.as_str());
         match url.extension() {
-            "gltf" | "glb" => match gltf::load_from_url(&url).await {
-                Err(err) => {
-                    let err = format!("Failed to load model from ({}): {:?}", source_id, err);
-                    log::warn!("{}", err);
-                    Some(ModelLoadResponse::Error(err))
-                }
-                Ok(data) => Some(ModelLoadResponse::ModelData(data)),
-            },
-            ext => {
-                let err = format!("Unknown model type ({})", ext);
-                log::warn!("{}", err);
-                Some(ModelLoadResponse::Error(err))
-            }
+            "gltf" | "glb" => Ok(gltf::load_from_url(&url).await?),
+            ext => Err(ModelLoadError::Asset(AssetError::UnsupportedFormat(ext.to_owned()))),
+        }
+    }
+
+    async fn try_load_from_url(
+        &mut self,
+        cancellation_token: CancellationToken<Model>,
+        source_id: String,
+    ) -> Option<ModelLoadResponse> {
+        match self.load_from_url(cancellation_token, source_id).await {
+            Err(ModelLoadError::Canceled) => None,
+            result => Some(result),
         }
     }
 }
@@ -126,7 +129,7 @@ impl DataLoader<Model> for ModelLoader {
         source_id: String,
         cancellation_token: CancellationToken<Model>,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<ModelLoadResponse>>>> {
-        Box::pin(self.load_from_url(cancellation_token, source_id))
+        Box::pin(self.try_load_from_url(cancellation_token, source_id))
     }
 }
 

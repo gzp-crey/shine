@@ -1,5 +1,7 @@
-use crate::render::{Context, VertexBufferLayout};
-use crate::wgpu;
+use crate::{
+    render::{Context, VertexBufferLayout},
+    utils::assets::AssetError,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -49,18 +51,18 @@ pub struct VertexStage {
 }
 
 impl VertexStage {
-    fn check_format(&self, target: wgpu::VertexFormat, source: wgpu::VertexFormat) -> Result<(), String> {
+    fn check_format(&self, target: wgpu::VertexFormat, source: wgpu::VertexFormat) -> Result<(), AssetError> {
         if target != source {
-            Err(format!(
+            Err(AssetError::Content(format!(
                 "Vertex attribute format missmacth, target:{:?}, source:{:?}",
                 target, source
-            ))
+            )))
         } else {
             Ok(())
         }
     }
 
-    pub fn check_vertex_layouts(&self, vertex_layouts: &Vec<VertexBufferLayout>) -> Result<(), String> {
+    pub fn check_vertex_layouts(&self, vertex_layouts: &Vec<VertexBufferLayout>) -> Result<(), AssetError> {
         // check vertex attribute source duplication and the format compatibility
         let mut semantics = HashSet::new();
         for layout in vertex_layouts {
@@ -68,7 +70,10 @@ impl VertexStage {
                 if let Some(pa) = self.attributes.iter().find(|pa| pa.semantic() == va.semantic()) {
                     self.check_format(pa.format(), va.format())?;
                     if !semantics.insert(pa.semantic().clone()) {
-                        return Err(format!("{:?} attribute defined multiple times", pa.semantic()));
+                        return Err(AssetError::Content(format!(
+                            "{:?} attribute defined multiple times",
+                            pa.semantic()
+                        )));
                     }
                 }
             }
@@ -80,7 +85,10 @@ impl VertexStage {
         // check if all the pipeline attributes are covered
         for pa in &self.attributes {
             if !semantics.contains(pa.semantic()) {
-                return Err(format!("Missing attribute for {:?}", pa.semantic()));
+                return Err(AssetError::Content(format!(
+                    "Missing attribute for {:?}",
+                    pa.semantic()
+                )));
             }
         }
 
@@ -90,7 +98,7 @@ impl VertexStage {
     pub fn create_attribute_descriptors(
         &self,
         vertex_layouts: &Vec<VertexBufferLayout>,
-    ) -> Result<Vec<(wgpu::BufferAddress, Vec<wgpu::VertexAttributeDescriptor>)>, String> {
+    ) -> Result<Vec<(wgpu::BufferAddress, Vec<wgpu::VertexAttributeDescriptor>)>, AssetError> {
         let mut descriptors = Vec::new();
         for layout in vertex_layouts {
             let mut attributes = Vec::new();
@@ -140,7 +148,7 @@ impl PipelineDescriptor {
         context: &Context,
         vertex_layouts: &Vec<VertexBufferLayout>,
         (vs, fs): (&wgpu::ShaderModule, &wgpu::ShaderModule),
-    ) -> Result<wgpu::RenderPipeline, String> {
+    ) -> Result<wgpu::RenderPipeline, AssetError> {
         let device = context.device();
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

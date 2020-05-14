@@ -1,10 +1,16 @@
-use crate::utils::url::Url;
-use crate::{render::Context, utils, wgpu, GameError};
+use crate::{
+    render::Context,
+    utils::assets::{self, AssetError},
+    utils::url::{Url, UrlError},
+};
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
+use std::io::{self, Cursor};
 use std::pin::Pin;
+use std::str::FromStr;
 
+/// Supported shader types
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ShaderType {
     Vertex,
@@ -12,11 +18,24 @@ pub enum ShaderType {
     Compute,
 }
 
+impl FromStr for ShaderType {
+    type Err = AssetError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "fs_spv" => Ok(ShaderType::Fragment),
+            "vs_spv" => Ok(ShaderType::Vertex),
+            "cs_spv" => Ok(ShaderType::Compute),
+            _ => Err(AssetError::UnsupportedFormat(s.to_owned())),
+        }
+    }
+}
+
 /// Helper to manage the state of a shader dependency
 pub enum ShaderDependency {
     Pending(ShaderType, ShaderIndex),
     Completed(ShaderIndex),
-    Failed(String),
+    Failed,
 }
 
 impl ShaderDependency {
@@ -37,13 +56,10 @@ impl ShaderDependency {
                 if *st == shader_type {
                     ShaderDependency::Completed(id)
                 } else {
-                    ShaderDependency::Failed(format!(
-                        "Shader type missmatch, expected: {:?}, found: {:?}",
-                        shader_type, st
-                    ))
+                    ShaderDependency::Failed
                 }
             }
-            Shader::Error(ref err) => ShaderDependency::Failed(err.clone()),
+            Shader::Error => ShaderDependency::Failed,
             Shader::None => unreachable!(),
         }
     }
@@ -56,13 +72,10 @@ impl ShaderDependency {
                     if *st == shader_type {
                         ShaderDependency::Completed(id)
                     } else {
-                        ShaderDependency::Failed(format!(
-                            "Shader type missmatch, expected: {:?}, found: {:?}",
-                            shader_type, st
-                        ))
+                        ShaderDependency::Failed
                     }
                 }
-                Shader::Error(ref err) => ShaderDependency::Failed(err.to_owned()),
+                Shader::Error => ShaderDependency::Failed,
                 Shader::None => unreachable!(),
             },
             sd => sd,
@@ -70,10 +83,35 @@ impl ShaderDependency {
     }
 }
 
+/// Error during shader loading
+#[derive(Debug)]
+pub enum ShaderLoadError {
+    Asset(AssetError),
+    Canceled,
+}
+
+impl From<UrlError> for ShaderLoadError {
+    fn from(err: UrlError) -> ShaderLoadError {
+        ShaderLoadError::Asset(AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<AssetError> for ShaderLoadError {
+    fn from(err: AssetError) -> ShaderLoadError {
+        ShaderLoadError::Asset(err)
+    }
+}
+
+impl From<io::Error> for ShaderLoadError {
+    fn from(err: io::Error) -> ShaderLoadError {
+        ShaderLoadError::Asset(AssetError::ContentLoad(format!("{:?}", err)))
+    }
+}
+
 pub enum Shader {
     Pending(LoadListeners),
     Compiled(ShaderType, wgpu::ShaderModule),
-    Error(String),
+    Error,
     None,
 }
 
@@ -93,20 +131,20 @@ impl Shader {
         load_response: ShaderLoadResponse,
     ) -> Option<String> {
         *self = match (std::mem::replace(self, Shader::None), load_response) {
-            (Shader::Pending(listeners), ShaderLoadResponse::Error(err)) => {
-                log::debug!("Shader compilation failed [{:?}]: {:?}", load_context, err);
+            (Shader::Pending(listeners), Err(err)) => {
+                log::debug!("Shader[{:?}] compilation failed: {:?}", load_context, err);
                 listeners.notify_all();
-                Shader::Error(err)
+                Shader::Error
             }
 
-            (Shader::Pending(listeners), ShaderLoadResponse::Spirv(ty, spirv)) => {
-                log::debug!("Shader compilation completed for [{:?}]", load_context);
+            (Shader::Pending(listeners), Ok((ty, spirv))) => {
+                log::debug!("Shader[{:?}] compilation completed", load_context);
                 listeners.notify_all();
                 Shader::Compiled(ty, context.device().create_shader_module(&spirv))
             }
 
             (Shader::Compiled(_, _), _) => unreachable!(),
-            (Shader::Error(_), _) => unreachable!(),
+            (Shader::Error, _) => unreachable!(),
             (Shader::None, _) => unreachable!(),
         };
         None
@@ -126,74 +164,45 @@ impl FromKey for Shader {
 }
 
 pub type ShaderLoadRequest = String;
-
-pub enum ShaderLoadResponse {
-    Spirv(ShaderType, Vec<u32>),
-    Error(String),
-}
+pub type ShaderLoadResponse = Result<(ShaderType, Vec<u32>), ShaderLoadError>;
 
 pub struct ShaderLoader {
     base_url: Url,
 }
 
 impl ShaderLoader {
-    pub fn new(base_url: &str) -> Result<ShaderLoader, GameError> {
-        let base_url = Url::parse(base_url)
-            .map_err(|err| GameError::Config(format!("Failed to parse base url for shaders: {:?}", err)))?;
-
-        Ok(ShaderLoader { base_url })
+    pub fn new(base_url: Url) -> ShaderLoader {
+        ShaderLoader { base_url }
     }
 
     async fn load_from_url(
         &mut self,
         cancellation_token: CancellationToken<Shader>,
         source_id: String,
-    ) -> Option<ShaderLoadResponse> {
+    ) -> ShaderLoadResponse {
         if cancellation_token.is_canceled() {
-            return None;
+            return Err(ShaderLoadError::Canceled);
         }
 
-        let url = match self.base_url.join(&source_id) {
-            Err(err) => {
-                let err = format!("Invalid shader url ({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(ShaderLoadResponse::Error(err));
-            }
-            Ok(url) => url,
-        };
+        let url = self.base_url.join(&source_id)?;
+        let ty = ShaderType::from_str(url.extension())?;
 
-        log::debug!("Shader loading: [{}]", url.as_str());
-        let ty = match url.extension() {
-            "fs_spv" => ShaderType::Fragment,
-            "vs_spv" => ShaderType::Vertex,
-            "cs_spv" => ShaderType::Compute,
-            ext => {
-                let err = format!("Unknown shader type ({})", ext);
-                log::warn!("{}", err);
-                return Some(ShaderLoadResponse::Error(err));
-            }
-        };
+        log::debug!("[{}] Loading shader...", url.as_str());
+        let data = assets::download_binary(&url).await?;
+        let spirv = wgpu::read_spirv(Cursor::new(&data[..]))?;
 
-        let data = match utils::assets::download_binary(&url).await {
-            Err(err) => {
-                let err = format!("Failed to get shader({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(ShaderLoadResponse::Error(err));
-            }
-            Ok(data) => data,
-        };
+        Ok((ty, spirv))
+    }
 
-        use std::io::Cursor;
-        let spirv = match wgpu::read_spirv(Cursor::new(&data[..])) {
-            Err(err) => {
-                let err = format!("Failed to read spirv ({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(ShaderLoadResponse::Error(err));
-            }
-            Ok(spirv) => spirv,
-        };
-
-        Some(ShaderLoadResponse::Spirv(ty, spirv))
+    async fn try_load_from_url(
+        &mut self,
+        cancellation_token: CancellationToken<Shader>,
+        source_id: String,
+    ) -> Option<ShaderLoadResponse> {
+        match self.load_from_url(cancellation_token, source_id).await {
+            Err(ShaderLoadError::Canceled) => None,
+            result => Some(result),
+        }
     }
 }
 
@@ -203,7 +212,7 @@ impl DataLoader<Shader> for ShaderLoader {
         source_id: String,
         cancellation_token: CancellationToken<Shader>,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<ShaderLoadResponse>>>> {
-        Box::pin(self.load_from_url(cancellation_token, source_id))
+        Box::pin(self.try_load_from_url(cancellation_token, source_id))
     }
 }
 

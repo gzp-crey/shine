@@ -1,20 +1,21 @@
 use std::path::PathBuf;
-
-pub use url::{ParseError, Position};
+pub use url::ParseError as UrlError;
+pub use url::Position;
 
 ///A wrapper around url as it has some strange sematics due to the web sepcification.
+#[derive(Clone)]
 pub struct Url {
     inner: url::Url,
 }
 
 impl Url {
-    pub fn parse(input: &str) -> Result<Self, ParseError> {
+    pub fn parse(input: &str) -> Result<Self, UrlError> {
         Ok(Url {
             inner: url::Url::parse(input)?,
         })
     }
 
-    pub fn from_base_or_current(base: &Url, current: &Url, input: &str) -> Result<Self, ParseError> {
+    pub fn from_base_or_current(base: &Url, current: &Url, input: &str) -> Result<Self, UrlError> {
         if input.starts_with('/') {
             // input is relative to the base
             base.join(input)
@@ -24,7 +25,7 @@ impl Url {
         }
     }
 
-    pub fn to_folder(&self) -> Result<Url, ParseError> {
+    pub fn to_folder(&self) -> Result<Url, UrlError> {
         let path = &self.inner[url::Position::BeforeHost..url::Position::AfterPath];
         let mut parts = path.rsplitn(2, '/');
         let first = parts.next();
@@ -68,7 +69,7 @@ impl Url {
         second.and(first).unwrap_or("")
     }
 
-    pub fn set_extension(&self, ext: &str) -> Result<Url, ParseError> {
+    pub fn set_extension(&self, ext: &str) -> Result<Url, UrlError> {
         let path = &self.inner[url::Position::BeforeHost..url::Position::AfterPath];
         let mut parts = path.rsplitn(2, '.');
         let first = parts.next();
@@ -84,7 +85,7 @@ impl Url {
         ))
     }
 
-    pub fn join(&self, path: &str) -> Result<Url, ParseError> {
+    pub fn join(&self, path: &str) -> Result<Url, UrlError> {
         Url::parse(&format!(
             "{}{}{}",
             &self.inner[..url::Position::AfterPath],

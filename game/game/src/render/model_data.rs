@@ -2,12 +2,14 @@ use crate::render::{IndexData, VertexData};
 
 pub const MAX_LOD_COUNT: usize = 4;
 
+/// Compiled mesh data ready for rendering
 pub struct MeshBuffer {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: Option<wgpu::Buffer>,
     pub lod: [(usize, usize); MAX_LOD_COUNT],
 }
 
+/// Deserialized mesh data
 pub struct MeshData {
     pub vertices: VertexData,
     pub indices: Option<IndexData>,
@@ -43,10 +45,12 @@ impl MeshData {
     }
 }
 
+/// Compiled model ready for rendering
 pub struct ModelBuffer {
     pub meshes: Vec<MeshBuffer>,
 }
 
+/// Deserialized model data
 pub struct ModelData {
     pub meshes: Vec<MeshData>,
 }

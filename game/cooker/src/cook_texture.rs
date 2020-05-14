@@ -2,7 +2,7 @@ use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageErro
 use shine_game::render::{TextureDescriptor, TextureImage, TextureImageEncoding};
 use shine_game::utils::{
     assets,
-    url::{self, Url},
+    url::{Url, UrlError},
 };
 use std::{error, fmt};
 use tokio::task;
@@ -48,8 +48,8 @@ impl From<bincode::Error> for Error {
     }
 }
 
-impl From<url::ParseError> for Error {
-    fn from(err: url::ParseError) -> Error {
+impl From<UrlError> for Error {
+    fn from(err: UrlError) -> Error {
         Error::Asset(assets::AssetError::InvalidUrl(err))
     }
 }
@@ -99,7 +99,7 @@ pub async fn cook_texture(_source_base: &Url, target_base: &Url, texture_url: &U
     let mut descriptor = load_descriptor(&texture_url.set_extension("tex")?).await?;
 
     if descriptor.size != (0, 0) {
-        let (w,h) = descriptor.size;
+        let (w, h) = descriptor.size;
         log::trace!("[{}] Resizing texture to ({},{})...", texture_url.as_str(), w, h);
         image = task::spawn_blocking(move || image.resize_exact(w, h, FilterType::CatmullRom)).await?;
     } else {

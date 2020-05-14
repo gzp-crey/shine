@@ -1,3 +1,4 @@
+use crate::utils::url::Url;
 use crate::{Config, GameError};
 use shine_ecs::core::store::{Data, DataLoader, Store};
 use shine_ecs::legion::systems::resource::Resources;
@@ -56,9 +57,13 @@ pub async fn add_render_system(
     resources.insert(Context::new(wgpu_instance, config).await?);
     resources.insert(Frame::new());
 
-    register_store(ShaderLoader::new(&config.asset_base)?, 16, resources);
-    register_store(PipelineLoader::new(&config.asset_base)?, 16, resources);
-    register_store(ModelLoader::new(&config.asset_base)?, 16, resources);
+    let base_url = Url::parse(&config.asset_base)
+        .map_err(|err| GameError::Config(format!("Failed to parse base url for assets: {:?}", err)))?;
+
+    register_store(ShaderLoader::new(base_url.clone()), 16, resources);
+    register_store(PipelineLoader::new(base_url.clone()), 16, resources);
+    register_store(ModelLoader::new(base_url.clone()), 16, resources);
+    register_store(TextureLoader::new(&config.asset_base)?, 16, resources);
 
     Ok(())
 }
@@ -67,4 +72,5 @@ pub mod systems {
     pub use super::model::systems::*;
     pub use super::pipeline::systems::*;
     pub use super::shader::systems::*;
+    pub use super::texture::systems::*;
 }

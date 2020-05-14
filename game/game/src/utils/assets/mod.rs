@@ -1,13 +1,15 @@
-use crate::utils::url;
+use crate::utils::url::UrlError;
 use std::{error, fmt};
 
 #[derive(Debug)]
 pub enum AssetError {
     UnsupportedScheme(String),
-    InvalidUrl(url::ParseError),
+    InvalidUrl(UrlError),
+    UnsupportedFormat(String),
     AssetProvider(String),
     ContentLoad(String),
     ContentSave(String),
+    Content(String),
     TODO,
 }
 
@@ -16,9 +18,11 @@ impl fmt::Display for AssetError {
         match self {
             AssetError::UnsupportedScheme(scheme) => write!(f, "Unsupported scheme error: {}", scheme),
             AssetError::InvalidUrl(err) => write!(f, "Mallformed url: {}", err),
+            AssetError::UnsupportedFormat(ext) => write!(f, "Unsupported input format: {}", ext),
             AssetError::AssetProvider(err) => write!(f, "Asset source error: {}", err),
             AssetError::ContentLoad(err) => write!(f, "Asset loading error: {}", err),
             AssetError::ContentSave(err) => write!(f, "Asset saving error: {}", err),
+            AssetError::Content(err) => write!(f, "Error in content: {}", err),
             AssetError::TODO => write!(f, "Not implemented"),
         }
     }
@@ -26,8 +30,8 @@ impl fmt::Display for AssetError {
 
 impl error::Error for AssetError {}
 
-impl From<url::ParseError> for AssetError {
-    fn from(err: url::ParseError) -> AssetError {
+impl From<UrlError> for AssetError {
+    fn from(err: UrlError) -> AssetError {
         AssetError::InvalidUrl(err)
     }
 }

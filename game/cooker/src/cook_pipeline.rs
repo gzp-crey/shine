@@ -2,7 +2,7 @@ use crate::cook_shader;
 use shine_game::render::PipelineDescriptor;
 use shine_game::utils::{
     assets,
-    url::{self, Url},
+    url::{Url, UrlError},
 };
 use std::{error, fmt};
 
@@ -45,8 +45,8 @@ impl From<bincode::Error> for Error {
     }
 }
 
-impl From<url::ParseError> for Error {
-    fn from(err: url::ParseError) -> Error {
+impl From<UrlError> for Error {
+    fn from(err: UrlError) -> Error {
         Error::Asset(assets::AssetError::InvalidUrl(err))
     }
 }

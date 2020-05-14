@@ -1,10 +1,10 @@
-use crate::utils::url::Url;
 use crate::{
     render::{
         Context, IntoVertexTypeId, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType,
         VertexBufferLayout, VertexTypeId,
     },
-    utils, wgpu, GameError,
+    utils::assets::{self, AssetError},
+    utils::url::{Url, UrlError},
 };
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
@@ -13,6 +13,32 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 
+/// Error during pipeline loading
+#[derive(Debug)]
+pub enum PipelineLoadError {
+    Asset(AssetError),
+    Canceled,
+}
+
+impl From<UrlError> for PipelineLoadError {
+    fn from(err: UrlError) -> PipelineLoadError {
+        PipelineLoadError::Asset(AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<AssetError> for PipelineLoadError {
+    fn from(err: AssetError) -> PipelineLoadError {
+        PipelineLoadError::Asset(err)
+    }
+}
+
+impl From<bincode::Error> for PipelineLoadError {
+    fn from(err: bincode::Error) -> PipelineLoadError {
+        PipelineLoadError::Asset(AssetError::ContentLoad(format!("Binary stream error: {}", err)))
+    }
+}
+
+/// Pipeline dependencies required for compilation
 pub struct Dependecy {
     descriptor: Box<PipelineDescriptor>,
     vertex_layouts: Vec<VertexBufferLayout>,
@@ -32,14 +58,14 @@ impl Dependecy {
             &descriptor.vertex_stage.shader,
             ShaderType::Vertex,
             load_context,
-            PipelineLoadResponse::ShaderReady(ShaderType::Vertex),
+            Ok(PipelineLoadData::ShaderReady(ShaderType::Vertex)),
         );
         let fragment_shader = ShaderDependency::new(
             shaders,
             &descriptor.fragment_stage.shader,
             ShaderType::Fragment,
             load_context,
-            PipelineLoadResponse::ShaderReady(ShaderType::Fragment),
+            Ok(PipelineLoadData::ShaderReady(ShaderType::Fragment)),
         );
 
         Dependecy {
@@ -72,16 +98,18 @@ impl Dependecy {
         listeners: LoadListeners,
     ) -> Pipeline {
         match (&self.vertex_shader, &self.fragment_shader) {
-            (ShaderDependency::Failed(err), _) => {
+            (ShaderDependency::Failed, _) => {
                 listeners.notify_all();
-                Pipeline::Error(format!("Vertex shader error: {}", err))
+                Pipeline::Error
             }
-            (_, ShaderDependency::Failed(err)) => {
+            (_, ShaderDependency::Failed) => {
                 listeners.notify_all();
-                Pipeline::Error(format!("Fragment shader error: {}", err))
+                Pipeline::Error
             }
+
             (ShaderDependency::Pending(_, _), _) => Pipeline::WaitingDependency(self, listeners),
             (_, ShaderDependency::Pending(_, _)) => Pipeline::WaitingDependency(self, listeners),
+
             (ShaderDependency::Completed(vs), ShaderDependency::Completed(fs)) => {
                 log::debug!("Pipeline compilation completed [{:?}]", load_context);
                 listeners.notify_all();
@@ -89,7 +117,7 @@ impl Dependecy {
                 let fs = shaders.at(&fs).shadere_module().unwrap();
                 match self.descriptor.compile(context, &self.vertex_layouts, (vs, fs)) {
                     Ok(pipeline) => Pipeline::Compiled(pipeline),
-                    Err(err) => Pipeline::Error(err),
+                    Err(_) => Pipeline::Error,
                 }
             }
         }
@@ -100,7 +128,7 @@ pub enum Pipeline {
     Pending(LoadListeners),
     WaitingDependency(Dependecy, LoadListeners),
     Compiled(wgpu::RenderPipeline),
-    Error(String),
+    Error,
     None,
 }
 
@@ -131,29 +159,29 @@ impl Pipeline {
         load_response: PipelineLoadResponse,
     ) -> Option<PipelineKey> {
         *self = match (std::mem::replace(self, Pipeline::None), load_response) {
-            (Pipeline::Pending(listeners), PipelineLoadResponse::Error(err)) => {
-                log::debug!("Pipeline compilation failed [{:?}]: {}", load_context, err);
+            (Pipeline::Pending(listeners), Err(err)) => {
+                log::debug!("Pipeline compilation failed [{:?}]: {:?}", load_context, err);
                 listeners.notify_all();
-                Pipeline::Error(err)
+                Pipeline::Error
             }
 
-            (Pipeline::Pending(listeners), PipelineLoadResponse::Descriptor(descriptor, vertex_layouts)) => {
+            (Pipeline::Pending(listeners), Ok(PipelineLoadData::Descriptor(descriptor, vertex_layouts))) => {
                 let dependency = Dependecy::from_descriptor(&load_context, descriptor, vertex_layouts, shaders);
                 dependency.into_pipeline(&load_context, context, shaders, listeners)
             }
 
-            (Pipeline::WaitingDependency(dependency, listeners), PipelineLoadResponse::ShaderReady(shader_type)) => {
+            (Pipeline::WaitingDependency(dependency, listeners), Ok(PipelineLoadData::ShaderReady(shader_type))) => {
                 dependency
                     .with_updated_shader_dependency(shader_type, shaders)
                     .into_pipeline(&load_context, context, shaders, listeners)
             }
 
-            (err @ Pipeline::Error(_), PipelineLoadResponse::ShaderReady(_)) => err,
+            (Pipeline::Error, Ok(PipelineLoadData::ShaderReady(_))) => Pipeline::Error,
 
             (Pipeline::WaitingDependency(_, _), _) => unreachable!(),
             (Pipeline::Pending(_), _) => unreachable!(),
             (Pipeline::Compiled(_), _) => unreachable!(),
-            (Pipeline::Error(_), _) => unreachable!(),
+            (Pipeline::Error, _) => unreachable!(),
             (Pipeline::None, _) => unreachable!(),
         };
 
@@ -194,77 +222,56 @@ impl FromKey for Pipeline {
     }
 }
 
-pub type PipelineLoadRequest = PipelineKey;
-
-pub enum PipelineLoadResponse {
-    Error(String),
+pub enum PipelineLoadData {
     Descriptor(Box<PipelineDescriptor>, Vec<VertexBufferLayout>),
     ShaderReady(ShaderType),
 }
+
+pub type PipelineLoadRequest = PipelineKey;
+pub type PipelineLoadResponse = Result<PipelineLoadData, PipelineLoadError>;
 
 pub struct PipelineLoader {
     base_url: Url,
 }
 
 impl PipelineLoader {
-    pub fn new(base_url: &str) -> Result<PipelineLoader, GameError> {
-        let base_url = Url::parse(base_url)
-            .map_err(|err| GameError::Config(format!("Failed to parse base url for pipeline: {:?}", err)))?;
-
-        Ok(PipelineLoader { base_url })
+    pub fn new(base_url: Url) -> PipelineLoader {
+        PipelineLoader { base_url }
     }
 
     async fn load_from_url(
         &mut self,
         cancellation_token: CancellationToken<Pipeline>,
         pipeline_key: PipelineKey,
-    ) -> Option<PipelineLoadResponse> {
+    ) -> PipelineLoadResponse {
         if cancellation_token.is_canceled() {
-            return None;
+            return Err(PipelineLoadError::Canceled);
         }
 
         let source_id = &pipeline_key.name;
+        let url = self.base_url.join(&source_id)?;
+        log::debug!("[{}] Loading pipeline...", url.as_str());
+
         let vertex_layouts = pipeline_key.vertex_type.to_layout();
         log::trace!("Vertex attributes: {:#?}", vertex_layouts);
 
-        let url = match self.base_url.join(&source_id) {
-            Err(err) => {
-                let err = format!("Invalid pipeline url ({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(PipelineLoadResponse::Error(err));
-            }
-            Ok(url) => url,
-        };
-
-        let data = match utils::assets::download_binary(&url).await {
-            Err(err) => {
-                let err = format!("Failed to get pipeline({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(PipelineLoadResponse::Error(err));
-            }
-            Ok(data) => data,
-        };
-
-        let descriptor: PipelineDescriptor = match bincode::deserialize(&data) {
-            Err(err) => {
-                let err = format!("Failed to parse pipeline({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(PipelineLoadResponse::Error(err));
-            }
-            Ok(descriptor) => descriptor,
-        };
+        let data = assets::download_binary(&url).await?;
+        let descriptor = bincode::deserialize::<PipelineDescriptor>(&data)?;
         log::trace!("pipeline [{}]: {:#?}", source_id, descriptor);
 
-        if let Err(err) = descriptor.vertex_stage.check_vertex_layouts(&vertex_layouts) {
-            let err = format!(
-                "Pipeline and vertex layouts are not compatible [{}]: {:?}",
-                source_id, err
-            );
-            log::warn!("{}", err);
-            return Some(PipelineLoadResponse::Error(err));
-        }
+        descriptor.vertex_stage.check_vertex_layouts(&vertex_layouts)?;
+        Ok(PipelineLoadData::Descriptor(Box::new(descriptor), vertex_layouts))
+    }
 
-        Some(PipelineLoadResponse::Descriptor(Box::new(descriptor), vertex_layouts))
+    async fn try_load_from_url(
+        &mut self,
+        cancellation_token: CancellationToken<Pipeline>,
+        pipeline_key: PipelineKey,
+    ) -> Option<PipelineLoadResponse> {
+        match self.load_from_url(cancellation_token, pipeline_key).await {
+            Err(PipelineLoadError::Canceled) => None,
+            result => Some(result),
+        }
     }
 }
 
@@ -274,7 +281,7 @@ impl DataLoader<Pipeline> for PipelineLoader {
         pipeline_key: PipelineKey,
         cancellation_token: CancellationToken<Pipeline>,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<PipelineLoadResponse>>>> {
-        Box::pin(self.load_from_url(cancellation_token, pipeline_key))
+        Box::pin(self.try_load_from_url(cancellation_token, pipeline_key))
     }
 }
 
