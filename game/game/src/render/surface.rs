@@ -1,5 +1,3 @@
-use crate::wgpu;
-
 /// Thread local rendering surface.
 pub struct Surface {
     surface: wgpu::Surface,

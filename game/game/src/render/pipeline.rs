@@ -1,17 +1,14 @@
-use crate::{
-    render::{
-        Context, IntoVertexTypeId, PipelineDescriptor, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType,
-        VertexBufferLayout, VertexTypeId,
-    },
-    utils::assets::{self, AssetError},
-    utils::url::{Url, UrlError},
+use crate::assets::{
+    AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, Url, UrlError, VertexBufferLayout, VertexTypeId,
 };
+use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType};
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
+use std::sync::Arc;
 
 /// Error during pipeline loading
 #[derive(Debug)]
@@ -115,7 +112,12 @@ impl Dependecy {
                 listeners.notify_all();
                 let vs = shaders.at(&vs).shadere_module().unwrap();
                 let fs = shaders.at(&fs).shadere_module().unwrap();
-                match self.descriptor.compile(context, &self.vertex_layouts, (vs, fs)) {
+                match self.descriptor.compile(
+                    context.device(),
+                    context.swap_chain_format(),
+                    &self.vertex_layouts,
+                    (vs, fs),
+                ) {
                     Ok(pipeline) => Pipeline::Compiled(pipeline),
                     Err(_) => Pipeline::Error,
                 }
@@ -232,11 +234,12 @@ pub type PipelineLoadResponse = Result<PipelineLoadData, PipelineLoadError>;
 
 pub struct PipelineLoader {
     base_url: Url,
+    assetio: Arc<AssetIO>,
 }
 
 impl PipelineLoader {
-    pub fn new(base_url: Url) -> PipelineLoader {
-        PipelineLoader { base_url }
+    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> PipelineLoader {
+        PipelineLoader { base_url, assetio }
     }
 
     async fn load_from_url(
@@ -255,7 +258,7 @@ impl PipelineLoader {
         let vertex_layouts = pipeline_key.vertex_type.to_layout();
         log::trace!("Vertex attributes: {:#?}", vertex_layouts);
 
-        let data = assets::download_binary(&url).await?;
+        let data = self.assetio.download_binary(&url).await?;
         let descriptor = bincode::deserialize::<PipelineDescriptor>(&data)?;
         log::trace!("pipeline [{}]: {:#?}", source_id, descriptor);
 

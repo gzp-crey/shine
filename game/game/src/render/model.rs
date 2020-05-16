@@ -1,12 +1,10 @@
-use crate::{
-    render::{gltf, Context, ModelBuffer, ModelData, PipelineStore, PipelineStoreRead},
-    utils::assets::AssetError,
-    utils::url::{Url, UrlError},
-};
+use crate::assets::{gltf, AssetError, AssetIO, ModelBuffer, ModelData, Url, UrlError};
+use crate::render::{Context, PipelineStore, PipelineStoreRead};
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
 use std::pin::Pin;
+use std::sync::Arc;
 
 /// Error during model loading.
 #[derive(Debug)]
@@ -88,11 +86,12 @@ pub type ModelLoadResponse = Result<ModelData, ModelLoadError>;
 
 pub struct ModelLoader {
     base_url: Url,
+    assetio: Arc<AssetIO>,
 }
 
 impl ModelLoader {
-    pub fn new(base_url: Url) -> ModelLoader {
-        ModelLoader { base_url }
+    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> ModelLoader {
+        ModelLoader { base_url, assetio }
     }
 
     async fn load_from_url(
@@ -106,7 +105,7 @@ impl ModelLoader {
         let url = self.base_url.join(&source_id)?;
         log::debug!("[{}] Loading model...", url.as_str());
         match url.extension() {
-            "gltf" | "glb" => Ok(gltf::load_from_url(&url).await?),
+            "gltf" | "glb" => Ok(gltf::load_from_url(&self.assetio, &url).await?),
             ext => Err(ModelLoadError::Asset(AssetError::UnsupportedFormat(ext.to_owned()))),
         }
     }

@@ -139,7 +139,7 @@
                 "-p",
                 "shine-cooker",
                 "--",
-                "config_local_cooker.json"
+                "secret.config_cooker.json"
             ],
             "options": {
                 "env": {

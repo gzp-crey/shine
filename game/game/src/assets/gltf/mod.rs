@@ -1,6 +1,4 @@
-use crate::render::{vertex, IndexData, MeshData, ModelData, VertexData};
-use crate::utils::assets::{self, AssetError};
-use crate::utils::url::Url;
+use crate::assets::{vertex, AssetError, AssetIO, IndexData, MeshData, ModelData, Url, VertexData};
 use base64;
 use gltf::{accessor::Dimensions, buffer, Document, Gltf, Primitive, Semantic};
 use itertools::izip;
@@ -56,8 +54,8 @@ pub fn create_vertex_p3c4(buffers: &Vec<buffer::Data>, primitive: &Primitive<'_>
     VertexData::from_vec(vertices)
 }
 
-pub async fn load_from_url(url: &Url) -> Result<ModelData, AssetError> {
-    let data = assets::download_binary(&url).await?;
+pub async fn load_from_url(io: &AssetIO, url: &Url) -> Result<ModelData, AssetError> {
+    let data = io.download_binary(&url).await?;
     let Gltf { document, blob } =
         Gltf::from_slice(&data).map_err(|err| AssetError::ContentLoad(format!("Failed to parse gltf: {:?}", err)))?;
 

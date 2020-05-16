@@ -1,7 +1,5 @@
-use crate::render::{
-    vertex::{self, Pos3fCol4f},
-    Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead,
-};
+use crate::assets::vertex::{self, Pos3fCol4f};
+use crate::render::{Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead};
 use crate::GameError;
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -72,8 +70,8 @@ impl TestScene {
             let pipeline = pipelines.at(pipeline);
             //let pipeline = &pipelines[pipeline];
             if let Some(mut pipeline) = pipeline.bind(encoder, pass_descriptor) {
-                pipeline.set_vertex_buffer(0, &buffers.0, 0, 0);
-                pipeline.set_index_buffer(&buffers.1, 0, 0);
+                pipeline.set_vertex_buffer(0, buffers.0.slice(..));
+                pipeline.set_index_buffer(buffers.1.slice(..));
                 pipeline.draw_indexed(0..buffers.2, 0, 0..1);
             }
         }

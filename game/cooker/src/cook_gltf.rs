@@ -1,11 +1,11 @@
 use gltf::{binary, Document, Gltf};
-use shine_game::utils::{assets, url::Url};
+use shine_game::assets::{AssetError, AssetIO, Url};
 use std::borrow::Cow;
 use std::{error, fmt};
 
 #[derive(Debug)]
 pub enum Error {
-    Asset(assets::AssetError),
+    Asset(AssetError),
     Gltf(gltf::Error),
     Json(serde_json::Error),
 }
@@ -22,8 +22,8 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
-impl From<assets::AssetError> for Error {
-    fn from(err: assets::AssetError) -> Error {
+impl From<AssetError> for Error {
+    fn from(err: AssetError) -> Error {
         Error::Asset(err)
     }
 }
@@ -64,11 +64,11 @@ pub fn serialize_gltf(document: Document, mut blob: Option<Vec<u8>>) -> Result<V
     Ok(data)
 }
 
-pub async fn cook_gltf(_source_base: &Url, target_base: &Url, gltf_url: &Url) -> Result<String, Error> {
+pub async fn cook_gltf(io: &AssetIO, _source_base: &Url, target_base: &Url, gltf_url: &Url) -> Result<String, Error> {
     log::info!("[{}] Cooking...", gltf_url.as_str());
 
     log::trace!("[{}] Downloading...", gltf_url.as_str());
-    let data = assets::download_binary(&gltf_url).await?;
+    let data = io.download_binary(&gltf_url).await?;
     let Gltf { document, blob } = Gltf::from_slice(&data)?;
 
     // parse, cook external, referenced resources
@@ -77,7 +77,7 @@ pub async fn cook_gltf(_source_base: &Url, target_base: &Url, gltf_url: &Url) ->
     let cooked_gltf = serialize_gltf(document, blob)?;
 
     log::trace!("[{}] Uploading...", gltf_url.as_str());
-    let target_id = assets::upload_cooked_binary(&target_base, "glb", &cooked_gltf).await?;
+    let target_id = io.upload_cooked_binary(&target_base, "glb", &cooked_gltf).await?;
 
     Ok(target_id)
 }

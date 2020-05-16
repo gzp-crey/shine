@@ -1,7 +1,8 @@
-use crate::utils::url::Url;
+use crate::assets::{AssetIO, Url};
 use crate::{Config, GameError};
 use shine_ecs::core::store::{Data, DataLoader, Store};
 use shine_ecs::legion::systems::resource::Resources;
+use std::sync::Arc;
 
 mod surface;
 pub use self::surface::*;
@@ -9,19 +10,6 @@ mod context;
 pub use self::context::*;
 mod frame;
 pub use self::frame::*;
-
-mod pipeline_descriptor;
-pub use self::pipeline_descriptor::*;
-mod vertex_layout;
-pub use self::vertex_layout::*;
-mod vertex_data;
-pub use self::vertex_data::*;
-mod index_data;
-pub use self::index_data::*;
-mod model_data;
-pub use self::model_data::*;
-mod texture_descriptor;
-pub use self::texture_descriptor::*;
 
 mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderLoader, ShaderStore, ShaderStoreRead, ShaderType};
@@ -32,7 +20,6 @@ pub use self::model::{Model, ModelIndex, ModelLoader, ModelStore, ModelStoreRead
 mod texture;
 pub use self::texture::{Texture, TextureIndex, TextureLoader, TextureStore, TextureStoreRead};
 
-pub mod gltf;
 pub mod tech;
 
 fn register_store<D: Data, L: DataLoader<D>>(loader: L, store_page_size: usize, resources: &mut Resources) {
@@ -59,11 +46,13 @@ pub async fn add_render_system(
 
     let base_url = Url::parse(&config.asset_base)
         .map_err(|err| GameError::Config(format!("Failed to parse base url for assets: {:?}", err)))?;
+    let assetio =
+        Arc::new(AssetIO::new().map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?);
 
-    register_store(ShaderLoader::new(base_url.clone()), 16, resources);
-    register_store(PipelineLoader::new(base_url.clone()), 16, resources);
-    register_store(ModelLoader::new(base_url.clone()), 16, resources);
-    register_store(TextureLoader::new(&config.asset_base)?, 16, resources);
+    register_store(ShaderLoader::new(assetio.clone(), base_url.clone()), 16, resources);
+    register_store(PipelineLoader::new(assetio.clone(), base_url.clone()), 16, resources);
+    register_store(ModelLoader::new(assetio.clone(), base_url.clone()), 16, resources);
+    register_store(TextureLoader::new(assetio.clone(), base_url.clone()), 16, resources);
 
     Ok(())
 }

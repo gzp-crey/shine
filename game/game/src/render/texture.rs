@@ -1,17 +1,40 @@
-use crate::utils::{assets, url::Url};
-use crate::{
-    render::{Context, TextureBuffer, TextureImage},
-    GameError,
-};
+use crate::assets::{AssetError, AssetIO, TextureBuffer, TextureImage, Url, UrlError};
+use crate::render::Context;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
 use std::pin::Pin;
+use std::sync::Arc;
+
+/// Error during texture loading
+#[derive(Debug)]
+pub enum TextureLoadError {
+    Asset(AssetError),
+    Canceled,
+}
+
+impl From<UrlError> for TextureLoadError {
+    fn from(err: UrlError) -> TextureLoadError {
+        TextureLoadError::Asset(AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<AssetError> for TextureLoadError {
+    fn from(err: AssetError) -> TextureLoadError {
+        TextureLoadError::Asset(err)
+    }
+}
+
+impl From<bincode::Error> for TextureLoadError {
+    fn from(err: bincode::Error) -> TextureLoadError {
+        TextureLoadError::Asset(AssetError::ContentLoad(format!("Binary stream error: {}", err)))
+    }
+}
 
 pub enum Texture {
     Pending(LoadListeners),
     Compiled(TextureBuffer),
-    Error(String),
+    Error,
     None,
 }
 
@@ -31,20 +54,20 @@ impl Texture {
         load_response: TextureLoadResponse,
     ) -> Option<String> {
         *self = match (std::mem::replace(self, Texture::None), load_response) {
-            (Texture::Pending(listeners), TextureLoadResponse::Error(err)) => {
+            (Texture::Pending(listeners), Err(err)) => {
                 log::debug!("Texture compilation failed [{:?}]: {:?}", load_context, err);
                 listeners.notify_all();
-                Texture::Error(err)
+                Texture::Error
             }
 
-            (Texture::Pending(listeners), TextureLoadResponse::TextureImage(texture_image)) => {
+            (Texture::Pending(listeners), Ok(texture_image)) => {
                 log::debug!("Texture compilation completed for [{:?}]", load_context);
                 listeners.notify_all();
                 Texture::Compiled(texture_image.to_texture_buffer(context.device()))
             }
 
             (Texture::Compiled(_), _) => unreachable!(),
-            (Texture::Error(_), _) => unreachable!(),
+            (Texture::Error, _) => unreachable!(),
             (Texture::None, _) => unreachable!(),
         };
         None
@@ -64,63 +87,46 @@ impl FromKey for Texture {
 }
 
 pub type TextureLoadRequest = String;
-
-pub enum TextureLoadResponse {
-    TextureImage(TextureImage),
-    Error(String),
-}
+pub type TextureLoadResponse = Result<TextureImage, TextureLoadError>;
 
 pub struct TextureLoader {
     base_url: Url,
+    assetio: Arc<AssetIO>,
 }
 
 impl TextureLoader {
-    pub fn new(base_url: &str) -> Result<TextureLoader, GameError> {
-        let base_url = Url::parse(base_url)
-            .map_err(|err| GameError::Config(format!("Failed to parse base url for texture: {:?}", err)))?;
-
-        Ok(TextureLoader { base_url })
+    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> TextureLoader {
+        TextureLoader { base_url, assetio }
     }
 
     async fn load_from_url(
         &mut self,
         cancellation_token: CancellationToken<Texture>,
         source_id: String,
-    ) -> Option<TextureLoadResponse> {
+    ) -> TextureLoadResponse {
         if cancellation_token.is_canceled() {
-            return None;
+            return Err(TextureLoadError::Canceled);
         }
 
-        let url = match self.base_url.join(&source_id) {
-            Err(err) => {
-                let err = format!("Invalid texture url ({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(TextureLoadResponse::Error(err));
-            }
-            Ok(url) => url,
-        };
+        let url = self.base_url.join(&source_id)?;
 
-        log::debug!("Texture loading: [{}]", url.as_str());
-        let data = match assets::download_binary(&url).await {
-            Err(err) => {
-                let err = format!("Failed to get texture({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(TextureLoadResponse::Error(err));
-            }
-            Ok(data) => data,
-        };
+        log::debug!("[{}] Loading texture...", url.as_str());
+        let data = self.assetio.download_binary(&url).await?;
 
-        let texture_image = match bincode::deserialize::<TextureImage>(&data) {
-            Err(err) => {
-                let err = format!("Failed to parse texture({}): {:?}", source_id, err);
-                log::warn!("{}", err);
-                return Some(TextureLoadResponse::Error(err));
-            }
-            Ok(texture_image) => texture_image,
-        };
+        log::debug!("[{}] Decompressiong texture...", url.as_str());
+        let texture_image = bincode::deserialize::<TextureImage>(&data)?.decompress();
+        Ok(texture_image)
+    }
 
-        let texture_image = texture_image.decompress();
-        Some(TextureLoadResponse::TextureImage(texture_image))
+    async fn try_load_from_url(
+        &mut self,
+        cancellation_token: CancellationToken<Texture>,
+        source_id: String,
+    ) -> Option<TextureLoadResponse> {
+        match self.load_from_url(cancellation_token, source_id).await {
+            Err(TextureLoadError::Canceled) => None,
+            result => Some(result),
+        }
     }
 }
 
@@ -130,7 +136,7 @@ impl DataLoader<Texture> for TextureLoader {
         source_id: String,
         cancellation_token: CancellationToken<Texture>,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<TextureLoadResponse>>>> {
-        Box::pin(self.load_from_url(cancellation_token, source_id))
+        Box::pin(self.try_load_from_url(cancellation_token, source_id))
     }
 }
 

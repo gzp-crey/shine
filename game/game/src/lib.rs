@@ -1,14 +1,14 @@
 #![feature(async_closure)]
 
-mod error;
-pub use self::error::*;
-mod gamerender;
-pub use self::gamerender::*;
-mod config;
-pub use self::config::*;
-
+pub mod assets;
 pub mod input;
 pub mod render;
-pub mod utils;
+
+mod error;
+pub use self::error::*;
+mod config;
+pub use self::config::*;
+mod gamerender;
+pub use self::gamerender::*;
 
 pub use wgpu;

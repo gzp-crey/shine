@@ -11,13 +11,6 @@ pub struct Frame {
     buffers: Mutex<Vec<wgpu::CommandBuffer>>,
 }
 
-//https://github.com/gfx-rs/wgpu-rs/issues/287
-#[cfg(feature = "wasm")]
-mod wasm_hack {
-    unsafe impl Send for super::Frame {}
-    unsafe impl Sync for super::Frame {}
-}
-
 impl Frame {
     pub fn new() -> Frame {
         Frame {

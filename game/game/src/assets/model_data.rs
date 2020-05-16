@@ -1,4 +1,4 @@
-use crate::render::{IndexData, VertexData};
+use crate::assets::{IndexData, VertexData};
 
 pub const MAX_LOD_COUNT: usize = 4;
 

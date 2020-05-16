@@ -1,4 +1,4 @@
-use crate::utils::url::UrlError;
+use crate::assets::UrlError;
 use std::{error, fmt};
 
 #[derive(Debug)]
@@ -35,18 +35,3 @@ impl From<UrlError> for AssetError {
         AssetError::InvalidUrl(err)
     }
 }
-
-#[cfg(feature = "native")]
-mod tokio_assets;
-#[cfg(feature = "native")]
-pub use self::tokio_assets::*;
-
-#[cfg(feature = "wasm")]
-mod wasm_assets;
-#[cfg(feature = "wasm")]
-pub use self::wasm_assets::*;
-
-mod hashing;
-pub use hashing::*;
-mod utils;
-pub use utils::*;

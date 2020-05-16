@@ -35,14 +35,14 @@ itertools = "0.9"
 image = "0.23"
 
 # render
-wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "f64b2dd3bb9e11c1dfc0eb3be44fbaae81b18c7b", features = ["trace", "replay"] }
+wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "a7200bb8658e7b7bb972ee46a81f423209fb7659", features = ["trace", "replay"] }
 wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
 bytemuck = "1.2"
 gltf = "0.15"
 
 # native
 tokio = { version = "0.2", features = ["rt-core", "fs"], optional = true }
-reqwest = { version = "0.10", optional = true }
+reqwest = { version = "0.10", features = ["gzip"], optional = true }
 
 # wasm support
 wasm-bindgen = { version = "0.2", optional = true }

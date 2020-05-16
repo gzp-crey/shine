@@ -1,6 +1,7 @@
 #![feature(async_closure)]
 
-use shine_game::{render::Surface, wgpu, Config, GameRender};
+use shine_game::wgpu;
+use shine_game::{render::Surface, Config, GameRender};
 use tokio::runtime::Runtime;
 use winit::{
     event,

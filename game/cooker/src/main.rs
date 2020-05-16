@@ -1,4 +1,4 @@
-use shine_game::utils::url::Url;
+use shine_game::assets::{AssetIO, Url};
 use std::{error, fmt};
 use tokio::runtime::Runtime;
 
@@ -55,12 +55,12 @@ impl From<cook_texture::Error> for CookingError {
     }
 }
 
-async fn cook(source_base: &Url, target_base: &Url, url: &Url) -> Result<String, CookingError> {
+async fn cook(assetio: &AssetIO, source_base: &Url, target_base: &Url, url: &Url) -> Result<String, CookingError> {
     let hashed_file = match url.extension() {
-        "vs" | "fs" | "cs" => cook_shader::cook_shader(&source_base, &target_base, &url).await?,
-        "pl" => cook_pipeline::cook_pipeline(&source_base, &target_base, &url).await?,
-        "glb" | "gltf" => cook_gltf::cook_gltf(&source_base, &target_base, &url).await?,
-        "jpg" | "png" => cook_texture::cook_texture(&source_base, &target_base, &url).await?,
+        "vs" | "fs" | "cs" => cook_shader::cook_shader(assetio, &source_base, &target_base, &url).await?,
+        "pl" => cook_pipeline::cook_pipeline(assetio, &source_base, &target_base, &url).await?,
+        "glb" | "gltf" => cook_gltf::cook_gltf(assetio, &source_base, &target_base, &url).await?,
+        "jpg" | "png" => cook_texture::cook_texture(assetio, &source_base, &target_base, &url).await?,
         e => return Err(CookingError::Other(format!("Unknown asset type: {}", e))),
     };
 
@@ -73,15 +73,16 @@ async fn run(asset: String) {
     let asset_target_base = Url::parse(&config.asset_target_base).unwrap();
 
     let asset_url = asset_source_base.join(&asset).unwrap();
+    let assetio = AssetIO::new().unwrap();
 
-    match cook(&asset_source_base, &asset_target_base, &asset_url).await {
+    match cook(&assetio, &asset_source_base, &asset_target_base, &asset_url).await {
         Ok(hashed_id) => log::info!("Cooking of [{}] done: [{}]", asset, hashed_id),
         Err(err) => log::error!("Cooking of [{}] failed: {}", asset, err),
     };
 }
 
 fn main() {
-    shine_game::render::foo();
+    //shine_game::render::foo();
 
     let _ = env_logger::builder()
         .filter_level(log::LevelFilter::Trace)
@@ -91,10 +92,10 @@ fn main() {
     let mut rt = Runtime::new().unwrap();
 
     //let asset = "models/VertexColorTest.glb".to_owned();
-    //let asset = "pipelines/hello/hello.vs".to_owned();
+    let asset = "pipelines/hello/hello.vs".to_owned();
     //let asset = "pipelines/hello/hello.pl".to_owned();
     //let asset = "pipelines/hello2/hello.pl".to_owned();
-    let asset = "tex/checker.png".to_owned();
+    //let asset = "tex/checker.png".to_owned();
     rt.block_on(run(asset));
 }
 

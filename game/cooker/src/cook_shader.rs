@@ -1,9 +1,9 @@
-use shine_game::utils::{assets, url::Url};
+use shine_game::assets::{AssetError, AssetIO, Url};
 use std::{error, fmt};
 
 #[derive(Debug)]
 pub enum Error {
-    Asset(assets::AssetError),
+    Asset(AssetError),
     Json(serde_json::Error),
     UnknownShader(String),
     Compile(shaderc::Error),
@@ -22,8 +22,8 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
-impl From<assets::AssetError> for Error {
-    fn from(err: assets::AssetError) -> Error {
+impl From<AssetError> for Error {
+    fn from(err: AssetError) -> Error {
         Error::Asset(err)
     }
 }
@@ -40,11 +40,16 @@ impl From<shaderc::Error> for Error {
     }
 }
 
-pub async fn cook_shader(_source_base: &Url, target_base: &Url, shader_url: &Url) -> Result<String, Error> {
+pub async fn cook_shader(
+    io: &AssetIO,
+    _source_base: &Url,
+    target_base: &Url,
+    shader_url: &Url,
+) -> Result<String, Error> {
     log::trace!("[{}] Cooking...", shader_url.as_str());
 
     log::trace!("[{}] Downloading...", shader_url.as_str());
-    let shader_source = assets::download_string(&shader_url).await?;
+    let shader_source = io.download_string(&shader_url).await?;
 
     let ext = shader_url.extension();
     let ty = match ext {
@@ -62,7 +67,8 @@ pub async fn cook_shader(_source_base: &Url, target_base: &Url, shader_url: &Url
         compiler.compile_into_spirv(&shader_source, ty, shader_url.as_str(), "main", Some(&options))?;
 
     log::trace!("[{}] Uploading...", shader_url.as_str());
-    let target_id =
-        assets::upload_cooked_binary(&target_base, &format!("{}_spv", ext), compiled_artifact.as_binary_u8()).await?;
+    let target_id = io
+        .upload_cooked_binary(&target_base, &format!("{}_spv", ext), compiled_artifact.as_binary_u8())
+        .await?;
     Ok(target_id)
 }

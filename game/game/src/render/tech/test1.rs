@@ -1,4 +1,5 @@
-use crate::render::{vertex, Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead};
+use crate::assets::vertex;
+use crate::render::{Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead};
 use crate::GameError;
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},

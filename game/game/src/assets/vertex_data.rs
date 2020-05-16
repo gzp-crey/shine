@@ -1,4 +1,4 @@
-use crate::render::{Vertex, VertexBufferLayout};
+use crate::assets::{Vertex, VertexBufferLayout};
 
 pub struct VertexData {
     raw: Vec<u8>,

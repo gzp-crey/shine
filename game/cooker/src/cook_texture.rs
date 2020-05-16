@@ -1,15 +1,11 @@
 use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
-use shine_game::render::{TextureDescriptor, TextureImage, TextureImageEncoding};
-use shine_game::utils::{
-    assets,
-    url::{Url, UrlError},
-};
+use shine_game::assets::{AssetError, AssetIO, TextureDescriptor, TextureImage, TextureImageEncoding, Url, UrlError};
 use std::{error, fmt};
 use tokio::task;
 
 #[derive(Debug)]
 pub enum Error {
-    Asset(assets::AssetError),
+    Asset(AssetError),
     Json(serde_json::Error),
     Bincode(bincode::Error),
     Image(ImageError),
@@ -30,8 +26,8 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
-impl From<assets::AssetError> for Error {
-    fn from(err: assets::AssetError) -> Error {
+impl From<AssetError> for Error {
+    fn from(err: AssetError) -> Error {
         Error::Asset(err)
     }
 }
@@ -50,7 +46,7 @@ impl From<bincode::Error> for Error {
 
 impl From<UrlError> for Error {
     fn from(err: UrlError) -> Error {
-        Error::Asset(assets::AssetError::InvalidUrl(err))
+        Error::Asset(AssetError::InvalidUrl(err))
     }
 }
 
@@ -66,9 +62,9 @@ impl From<ImageError> for Error {
     }
 }
 
-pub async fn load_image(image_url: &Url) -> Result<DynamicImage, Error> {
+pub async fn load_image(io: &AssetIO, image_url: &Url) -> Result<DynamicImage, Error> {
     log::trace!("[{}] Downloading image...", image_url.as_str());
-    let data = assets::download_binary(&image_url).await?;
+    let data = io.download_binary(&image_url).await?;
 
     log::trace!("[{}] Docompressing image...", image_url.as_str());
     let image = task::spawn_blocking(move || image::load_from_memory(&data)).await??;
@@ -82,11 +78,11 @@ pub async fn load_image(image_url: &Url) -> Result<DynamicImage, Error> {
     Ok(image)
 }
 
-pub async fn load_descriptor(meta_url: &Url) -> Result<TextureDescriptor, Error> {
+pub async fn load_descriptor(io: &AssetIO, meta_url: &Url) -> Result<TextureDescriptor, Error> {
     log::trace!("[{}] Downloading descriptor...", meta_url.as_str());
-    match assets::download_string(&meta_url).await {
+    match io.download_string(&meta_url).await {
         Ok(data) => Ok(serde_json::from_str(&data)?),
-        Err(assets::AssetError::AssetProvider(_)) => {
+        Err(AssetError::AssetProvider(_)) => {
             log::warn!("[{}] Missing  texture descriptor", meta_url.as_str());
             Ok(TextureDescriptor::new())
         }
@@ -94,9 +90,14 @@ pub async fn load_descriptor(meta_url: &Url) -> Result<TextureDescriptor, Error>
     }
 }
 
-pub async fn cook_texture(_source_base: &Url, target_base: &Url, texture_url: &Url) -> Result<String, Error> {
-    let mut image = load_image(texture_url).await?;
-    let mut descriptor = load_descriptor(&texture_url.set_extension("tex")?).await?;
+pub async fn cook_texture(
+    io: &AssetIO,
+    _source_base: &Url,
+    target_base: &Url,
+    texture_url: &Url,
+) -> Result<String, Error> {
+    let mut image = load_image(io, texture_url).await?;
+    let mut descriptor = load_descriptor(io, &texture_url.set_extension("tex")?).await?;
 
     if descriptor.size != (0, 0) {
         let (w, h) = descriptor.size;
@@ -122,6 +123,6 @@ pub async fn cook_texture(_source_base: &Url, target_base: &Url, texture_url: &U
 
     log::trace!("[{}] Uploading...", texture_url.as_str());
     let cooked_texture = bincode::serialize(&TextureImage { descriptor, image })?;
-    let target_id = assets::upload_cooked_binary(&target_base, "tex", &cooked_texture).await?;
+    let target_id = io.upload_cooked_binary(&target_base, "tex", &cooked_texture).await?;
     Ok(target_id)
 }

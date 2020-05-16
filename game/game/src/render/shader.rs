@@ -1,14 +1,12 @@
-use crate::{
-    render::Context,
-    utils::assets::{self, AssetError},
-    utils::url::{Url, UrlError},
-};
+use crate::assets::{AssetError, AssetIO, Url, UrlError};
+use crate::render::Context;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
 use std::io::{self, Cursor};
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::Arc;
 
 /// Supported shader types
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -168,11 +166,12 @@ pub type ShaderLoadResponse = Result<(ShaderType, Vec<u32>), ShaderLoadError>;
 
 pub struct ShaderLoader {
     base_url: Url,
+    assetio: Arc<AssetIO>,
 }
 
 impl ShaderLoader {
-    pub fn new(base_url: Url) -> ShaderLoader {
-        ShaderLoader { base_url }
+    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> ShaderLoader {
+        ShaderLoader { base_url, assetio }
     }
 
     async fn load_from_url(
@@ -188,7 +187,7 @@ impl ShaderLoader {
         let ty = ShaderType::from_str(url.extension())?;
 
         log::debug!("[{}] Loading shader...", url.as_str());
-        let data = assets::download_binary(&url).await?;
+        let data = self.assetio.download_binary(&url).await?;
         let spirv = wgpu::read_spirv(Cursor::new(&data[..]))?;
 
         Ok((ty, spirv))

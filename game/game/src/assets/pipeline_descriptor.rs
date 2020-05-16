@@ -1,7 +1,4 @@
-use crate::{
-    render::{Context, VertexBufferLayout},
-    utils::assets::AssetError,
-};
+use crate::assets::{AssetError, VertexBufferLayout};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -145,12 +142,11 @@ pub struct PipelineDescriptor {
 impl PipelineDescriptor {
     pub fn compile(
         &self,
-        context: &Context,
+        device: &wgpu::Device,
+        color_state_format: wgpu::TextureFormat,
         vertex_layouts: &Vec<VertexBufferLayout>,
         (vs, fs): (&wgpu::ShaderModule, &wgpu::ShaderModule),
     ) -> Result<wgpu::RenderPipeline, AssetError> {
-        let device = context.device();
-
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[],
         });
@@ -187,7 +183,7 @@ impl PipelineDescriptor {
             rasterization_state: None,
 
             color_states: &[wgpu::ColorStateDescriptor {
-                format: context.swap_chain_format(),
+                format: color_state_format,
                 color_blend: wgpu::BlendDescriptor::REPLACE,
                 alpha_blend: wgpu::BlendDescriptor::REPLACE,
                 write_mask: wgpu::ColorWrite::ALL,

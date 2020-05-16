@@ -1,7 +1,5 @@
-#![cfg(feature = "wasm")]
-
-use crate::utils::assets::AssetError;
-use crate::utils::url::Url;
+use crate::assets::io::Url;
+use crate::assets::AssetError;
 use js_sys::Uint8Array;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;

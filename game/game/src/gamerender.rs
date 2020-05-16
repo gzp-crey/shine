@@ -106,7 +106,7 @@ impl GameRender {
         self.run_logic("update_render");
 
         self.start_frame(size)?;
-        self.run_logic("test2");
+        self.run_logic("test1");
         self.end_frame()
     }
 

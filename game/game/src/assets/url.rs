@@ -61,6 +61,10 @@ impl Url {
         self.inner.scheme()
     }
 
+    pub fn set_scheme(&self, scheme: &str) -> Result<Url, UrlError> {
+        Url::parse(&format!("{}{}", scheme, &self.inner[url::Position::AfterScheme..]))
+    }
+
     pub fn extension(&self) -> &str {
         let path = &self.inner[url::Position::BeforeHost..url::Position::AfterPath];
         let mut parts = path.rsplitn(2, '.');

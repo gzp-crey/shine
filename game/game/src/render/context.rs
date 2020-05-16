@@ -1,5 +1,4 @@
 use crate::render::{FrameOutput, Surface};
-use crate::wgpu;
 use crate::{Config, GameError};
 
 /// Thread safe rendering context.
@@ -9,13 +8,6 @@ pub struct Context {
     queue: wgpu::Queue,
     swap_chain_format: wgpu::TextureFormat,
     swap_chain: Option<(wgpu::SwapChain, wgpu::SwapChainDescriptor)>,
-}
-
-//https://github.com/gfx-rs/wgpu-rs/issues/287
-#[cfg(feature = "wasm")]
-mod wasm_hack {
-    unsafe impl Send for super::Context {}
-    unsafe impl Sync for super::Context {}
 }
 
 impl Context {
