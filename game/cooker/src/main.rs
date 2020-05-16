@@ -67,18 +67,19 @@ async fn cook(assetio: &AssetIO, source_base: &Url, target_base: &Url, url: &Url
     Ok(hashed_file)
 }
 
-async fn run(asset: String) {
+async fn run(assets: Vec<String>) {
     let config = config::Config::new().unwrap();
     let asset_source_base = Url::parse(&config.asset_source_base).unwrap();
     let asset_target_base = Url::parse(&config.asset_target_base).unwrap();
-
-    let asset_url = asset_source_base.join(&asset).unwrap();
     let assetio = AssetIO::new().unwrap();
 
-    match cook(&assetio, &asset_source_base, &asset_target_base, &asset_url).await {
-        Ok(hashed_id) => log::info!("Cooking of [{}] done: [{}]", asset, hashed_id),
-        Err(err) => log::error!("Cooking of [{}] failed: {}", asset, err),
-    };
+    for asset in &assets {
+        let asset_url = asset_source_base.join(&asset).unwrap();
+        match cook(&assetio, &asset_source_base, &asset_target_base, &asset_url).await {
+            Ok(hashed_id) => log::info!("Cooking of [{}] done: [{}]", asset, hashed_id),
+            Err(err) => log::error!("Cooking of [{}] failed: {}", asset, err),
+        };
+    }
 }
 
 fn main() {
@@ -91,12 +92,18 @@ fn main() {
         .try_init();
     let mut rt = Runtime::new().unwrap();
 
-    //let asset = "models/VertexColorTest.glb".to_owned();
-    let asset = "pipelines/hello/hello.vs".to_owned();
-    //let asset = "pipelines/hello/hello.pl".to_owned();
-    //let asset = "pipelines/hello2/hello.pl".to_owned();
-    //let asset = "tex/checker.png".to_owned();
-    rt.block_on(run(asset));
+    let assets: Vec<_> = [
+        "models/VertexColorTest.glb",
+        "pipelines/hello/hello.vs",
+        "pipelines/hello/hello.pl",
+        "pipelines/hello2/hello.pl",
+        "tex/checker.png",
+    ]
+    .iter()
+    .map(|&x| x.to_owned())
+    .collect();
+
+    rt.block_on(run(assets));
 }
 
 // todo: sqlite local DB

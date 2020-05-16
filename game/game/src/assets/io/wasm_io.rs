@@ -1,9 +1,47 @@
-use crate::assets::io::Url;
-use crate::assets::AssetError;
+use crate::assets::{Url, AssetError};
 use js_sys::Uint8Array;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
+
+pub struct AssetLowIO {
+}
+
+impl AssetLowIO {
+    pub fn new() -> Result<AssetLowIO, AssetError> {
+        Ok(AssetLowIO {})
+    }
+
+    pub async fn download_binary(&self, url: &Url) -> Result<Vec<u8>, AssetError> {
+        match url.scheme() {           
+            "http" | "https" => {
+                unimplemented!()
+            }
+            "blobs" => {
+                let url = url.set_scheme("https")?;
+                unimplemented!()
+            }
+            sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
+        }
+    }
+
+    pub async fn upload_binary(&self, url: &Url, data: &[u8]) -> Result<(), AssetError> {
+        match url.scheme() {            
+            "http" | "https" => {
+                unimplemented!()
+            }
+            "blobs" => {
+                let url = url.set_scheme("https")?;
+                unimplemented!()
+            }
+            sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
+        }
+    }
+}
+/*
+
+
+
 
 pub async fn get_response(url: &Url) -> Result<Response, AssetError> {
     let mut opts = RequestInit::new();
@@ -71,3 +109,4 @@ pub async fn upload_binary(url: &Url, data: &[u8]) -> Result<(), AssetError> {
 pub async fn upload_string(url: &Url, data: &str) -> Result<(), AssetError> {
     unimplemented!()
 }
+*/

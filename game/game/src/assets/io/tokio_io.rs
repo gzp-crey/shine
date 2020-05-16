@@ -55,7 +55,7 @@ impl AssetLowIO {
                     })
                     .map(|d| d.to_vec())
             }
-            "blob" => {
+            "blobs" => {
                 let url = url.set_scheme("https")?;
                 let response = self.client.get(url.as_str()).send().await?;
                 Self::check_response(response)
@@ -87,7 +87,7 @@ impl AssetLowIO {
                 let _ = Self::check_response(response).await?;
                 Ok(())
             }
-            "blob" => {
+            "blobs" => {
                 let url = url.set_scheme("https")?;
                 let response = self
                     .client
