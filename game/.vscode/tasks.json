@@ -50,7 +50,7 @@
                 "-p",
                 "shine-native",
                 "--",
-                "config_native_game.json"
+                "config_game.json"
             ],
             "options": {
                 "env": {

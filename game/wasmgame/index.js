@@ -1,9 +1,8 @@
 const canvas = document.getElementById('gameCanvas');
-const webgpu = canvas.getContext("gpupresent");
-const config = {
-    "asset_base" : "http://assets.shine.com:9100/assets/",
-    "swap_chain_format" : "Bgra8Unorm",
-};
+const webgpu = canvas.getContext('gpupresent');
+
+config = require('../config_game.json');
+config.swap_chain_format = "Bgra8Unorm";
 
 if (!webgpu) {
     alert('Failed to initialize WebGPU');
