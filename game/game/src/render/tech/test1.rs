@@ -74,8 +74,8 @@ fn render_test() -> Box<dyn Schedulable> {
                 };
 
                 //log::info!("render pass");
-                let mut render_pass = encoder.begin_render_pass(&pass_descriptor);
-                //scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
+                //let mut render_pass = encoder.begin_render_pass(&pass_descriptor);
+                scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
             }
 
             frame.add_command(encoder.finish());

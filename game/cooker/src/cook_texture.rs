@@ -1,5 +1,6 @@
 use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
 use shine_game::assets::{AssetError, AssetIO, TextureDescriptor, TextureImage, TextureImageEncoding, Url, UrlError};
+use shine_game::wgpu;
 use std::{error, fmt};
 use tokio::task;
 
@@ -106,6 +107,16 @@ pub async fn cook_texture(
     } else {
         descriptor.size = image.dimensions();
     }
+
+    log::trace!("[{}] Converting color space for texture format {:?}...", texture_url.as_str(), descriptor.format);
+    let format = descriptor.format;
+    image = task::spawn_blocking(move || match format {
+        wgpu::TextureFormat::Rgba8UnormSrgb => Ok(DynamicImage::ImageRgba8(image.into_rgba())),
+        wgpu::TextureFormat::Rgba8Unorm => Ok(DynamicImage::ImageRgba8(image.into_rgba())),
+        f => Err(AssetError::Content(format!("Unsupported texture format({:?}) ", f))),
+    }).await??;
+
+    //todo: reshape image the match format
     log::trace!("[{}] Texture descriptor:\n{:#?}", texture_url.as_str(), descriptor);
 
     log::trace!("[{}] Compressing texture...", texture_url.as_str());

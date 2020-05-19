@@ -97,10 +97,12 @@ impl Dependecy {
         match (&self.vertex_shader, &self.fragment_shader) {
             (ShaderDependency::Failed, _) => {
                 listeners.notify_all();
+                log::debug!("Pipeline[{:?}] compilation failed due to vertex shader", load_context);
                 Pipeline::Error
             }
             (_, ShaderDependency::Failed) => {
                 listeners.notify_all();
+                log::debug!("Pipeline[{:?}] compilation failed due to fragment shader", load_context);
                 Pipeline::Error
             }
 
@@ -108,7 +110,6 @@ impl Dependecy {
             (_, ShaderDependency::Pending(_, _)) => Pipeline::WaitingDependency(self, listeners),
 
             (ShaderDependency::Completed(vs), ShaderDependency::Completed(fs)) => {
-                log::debug!("Pipeline compilation completed [{:?}]", load_context);
                 listeners.notify_all();
                 let vs = shaders.at(&vs).shadere_module().unwrap();
                 let fs = shaders.at(&fs).shadere_module().unwrap();
@@ -118,8 +119,14 @@ impl Dependecy {
                     &self.vertex_layouts,
                     (vs, fs),
                 ) {
-                    Ok(pipeline) => Pipeline::Compiled(pipeline),
-                    Err(_) => Pipeline::Error,
+                    Ok(pipeline) => {
+                        log::debug!("Pipeline[{:?}] compilation completed", load_context);
+                        Pipeline::Compiled(pipeline)
+                    }
+                    Err(err) => {
+                        log::debug!("Pipeline[{:?}] compilation failed: {:?}", load_context, err);
+                        Pipeline::Error
+                    }
                 }
             }
         }

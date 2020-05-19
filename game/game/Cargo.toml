@@ -35,7 +35,7 @@ itertools = "0.9"
 image = "0.23"
 
 # render
-wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "a7200bb8658e7b7bb972ee46a81f423209fb7659", features = ["trace", "replay"] }
+wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "a203333c3e144cfd431c812213966ee32ae59d98", features = ["trace", "replay"] }
 wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
 bytemuck = "1.2"
 gltf = "0.15"

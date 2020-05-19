@@ -55,15 +55,24 @@ impl Texture {
     ) -> Option<String> {
         *self = match (std::mem::replace(self, Texture::None), load_response) {
             (Texture::Pending(listeners), Err(err)) => {
-                log::debug!("Texture compilation failed [{:?}]: {:?}", load_context, err);
                 listeners.notify_all();
+                log::debug!("Texture[{:?}] compilation failed: {:?}", load_context, err);
                 Texture::Error
             }
 
             (Texture::Pending(listeners), Ok(texture_image)) => {
-                log::debug!("Texture compilation completed for [{:?}]", load_context);
                 listeners.notify_all();
-                Texture::Compiled(texture_image.to_texture_buffer(context.device()))
+                match texture_image.to_texture_buffer(context.device()) {
+                    Ok((texture_buffer, init_command)) => {
+                        context.queue().submit(Some(init_command));
+                        log::debug!("Texture[{:?}] compilation completed", load_context);
+                        Texture::Compiled(texture_buffer)
+                    }
+                    Err(err) => {
+                        log::debug!("Texture[{:?}] compilation failed: {:?}", load_context, err);
+                        Texture::Error
+                    }
+                }
             }
 
             (Texture::Compiled(_), _) => unreachable!(),
@@ -114,7 +123,7 @@ impl TextureLoader {
         let data = self.assetio.download_binary(&url).await?;
 
         log::debug!("[{}] Decompressiong texture...", url.as_str());
-        let texture_image = bincode::deserialize::<TextureImage>(&data)?.decompress();
+        let texture_image = bincode::deserialize::<TextureImage>(&data)?.decompress()?;
         Ok(texture_image)
     }
 

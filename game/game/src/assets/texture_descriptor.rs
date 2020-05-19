@@ -1,3 +1,5 @@
+use crate::assets::AssetError;
+use image::ColorType;
 use serde::{Deserialize, Serialize};
 
 /// The encoding for the texture image
@@ -12,6 +14,7 @@ pub enum TextureImageEncoding {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TextureDescriptor {
     pub encoding: TextureImageEncoding,
+    pub format: wgpu::TextureFormat,
     pub size: (u32, u32),
 
     pub address_mode_u: wgpu::AddressMode,
@@ -29,6 +32,7 @@ impl TextureDescriptor {
     pub fn new() -> TextureDescriptor {
         TextureDescriptor {
             encoding: TextureImageEncoding::Png,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
             size: (0, 0),
 
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -57,11 +61,17 @@ impl TextureDescriptor {
             compare: self.compare,
         }
     }
+
+    pub fn get_upload_info(&self) -> (u32, u32) {
+        match self.format {
+            wgpu::TextureFormat::Rgba8UnormSrgb => (4 * self.size.0, self.size.1),
+            _ => unimplemented!(),
+        }
+    }
 }
 
 pub struct TextureBuffer {
     pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
 
@@ -72,80 +82,73 @@ pub struct TextureImage {
 }
 
 impl TextureImage {
-    pub fn decompress(mut self) -> TextureImage {
+    pub fn decompress(mut self) -> Result<TextureImage, AssetError> {
+        log::info!("Texture descriptor: {:#?}", self.descriptor);
         match self.descriptor.encoding {
             TextureImageEncoding::Png => {
                 let img = image::load_from_memory(&self.image).unwrap();
-                self.image = img.as_rgba8().unwrap().to_vec();
-                self
+                log::info!("color: {:?}", img.color());
+                self.image = match (img.color(), self.descriptor.format) {
+                    (ColorType::Rgba8, wgpu::TextureFormat::Rgba8UnormSrgb) => Ok(img.as_rgba8().unwrap().to_vec()),
+                    (ColorType::Rgba8, wgpu::TextureFormat::Rgba8Unorm) => Ok(img.as_rgba8().unwrap().to_vec()),
+                    (c, f) => Err(AssetError::Content(format!(
+                        "Unsupported image color({:?}) and texture format({:?})",
+                        c, f
+                    ))),
+                }?;
+                Ok(self)
             }
-            _ => self,
+            _ => Ok(self),
         }
     }
 
-    pub fn to_texture_buffer(&self, device: &wgpu::Device) -> TextureBuffer {
-        unimplemented!()
-    }
-
-    /*pub fn from_image(device: &wgpu::Device, img: &image::DynamicImage) -> Result<(Self, wgpu::CommandBuffer), failure::Error> {
-        let rgba = img.as_rgba8().unwrap();
-        let dimensions = img.dimensions();
+    pub fn to_texture_buffer(&self, device: &wgpu::Device) -> Result<(TextureBuffer, wgpu::CommandBuffer), AssetError> {
+        let (width, height) = self.descriptor.size;
 
         let size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
+            width,
+            height,
             depth: 1,
         };
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
             size,
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: self.descriptor.format,
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
         });
 
-        let buffer = device.create_buffer_with_data(
-            &rgba,
-            wgpu::BufferUsage::COPY_SRC,
-        );
+        let init_cmd_buffer = {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            let buffer = device.create_buffer_with_data(&self.image, wgpu::BufferUsage::COPY_SRC);
+            let (bpr, rpi) = self.descriptor.get_upload_info();
+            encoder.copy_buffer_to_texture(
+                wgpu::BufferCopyView {
+                    buffer: &buffer,
+                    offset: 0,
+                    bytes_per_row: bpr,
+                    rows_per_image: rpi,
+                },
+                wgpu::TextureCopyView {
+                    texture: &texture,
+                    mip_level: 0,
+                    array_layer: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                },
+                size,
+            );
+            encoder.finish()
+        };
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("texture_buffer_copy_encoder"),
-        });
-
-        encoder.copy_buffer_to_texture(
-            wgpu::BufferCopyView {
-                buffer: &buffer,
-                offset: 0,
-                bytes_per_row: 4 * dimensions.0,
-                rows_per_image: dimensions.1,
+        Ok((
+            TextureBuffer {
+                texture,
+                sampler: device.create_sampler(&self.descriptor.create_sampler_descriptor()),
             },
-            wgpu::TextureCopyView {
-                texture: &texture,
-                mip_level: 0,
-                array_layer: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            size,
-        );
-
-        let cmd_buffer = encoder.finish(); // 2.
-
-        let view = texture.create_default_view();
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            lod_min_clamp: -100.0,
-            lod_max_clamp: 100.0,
-            compare_function: wgpu::CompareFunction::Always,
-        });
-
-        Ok((Self { texture, view, sampler }, cmd_buffer))
-    }*/
+            init_cmd_buffer,
+        ))
+    }
 }

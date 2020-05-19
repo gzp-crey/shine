@@ -78,6 +78,7 @@ fn main() {
         .filter_level(log::LevelFilter::Info)
         .filter_module("shine_ecs", log::LevelFilter::Trace)
         .filter_module("shine_game", log::LevelFilter::Trace)
+        .filter_module("wgpu_core::command::allocator", log::LevelFilter::Warn)
         .try_init();
     let mut rt = Runtime::new().unwrap();
 

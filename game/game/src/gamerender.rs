@@ -29,12 +29,14 @@ impl ScheduleSet {
                 .add_system(render::systems::update_shaders())
                 .add_system(render::systems::update_pipeline())
                 .add_system(render::systems::update_models())
+                .add_system(render::systems::update_textures())
                 .flush()
                 .build(),
         );
 
         logics.insert("test1".to_owned(), tech::test1::create_schedule());
         logics.insert("test2".to_owned(), tech::test2::create_schedule());
+        logics.insert("test3".to_owned(), tech::test3::create_schedule());
 
         ScheduleSet { logics }
     }
@@ -65,6 +67,7 @@ impl GameRender {
 
         tech::test1::add_test_scene(&mut resources).await?;
         tech::test2::add_test_scene(&mut resources).await?;
+        tech::test3::add_test_scene(&mut resources).await?;
 
         Ok(GameRender {
             surface,
@@ -106,7 +109,7 @@ impl GameRender {
         self.run_logic("update_render");
 
         self.start_frame(size)?;
-        self.run_logic("test1");
+        self.run_logic("test3");
         self.end_frame()
     }
 

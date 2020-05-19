@@ -31,7 +31,7 @@ impl AssetLowIO {
         let window = web_sys::window().unwrap();
         let resp = JsFuture::from(window.fetch_with_request(&request))
             .await
-            .map_err(|err| AssetError::AssetProvider(format!("Fetch failed: {:?}", err)) )?
+            .map_err(|err| AssetError::AssetProvider(format!("Fetch failed: {:?}", err)))?
             .dyn_into::<Response>()
             .unwrap();
 

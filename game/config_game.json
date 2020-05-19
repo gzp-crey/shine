@@ -1,5 +1,5 @@
 {
     "_asset_base_" : "http://127.0.0.1:9100/assets/",
-    "asset_base" : "http://assets.shine.com:9100/assets/",
-    "_asset_base" : "blobs://sashine.blob.core.windows.net/assets/"
+    "_asset_base" : "http://assets.shine.com:9100/assets/",
+    "asset_base" : "blobs://sashine.blob.core.windows.net/assets/"
 }
