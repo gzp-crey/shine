@@ -131,7 +131,7 @@ impl Shader {
         *self = match (std::mem::replace(self, Shader::None), load_response) {
             (Shader::Pending(listeners), Err(err)) => {
                 listeners.notify_all();
-                log::debug!("Shader[{:?}] compilation failed: {:?}", load_context, err);
+                log::warn!("Shader[{:?}] compilation failed: {:?}", load_context, err);
                 Shader::Error
             }
 

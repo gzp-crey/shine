@@ -1,4 +1,4 @@
-use crate::assets::vertex::{self, Pos3fCol4f};
+use crate::assets::vertex::{self, Pos3fTex2f};
 use crate::render::{
     Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead, TextureIndex, TextureStore,
     TextureStoreRead,
@@ -9,26 +9,26 @@ use shine_ecs::legion::{
     systems::{resource::Resources, SystemBuilder},
 };
 
-const VERTICES: &[Pos3fCol4f] = &[
-    Pos3fCol4f {
+const VERTICES: &[Pos3fTex2f] = &[
+    Pos3fTex2f {
         position: [-0.0868241, 0.49240386, 0.0],
-        color: [0.5, 0.0, 0.0, 1.0],
+        texcoord: [0.5, 0.0],
     },
-    Pos3fCol4f {
+    Pos3fTex2f {
         position: [-0.49513406, 0.06958647, 0.0],
-        color: [0.0, 0.5, 0.0, 1.0],
+        texcoord: [0.0, 0.5],
     },
-    Pos3fCol4f {
+    Pos3fTex2f {
         position: [-0.21918549, -0.44939706, 0.0],
-        color: [0.0, 0.0, 0.5, 1.0],
+        texcoord: [0.0, 0.0],
     },
-    Pos3fCol4f {
+    Pos3fTex2f {
         position: [0.35966998, -0.3473291, 0.0],
-        color: [0.5, 0.5, 0.0, 1.0],
+        texcoord: [0.5, 0.5],
     },
-    Pos3fCol4f {
+    Pos3fTex2f {
         position: [0.44147372, 0.2347359, 0.0],
-        color: [0.0, 0.5, 0.5, 1.0],
+        texcoord: [0.0, 0.5],
     },
 ];
 
@@ -67,8 +67,8 @@ impl TestScene {
         textures: &mut TextureStoreRead<'_>,
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
-            pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Pos3fCol4f>(
-                "63b0/81805928a06463d7d2cb05aad27312036f15fe7d2b90a272b95ce21a2a91.pl",
+            pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Pos3fTex2f>(
+                "1910/2aa508b774c6f92ec05d1bfb7d53f97eaca1b9c6f9c6082870b1a65b1270.pl",
             ))
         });
 

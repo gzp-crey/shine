@@ -190,9 +190,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.53"
+version = "1.0.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "404b1fe4f65288577753b17e3b36a04596ee784493ec249bf81c7f2d2acd751c"
+checksum = "7bbb73db36c1246e9034e307d0fba23f9a2e251faa47ade70c1bd252220c8311"
 
 [[package]]
 name = "cfg-if"
@@ -998,9 +998,9 @@ checksum = "a257582fdcde896fd96463bf2d40eefea0580021c0712a0e2b028b60b47a837a"
 
 [[package]]
 name = "instant"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7152d2aed88aa566e7a342250f21ba2222c1ae230ad577499dbfa3c18475b80"
+checksum = "7777a24a1ce5de49fcdde84ec46efa487c3af49d5b6e6e0a50367cc5c1096182"
 
 [[package]]
 name = "iovec"
@@ -1085,7 +1085,7 @@ checksum = "b294d6fa9ee409a054354afc4352b0b9ef7ca222c69b8812cbea9e7d2bf3783f"
 [[package]]
 name = "legion"
 version = "0.2.1"
-source = "git+https://github.com/TomGillen/legion.git#e2c7363e0c059ec1a5fe659b6e50f09f8cdf9793"
+source = "git+https://github.com/TomGillen/legion.git#55ba3ae744e41094bbf731382241f6f0bf179152"
 dependencies = [
  "legion-core",
  "legion-systems",
@@ -1094,7 +1094,7 @@ dependencies = [
 [[package]]
 name = "legion-core"
 version = "0.2.1"
-source = "git+https://github.com/TomGillen/legion.git#e2c7363e0c059ec1a5fe659b6e50f09f8cdf9793"
+source = "git+https://github.com/TomGillen/legion.git#55ba3ae744e41094bbf731382241f6f0bf179152"
 dependencies = [
  "crossbeam-channel",
  "derivative 1.0.4",
@@ -1111,7 +1111,7 @@ dependencies = [
 [[package]]
 name = "legion-systems"
 version = "0.2.1"
-source = "git+https://github.com/TomGillen/legion.git#e2c7363e0c059ec1a5fe659b6e50f09f8cdf9793"
+source = "git+https://github.com/TomGillen/legion.git#55ba3ae744e41094bbf731382241f6f0bf179152"
 dependencies = [
  "bit-set",
  "crossbeam-channel",

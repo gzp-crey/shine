@@ -108,13 +108,18 @@ pub async fn cook_texture(
         descriptor.size = image.dimensions();
     }
 
-    log::trace!("[{}] Converting color space for texture format {:?}...", texture_url.as_str(), descriptor.format);
+    log::trace!(
+        "[{}] Converting color space for texture format {:?}...",
+        texture_url.as_str(),
+        descriptor.format
+    );
     let format = descriptor.format;
     image = task::spawn_blocking(move || match format {
         wgpu::TextureFormat::Rgba8UnormSrgb => Ok(DynamicImage::ImageRgba8(image.into_rgba())),
         wgpu::TextureFormat::Rgba8Unorm => Ok(DynamicImage::ImageRgba8(image.into_rgba())),
         f => Err(AssetError::Content(format!("Unsupported texture format({:?}) ", f))),
-    }).await??;
+    })
+    .await??;
 
     //todo: reshape image the match format
     log::trace!("[{}] Texture descriptor:\n{:#?}", texture_url.as_str(), descriptor);

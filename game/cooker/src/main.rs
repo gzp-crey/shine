@@ -83,12 +83,13 @@ async fn run(assets: Vec<String>) {
 }
 
 fn main() {
-    //shine_game::render::foo();
+    shine_game::assets::foo();
 
     let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Trace)
-        .filter_module("shine-ecs", log::LevelFilter::Debug)
-        .filter_module("shine-game", log::LevelFilter::Trace)
+        .filter_level(log::LevelFilter::Info)
+        .filter_module("shine_cooker", log::LevelFilter::Trace)
+        .filter_module("shine_ecs", log::LevelFilter::Debug)
+        .filter_module("shine_game", log::LevelFilter::Trace)
         .try_init();
     let mut rt = Runtime::new().unwrap();
 
@@ -96,8 +97,9 @@ fn main() {
         /*"models/VertexColorTest.glb",
         "pipelines/hello/hello.vs",
         "pipelines/hello/hello.pl",
-        "pipelines/hello2/hello.pl",*/
-        "tex/checker.png",
+        "pipelines/hello2/hello.pl",
+        "tex/checker.png",*/
+        "pipelines/hello3/hello.pl",
     ]
     .iter()
     .map(|&x| x.to_owned())

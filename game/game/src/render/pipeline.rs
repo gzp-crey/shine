@@ -1,5 +1,5 @@
 use crate::assets::{
-    AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, Url, UrlError, VertexBufferLayout, VertexTypeId,
+    AssetError, AssetIO, IntoVertexTypeId, PipelineBuffer, PipelineDescriptor, Url, UrlError, VertexBufferLayout, VertexTypeId,
 };
 use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType};
 use shine_ecs::core::store::{
@@ -97,12 +97,12 @@ impl Dependecy {
         match (&self.vertex_shader, &self.fragment_shader) {
             (ShaderDependency::Failed, _) => {
                 listeners.notify_all();
-                log::debug!("Pipeline[{:?}] compilation failed due to vertex shader", load_context);
+                log::warn!("Pipeline[{:?}] compilation failed due to vertex shader", load_context);
                 Pipeline::Error
             }
             (_, ShaderDependency::Failed) => {
                 listeners.notify_all();
-                log::debug!("Pipeline[{:?}] compilation failed due to fragment shader", load_context);
+                log::warn!("Pipeline[{:?}] compilation failed due to fragment shader", load_context);
                 Pipeline::Error
             }
 
@@ -124,7 +124,7 @@ impl Dependecy {
                         Pipeline::Compiled(pipeline)
                     }
                     Err(err) => {
-                        log::debug!("Pipeline[{:?}] compilation failed: {:?}", load_context, err);
+                        log::warn!("Pipeline[{:?}] compilation failed: {:?}", load_context, err);
                         Pipeline::Error
                     }
                 }
@@ -136,7 +136,7 @@ impl Dependecy {
 pub enum Pipeline {
     Pending(LoadListeners),
     WaitingDependency(Dependecy, LoadListeners),
-    Compiled(wgpu::RenderPipeline),
+    Compiled(PipelineBuffer),
     Error,
     None,
 }
@@ -307,15 +307,17 @@ impl<'a> DataUpdater<'a, Pipeline> for (&Context, &ShaderStore) {
 }
 
 pub struct BoundPipeline<'a: 'pass, 'pass> {
-    pipeline: &'a wgpu::RenderPipeline,
+    pipeline: &'a PipelineBuffer,
     render_pass: wgpu::RenderPass<'pass>,
 }
 
 impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
     #[inline]
     fn bind_pipeline(&mut self) {
-        self.render_pass.set_pipeline(self.pipeline);
+        self.render_pass.set_pipeline(&self.pipeline.pipeline);
     }
+
+    //pub fn set_global_uniforms(&mut self)
 }
 
 impl<'a: 'pass, 'pass> Deref for BoundPipeline<'a, 'pass> {

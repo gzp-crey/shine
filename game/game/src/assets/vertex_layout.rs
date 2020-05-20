@@ -142,4 +142,29 @@ pub mod vertex {
             }
         }
     }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Pos3fTex2f {
+        pub position: [f32; 3],
+        pub texcoord: [f32; 2],
+    }
+
+    unsafe impl bytemuck::Pod for Pos3fTex2f {}
+    unsafe impl bytemuck::Zeroable for Pos3fTex2f {}
+
+    impl Vertex for Pos3fTex2f {
+        #[allow(clippy::fn_to_numeric_cast)]
+        fn buffer_layout() -> VertexBufferLayout {
+            use wgpu::VertexFormat::*;
+            use VertexSemantic::*;
+            VertexBufferLayout {
+                stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+                attributes: vec![
+                    VertexAttribute(Position, 0, Float3),
+                    VertexAttribute(TexCoord(0), 8, Float2),
+                ],
+            }
+        }
+    }
 }

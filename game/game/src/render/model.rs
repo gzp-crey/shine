@@ -50,7 +50,7 @@ impl Model {
     ) -> Option<String> {
         *self = match (std::mem::replace(self, Model::None), load_response) {
             (Model::Pending(listeners), Err(err)) => {
-                log::debug!("Model[{:?}] compilation failed: {:?}", load_context, err);
+                log::warn!("Model[{:?}] compilation failed: {:?}", load_context, err);
                 listeners.notify_all();
                 Model::Error
             }

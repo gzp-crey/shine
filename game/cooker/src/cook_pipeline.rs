@@ -67,6 +67,15 @@ pub async fn cook_pipeline(
     let mut pipeline = serde_json::from_str::<PipelineDescriptor>(&pipeline)?;
     log::trace!("[{}] Pipeline:\n{:#?}", pipeline_url.as_str(), pipeline);
 
+    let global_layout = pipeline.get_global_uniform_layout()?;
+    log::trace!(
+        "[{}] Global binding layout:\n{:#?}",
+        pipeline_url.as_str(),
+        global_layout
+    );
+    let local_layout = pipeline.get_local_uniform_layout()?;
+    log::trace!("[{}] Local binding layout:\n{:#?}", pipeline_url.as_str(), local_layout);
+
     log::trace!("[{}] Cooking vertex shader...", pipeline_url.as_str());
     let vertex_shader_url = Url::from_base_or_current(&source_base, &pipeline_url, &pipeline.vertex_stage.shader)?;
     let vertex_shader_id = cook_shader::cook_shader(io, source_base, target_base, &vertex_shader_url).await?;

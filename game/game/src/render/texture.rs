@@ -56,7 +56,7 @@ impl Texture {
         *self = match (std::mem::replace(self, Texture::None), load_response) {
             (Texture::Pending(listeners), Err(err)) => {
                 listeners.notify_all();
-                log::debug!("Texture[{:?}] compilation failed: {:?}", load_context, err);
+                log::warn!("Texture[{:?}] compilation failed: {:?}", load_context, err);
                 Texture::Error
             }
 
@@ -69,7 +69,7 @@ impl Texture {
                         Texture::Compiled(texture_buffer)
                     }
                     Err(err) => {
-                        log::debug!("Texture[{:?}] compilation failed: {:?}", load_context, err);
+                        log::warn!("Texture[{:?}] compilation failed: {:?}", load_context, err);
                         Texture::Error
                     }
                 }
