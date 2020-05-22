@@ -69,10 +69,11 @@ impl TestScene {
         if let Some(ref buffers) = self.buffers {
             let pipeline = pipelines.at(pipeline);
             //let pipeline = &pipelines[pipeline];
-            if let Some(mut pipeline) = pipeline.bind(encoder, pass_descriptor) {
-                pipeline.set_vertex_buffer(0, buffers.0.slice(..));
-                pipeline.set_index_buffer(buffers.1.slice(..));
-                pipeline.draw_indexed(0..buffers.2, 0, 0..1);
+            if let Some(pipeline) = pipeline.pipeline_buffer() {
+                let mut pass = pipeline.bind(encoder, pass_descriptor);
+                pass.set_vertex_buffer(0, buffers.0.slice(..));
+                pass.set_index_buffer(buffers.1.slice(..));
+                pass.draw_indexed(0..buffers.2, 0, 0..1);
             }
         }
     }

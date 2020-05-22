@@ -94,12 +94,12 @@ fn main() {
     let mut rt = Runtime::new().unwrap();
 
     let assets: Vec<_> = [
-        /*"models/VertexColorTest.glb",
-        "pipelines/hello/hello.vs",
-        "pipelines/hello/hello.pl",
-        "pipelines/hello2/hello.pl",
-        "tex/checker.png",*/
+        //"pipelines/hello/hello.pl",
+        //"pipelines/hello2/hello.pl",
         "pipelines/hello3/hello.pl",
+        //"tex/checker.png",
+        "tex/farkas.jpg",
+        //"models/VertexColorTest.glb",
     ]
     .iter()
     .map(|&x| x.to_owned())

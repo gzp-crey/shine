@@ -72,6 +72,7 @@ impl TextureDescriptor {
 
 pub struct TextureBuffer {
     pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
 
@@ -143,9 +144,12 @@ impl TextureImage {
             encoder.finish()
         };
 
+        let view = texture.create_default_view();
+
         Ok((
             TextureBuffer {
                 texture,
+                view,
                 sampler: device.create_sampler(&self.descriptor.create_sampler_descriptor()),
             },
             init_cmd_buffer,

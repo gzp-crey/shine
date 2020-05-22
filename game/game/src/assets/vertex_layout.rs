@@ -162,7 +162,7 @@ pub mod vertex {
                 stride: mem::size_of::<Self>() as wgpu::BufferAddress,
                 attributes: vec![
                     VertexAttribute(Position, 0, Float3),
-                    VertexAttribute(TexCoord(0), 8, Float2),
+                    VertexAttribute(TexCoord(0), 12, Float2),
                 ],
             }
         }

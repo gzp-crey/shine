@@ -1,4 +1,7 @@
-use crate::assets::vertex::{self, Pos3fTex2f};
+use crate::assets::{
+    vertex::{self, Pos3fTex2f},
+    BoundPipeline, UniformFormat, UniformSemantic,
+};
 use crate::render::{
     Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead, TextureIndex, TextureStore,
     TextureStoreRead,
@@ -12,23 +15,23 @@ use shine_ecs::legion::{
 const VERTICES: &[Pos3fTex2f] = &[
     Pos3fTex2f {
         position: [-0.0868241, 0.49240386, 0.0],
-        texcoord: [0.5, 0.0],
+        texcoord:  [0.4131759, 0.00759614],
     },
     Pos3fTex2f {
         position: [-0.49513406, 0.06958647, 0.0],
-        texcoord: [0.0, 0.5],
+        texcoord: [0.0048659444, 0.43041354],
     },
     Pos3fTex2f {
         position: [-0.21918549, -0.44939706, 0.0],
-        texcoord: [0.0, 0.0],
+        texcoord: [0.28081453, 0.949397057],
     },
     Pos3fTex2f {
         position: [0.35966998, -0.3473291, 0.0],
-        texcoord: [0.5, 0.5],
+        texcoord: [0.85967, 0.84732911],
     },
     Pos3fTex2f {
         position: [0.44147372, 0.2347359, 0.0],
-        texcoord: [0.0, 0.5],
+        texcoord: [0.9414737, 0.2652641],
     },
 ];
 
@@ -38,6 +41,7 @@ struct TestScene {
     pipeline: Option<PipelineIndex>,
     texture: Option<TextureIndex>,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
+    bind_group: Option<wgpu::BindGroup>,
 }
 
 impl TestScene {
@@ -46,6 +50,7 @@ impl TestScene {
             pipeline: None,
             texture: None,
             buffers: None,
+            bind_group: None,
         }
     }
 
@@ -61,6 +66,7 @@ impl TestScene {
 
     pub fn render(
         &mut self,
+        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
         pipelines: &mut PipelineStoreRead<'_>,
@@ -68,24 +74,37 @@ impl TestScene {
     ) {
         let pipeline = self.pipeline.get_or_insert_with(|| {
             pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Pos3fTex2f>(
-                "1910/2aa508b774c6f92ec05d1bfb7d53f97eaca1b9c6f9c6082870b1a65b1270.pl",
+                "46f2/1b3a80275c203566e18c9aabb5409b19af2c48bda9db6d52b1f010e58094.pl",
             ))
         });
 
         let texture = self.texture.get_or_insert_with(|| {
             textures.get_or_add_blocking(
-                &"6832/55ae74cfa024e4cd2333c60aa24a2aceeb1886f5cce102095519ce5ae2df.tex".to_owned(),
+                &"6832/55ae74cfa024e4cd2333c60aa24a2aceeb1886f5cce102095519ce5ae2df.tex".to_owned(),                
             )
         });
 
         if let Some(ref buffers) = self.buffers {
             let pipeline = pipelines.at(pipeline);
-            let _texture = textures.at(texture);
-            //let pipeline = &pipelines[pipeline];
-            if let Some(mut pipeline) = pipeline.bind(encoder, pass_descriptor) {
-                pipeline.set_vertex_buffer(0, buffers.0.slice(..));
-                pipeline.set_index_buffer(buffers.1.slice(..));
-                pipeline.draw_indexed(0..buffers.2, 0, 0..1);
+            let texture = textures.at(texture);
+            if let (Some(pipeline), Some(texture)) = (pipeline.pipeline_buffer(), texture.texture_buffer()) {
+                let bind_group = self.bind_group.get_or_insert_with(|| {
+                    pipeline.create_global_bind_group(device, |s, f| match (s, f) {
+                        (UniformSemantic::Diffuse, UniformFormat::Texture) => {
+                            wgpu::BindingResource::TextureView(&texture.view)
+                        }
+                        (UniformSemantic::Diffuse, UniformFormat::Sampler) => {
+                            wgpu::BindingResource::Sampler(&texture.sampler)
+                        }
+                        _ => unreachable!(),
+                    }).unwrap()
+                });
+
+                let mut pass = pipeline.bind(encoder, pass_descriptor);
+                pass.set_vertex_buffer(0, buffers.0.slice(..));
+                pass.set_index_buffer(buffers.1.slice(..));
+                pass.set_bind_group(0, bind_group, &[]);
+                pass.draw_indexed(0..buffers.2, 0, 0..1);
             }
         }
     }
@@ -136,7 +155,7 @@ fn render_test() -> Box<dyn Schedulable> {
                     depth_stencil_attachment: None,
                 };
 
-                scene.render(&mut encoder, &pass_descriptor, &mut pipelines, &mut textures);
+                scene.render(context.device(), &mut encoder, &pass_descriptor, &mut pipelines, &mut textures);
             }
 
             frame.add_command(encoder.finish());

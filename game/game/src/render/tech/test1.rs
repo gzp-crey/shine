@@ -28,8 +28,9 @@ impl TestScene {
         });
 
         let pipeline = pipelines.at(pipeline);
-        if let Some(mut pipeline) = pipeline.bind(encoder, pass_descriptor) {
-            pipeline.draw(0..3, 0..1);
+        if let Some(pipeline) = pipeline.pipeline_buffer() {
+            let mut pass = pipeline.bind(encoder, pass_descriptor);
+            pass.draw(0..3, 0..1);
         }
     }
 }

@@ -1,12 +1,12 @@
 use crate::assets::{
-    AssetError, AssetIO, IntoVertexTypeId, PipelineBuffer, PipelineDescriptor, Url, UrlError, VertexBufferLayout, VertexTypeId,
+    AssetError, AssetIO, IntoVertexTypeId, PipelineBuffer, PipelineDescriptor, Url, UrlError, VertexBufferLayout,
+    VertexTypeId,
 };
 use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType};
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
 use std::fmt;
-use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -142,24 +142,52 @@ pub enum Pipeline {
 }
 
 impl Pipeline {
-    pub fn bind<'a: 'pass, 'pass>(
-        &'a self,
-        encoder: &'a mut wgpu::CommandEncoder,
-        pass_descriptor: &wgpu::RenderPassDescriptor<'pass, 'pass>,
-    ) -> Option<BoundPipeline<'a, 'pass>> {
-        match self {
-            Pipeline::Compiled(ref pipeline) => {
-                let mut b = BoundPipeline {
-                    pipeline,
-                    render_pass: encoder.begin_render_pass(pass_descriptor),
-                };
-                b.bind_pipeline();
-                Some(b)
-            }
-            _ => None,
+    pub fn pipeline_buffer(&self) -> Option<&PipelineBuffer> {
+        if let Pipeline::Compiled(ref pipeline_buffer) = self {
+            Some(pipeline_buffer)
+        } else {
+            None
         }
     }
 
+    /*pub fn create_global_bind_group<'a, F>(&self, device: wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
+        where
+            F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+        {
+            match self {
+                Pipeline::Compiled(ref pipeline) => pipeline.create_global_bind_group(device, get_value),
+                _ => None,
+            }
+        }
+
+        pub fn create_local_bind_group<'a, F>(&self, device: wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
+        where
+            F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+        {
+            match self {
+                Pipeline::Compiled(ref pipeline) => pipeline.create_local_bind_group(device, get_value),
+                _ => None,
+            }
+        }
+
+        pub fn bind<'a: 'pass, 'pass>(
+            &'a self,
+            encoder: &'a mut wgpu::CommandEncoder,
+            pass_descriptor: &wgpu::RenderPassDescriptor<'pass, 'pass>,
+        ) -> Option<BoundPipeline<'a, 'pass>> {
+            match self {
+                Pipeline::Compiled(ref pipeline) => {
+                    let mut b = BoundPipeline {
+                        pipeline,
+                        render_pass: encoder.begin_render_pass(pass_descriptor),
+                    };
+                    b.bind_pipeline();
+                    Some(b)
+                }
+                _ => None,
+            }
+        }
+    */
     fn on_update(
         &mut self,
         load_context: LoadContext<'_, Pipeline>,
@@ -303,33 +331,6 @@ impl<'a> DataUpdater<'a, Pipeline> for (&Context, &ShaderStore) {
         load_response: PipelineLoadResponse,
     ) -> Option<PipelineLoadRequest> {
         data.on_update(load_context, self.0, &mut self.1.read(), load_response)
-    }
-}
-
-pub struct BoundPipeline<'a: 'pass, 'pass> {
-    pipeline: &'a PipelineBuffer,
-    render_pass: wgpu::RenderPass<'pass>,
-}
-
-impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
-    #[inline]
-    fn bind_pipeline(&mut self) {
-        self.render_pass.set_pipeline(&self.pipeline.pipeline);
-    }
-
-    //pub fn set_global_uniforms(&mut self)
-}
-
-impl<'a: 'pass, 'pass> Deref for BoundPipeline<'a, 'pass> {
-    type Target = wgpu::RenderPass<'pass>;
-    fn deref(&self) -> &Self::Target {
-        &self.render_pass
-    }
-}
-
-impl<'a: 'pass, 'pass> DerefMut for BoundPipeline<'a, 'pass> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.render_pass
     }
 }
 

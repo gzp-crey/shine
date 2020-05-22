@@ -1,6 +1,7 @@
 use crate::assets::{AssetError, VertexBufferLayout};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
 
 #[derive(Clone, Debug, Serialize, Hash, Deserialize, PartialEq, Eq)]
 pub enum VertexSemantic {
@@ -98,7 +99,7 @@ fn merge_uniforms(
     Ok(result)
 }
 
-fn create_uniform_bindings(
+fn create_bind_group_layout_entries(
     layout: &Vec<(PipelineUniform, wgpu::ShaderStage)>,
 ) -> Result<Vec<wgpu::BindGroupLayoutEntry>, AssetError> {
     let mut descriptor = Vec::new();
@@ -121,6 +122,28 @@ fn create_uniform_bindings(
         });
     }
     Ok(descriptor)
+}
+
+pub fn create_bind_group<'a, F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>>(
+    device: &wgpu::Device,
+    (bind_group_layout, uniforms): (&wgpu::BindGroupLayout, &[PipelineUniform]),
+    get_value: F,
+) -> wgpu::BindGroup {
+    let mut bindings = Vec::with_capacity(uniforms.len());
+    for u in uniforms {
+        let resource = get_value(u.semantic(), u.format());
+        //todo: check if resource is conforming to uniform
+        bindings.push(wgpu::Binding {
+            binding: u.location(),
+            resource,
+        });
+    }
+
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: bind_group_layout,
+        bindings: &bindings,
+    })
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -217,10 +240,74 @@ pub enum Blending {
 /// Compiled pipeline with related binding information
 pub struct PipelineBuffer {
     pub pipeline: wgpu::RenderPipeline,
-    pub global_binding_group_layout: Option<wgpu::BindGroupLayout>,
-    pub local_binding_group_layout: Option<wgpu::BindGroupLayout>,
+    pub global_bind_group_layout: Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>,
+    pub local_bind_group_layout: Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>,
 }
 
+impl PipelineBuffer {
+    pub fn create_global_bind_group<'a, F>(&self, device: &wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
+    where
+        F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+    {
+        if let Some((ref bind_group_layout, ref uniforms)) = self.global_bind_group_layout {
+            Some(create_bind_group(device, (bind_group_layout, &*uniforms), get_value))
+        } else {
+            None
+        }
+    }
+
+    pub fn create_local_bind_group<'a, F>(&self, device: &wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
+    where
+        F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+    {
+        if let Some((ref layout, ref uniforms)) = self.local_bind_group_layout {
+            Some(create_bind_group(device, (layout, &*uniforms), get_value))
+        } else {
+            None
+        }
+    }
+
+    pub fn bind<'a: 'pass, 'pass>(
+        &'a self,
+        encoder: &'a mut wgpu::CommandEncoder,
+        pass_descriptor: &wgpu::RenderPassDescriptor<'pass, 'pass>,
+    ) -> BoundPipeline<'a, 'pass> {
+        let mut b = BoundPipeline {
+            pipeline: self,
+            render_pass: encoder.begin_render_pass(pass_descriptor),
+        };
+        b.bind_pipeline();
+        b
+    }
+}
+
+/// Pipeline rendering context (render pass)
+pub struct BoundPipeline<'a: 'pass, 'pass> {
+    pub(crate) pipeline: &'a PipelineBuffer,
+    pub(crate) render_pass: wgpu::RenderPass<'pass>,
+}
+
+impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
+    #[inline]
+    pub(crate) fn bind_pipeline(&mut self) {
+        self.render_pass.set_pipeline(&self.pipeline.pipeline);
+    }
+}
+
+impl<'a: 'pass, 'pass> Deref for BoundPipeline<'a, 'pass> {
+    type Target = wgpu::RenderPass<'pass>;
+    fn deref(&self) -> &Self::Target {
+        &self.render_pass
+    }
+}
+
+impl<'a: 'pass, 'pass> DerefMut for BoundPipeline<'a, 'pass> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.render_pass
+    }
+}
+
+/// Deserialized pipeline data
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipelineDescriptor {
     pub primitive_topology: wgpu::PrimitiveTopology,
@@ -267,41 +354,53 @@ impl PipelineDescriptor {
         };
         log::info!("vertex_state: {:?}", vertex_state);
 
-        let global_binding_group_layout = {
-            let bindings = create_uniform_bindings(&self.get_global_uniform_layout()?)?;
-            if bindings.is_empty() {
-                Some(device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    bindings: &bindings,
-                }))
+        let global_bind_group_layout = {
+            let layout = self.get_global_uniform_layout()?;
+            let bindings = create_bind_group_layout_entries(&layout)?;
+            let layout: Vec<_> = layout.into_iter().map(|(u, _)| u).collect();
+            if !bindings.is_empty() {
+                Some((
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        bindings: &bindings,
+                    }),
+                    layout,
+                ))
             } else {
                 None
             }
         };
 
-        let local_binding_group_layout = {
-            let bindings = create_uniform_bindings(&self.get_local_uniform_layout()?)?;
-            if bindings.is_empty() {
-                Some(device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    bindings: &bindings,
-                }))
+        let local_bind_group_layout = {
+            let layout = self.get_local_uniform_layout()?;
+            let bindings = create_bind_group_layout_entries(&layout)?;
+            let layout: Vec<_> = layout.into_iter().map(|(u, _)| u).collect();
+            if !bindings.is_empty() {
+                Some((
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        bindings: &bindings,
+                    }),
+                    layout,
+                ))
             } else {
                 None
             }
-        };        
+        };
 
         let pipeline_layout = {
             let mut bind_group_layouts = Vec::new();
-            if let Some(ref binding_group_layout) = global_binding_group_layout {
-                bind_group_layouts.push(binding_group_layout);
+            if let Some((ref bind_group_layout, _)) = global_bind_group_layout {
+                bind_group_layouts.push(bind_group_layout);
             }
-            if let Some(ref binding_group_layout) = local_binding_group_layout {
-                bind_group_layouts.push(binding_group_layout);
+            if let Some((ref bind_group_layout, _)) = local_bind_group_layout {
+                bind_group_layouts.push(bind_group_layout);
             }
 
+            log::trace!("bind_group_layouts: {:?}", bind_group_layouts.len());
+
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                bind_group_layouts: &bind_group_layouts
+                bind_group_layouts: &bind_group_layouts,
             })
         };
 
@@ -339,8 +438,8 @@ impl PipelineDescriptor {
 
         Ok(PipelineBuffer {
             pipeline,
-            global_binding_group_layout,
-            local_binding_group_layout,
+            global_bind_group_layout,
+            local_bind_group_layout,
         })
     }
 }
