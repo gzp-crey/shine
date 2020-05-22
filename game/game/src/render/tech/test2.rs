@@ -1,5 +1,5 @@
 use crate::assets::vertex::{self, Pos3fCol4f};
-use crate::render::{Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead};
+use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
 use crate::GameError;
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -32,14 +32,16 @@ const VERTICES: &[Pos3fCol4f] = &[
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
 struct TestScene {
-    pipeline: Option<PipelineIndex>,
+    pipeline: PipelineId,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 impl TestScene {
     fn new() -> TestScene {
         TestScene {
-            pipeline: None,
+            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fCol4f>(
+                "63b0/81805928a06463d7d2cb05aad27312036f15fe7d2b90a272b95ce21a2a91.pl",
+            )),
             buffers: None,
         }
     }
@@ -60,15 +62,9 @@ impl TestScene {
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
         pipelines: &mut PipelineStoreRead<'_>,
     ) {
-        let pipeline = self.pipeline.get_or_insert_with(|| {
-            pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Pos3fCol4f>(
-                "63b0/81805928a06463d7d2cb05aad27312036f15fe7d2b90a272b95ce21a2a91.pl",
-            ))
-        });
+        let pipeline = self.pipeline.get(pipelines);
 
         if let Some(ref buffers) = self.buffers {
-            let pipeline = pipelines.at(pipeline);
-            //let pipeline = &pipelines[pipeline];
             if let Some(pipeline) = pipeline.pipeline_buffer() {
                 let mut pass = pipeline.bind(encoder, pass_descriptor);
                 pass.set_vertex_buffer(0, buffers.0.slice(..));

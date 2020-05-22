@@ -2210,6 +2210,7 @@ dependencies = [
  "log",
  "permutohedron",
  "rand",
+ "serde 1.0.110",
  "tokio",
  "wasm-bindgen",
  "wasm-bindgen-futures",

@@ -1,5 +1,5 @@
 use crate::assets::vertex;
-use crate::render::{Context, Frame, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead};
+use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
 use crate::GameError;
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -7,12 +7,16 @@ use shine_ecs::legion::{
 };
 
 struct TestScene {
-    pipeline: Option<PipelineIndex>,
+    pipeline: PipelineId,
 }
 
 impl TestScene {
-    fn new() -> TestScene {
-        TestScene { pipeline: None }
+    pub fn new() -> TestScene {
+        TestScene {
+            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Null>(
+                "2efe/c9dbb5a6c535f3cddca3472280f53eff60f4bdd99f131383cfe45c67e99f.pl",
+            )),
+        }
     }
 
     pub fn render(
@@ -21,13 +25,8 @@ impl TestScene {
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
         pipelines: &mut PipelineStoreRead<'_>,
     ) {
-        let pipeline = self.pipeline.get_or_insert_with(|| {
-            pipelines.get_or_add_blocking(&PipelineKey::new::<vertex::Null>(
-                "2efe/c9dbb5a6c535f3cddca3472280f53eff60f4bdd99f131383cfe45c67e99f.pl",
-            ))
-        });
+        let pipeline = self.pipeline.get(pipelines);
 
-        let pipeline = pipelines.at(pipeline);
         if let Some(pipeline) = pipeline.pipeline_buffer() {
             let mut pass = pipeline.bind(encoder, pass_descriptor);
             pass.draw(0..3, 0..1);

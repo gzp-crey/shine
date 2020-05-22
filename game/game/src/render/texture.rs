@@ -1,7 +1,8 @@
 use crate::assets::{AssetError, AssetIO, TextureBuffer, TextureImage, Url, UrlError};
 use crate::render::Context;
 use shine_ecs::core::store::{
-    CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
+    CancellationToken, Data, DataLoader, DataUpdater, FromKey, GeneralId, Index, LoadContext, LoadListeners, ReadGuard,
+    Store,
 };
 use std::pin::Pin;
 use std::sync::Arc;
@@ -165,6 +166,7 @@ impl<'a> DataUpdater<'a, Texture> for TextureUpdater<'a> {
 pub type TextureStore = Store<Texture>;
 pub type TextureStoreRead<'a> = ReadGuard<'a, Texture>;
 pub type TextureIndex = Index<Texture>;
+pub type TextureId = GeneralId<Texture>;
 
 pub mod systems {
     use super::*;

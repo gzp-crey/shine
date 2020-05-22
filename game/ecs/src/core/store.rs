@@ -129,6 +129,54 @@ impl<D: Data> Drop for Index<D> {
     }
 }
 
+/// Generalized id that can store a key or an index. On first
+/// get (get_mut) operation the id is turned into index.
+pub enum GeneralId<D: FromKey> {
+    Name(D::Key),
+    Index(Index<D>),
+}
+
+impl<D: FromKey> GeneralId<D> {
+    pub fn from_key(key: <D as Data>::Key) -> Self {
+        GeneralId::Name(key)
+    }
+
+    pub fn get<'a, 's>(&'a mut self, store: &'a mut ReadGuard<'s, D>) -> &'a D {
+        if let GeneralId::Name(name) = self {
+            let idx = store.get_or_add_blocking(name);
+            *self = GeneralId::Index(idx);
+        }
+
+        if let GeneralId::Index(idx) = self {
+            store.at(idx)
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn get_mut<'a>(&'a mut self, store: &'a mut WriteGuard<'a, D>) -> &'a mut D {
+        if let GeneralId::Name(name) = self {
+            let idx = store.get_or_add(name);
+            *self = GeneralId::Index(idx);
+        }
+
+        if let GeneralId::Index(idx) = self {
+            store.at_mut(idx)
+        } else {
+            unreachable!()
+        }
+    }
+}
+
+impl<D: FromKey> Clone for GeneralId<D> {
+    fn clone(&self) -> GeneralId<D> {
+        match self {
+            GeneralId::Index(idx) => GeneralId::Index(idx.clone()),
+            GeneralId::Name(name) => GeneralId::Name(name.clone()),
+        }
+    }
+}
+
 /// An entry in the store.
 struct Entry<D: Data> {
     ref_count: AtomicUsize,

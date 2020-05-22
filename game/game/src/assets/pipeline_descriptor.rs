@@ -37,10 +37,8 @@ impl PipelineAttribute {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum UniformSemantic {
     ModelView,
-
     Diffuse,
     Normal,
-
     Custom(String),
 }
 
@@ -48,7 +46,7 @@ pub enum UniformSemantic {
 pub enum UniformFormat {
     Sampler,
     Texture,
-    //Binary,
+    //Binary(usize),
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -124,11 +122,14 @@ fn create_bind_group_layout_entries(
     Ok(descriptor)
 }
 
-pub fn create_bind_group<'a, F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>>(
+pub fn create_bind_group<'a, F>(
     device: &wgpu::Device,
     (bind_group_layout, uniforms): (&wgpu::BindGroupLayout, &[PipelineUniform]),
-    get_value: F,
-) -> wgpu::BindGroup {
+    mut get_value: F,
+) -> wgpu::BindGroup
+where
+    F: FnMut(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+{
     let mut bindings = Vec::with_capacity(uniforms.len());
     for u in uniforms {
         let resource = get_value(u.semantic(), u.format());
@@ -247,7 +248,7 @@ pub struct PipelineBuffer {
 impl PipelineBuffer {
     pub fn create_global_bind_group<'a, F>(&self, device: &wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
     where
-        F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+        F: FnMut(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
     {
         if let Some((ref bind_group_layout, ref uniforms)) = self.global_bind_group_layout {
             Some(create_bind_group(device, (bind_group_layout, &*uniforms), get_value))
@@ -258,7 +259,7 @@ impl PipelineBuffer {
 
     pub fn create_local_bind_group<'a, F>(&self, device: &wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
     where
-        F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+        F: FnMut(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
     {
         if let Some((ref layout, ref uniforms)) = self.local_bind_group_layout {
             Some(create_bind_group(device, (layout, &*uniforms), get_value))

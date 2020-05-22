@@ -4,7 +4,8 @@ use crate::assets::{
 };
 use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType};
 use shine_ecs::core::store::{
-    CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
+    CancellationToken, Data, DataLoader, DataUpdater, FromKey, GeneralId, Index, LoadContext, LoadListeners, ReadGuard,
+    Store,
 };
 use std::fmt;
 use std::pin::Pin;
@@ -150,44 +151,6 @@ impl Pipeline {
         }
     }
 
-    /*pub fn create_global_bind_group<'a, F>(&self, device: wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
-        where
-            F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
-        {
-            match self {
-                Pipeline::Compiled(ref pipeline) => pipeline.create_global_bind_group(device, get_value),
-                _ => None,
-            }
-        }
-
-        pub fn create_local_bind_group<'a, F>(&self, device: wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
-        where
-            F: Fn(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
-        {
-            match self {
-                Pipeline::Compiled(ref pipeline) => pipeline.create_local_bind_group(device, get_value),
-                _ => None,
-            }
-        }
-
-        pub fn bind<'a: 'pass, 'pass>(
-            &'a self,
-            encoder: &'a mut wgpu::CommandEncoder,
-            pass_descriptor: &wgpu::RenderPassDescriptor<'pass, 'pass>,
-        ) -> Option<BoundPipeline<'a, 'pass>> {
-            match self {
-                Pipeline::Compiled(ref pipeline) => {
-                    let mut b = BoundPipeline {
-                        pipeline,
-                        render_pass: encoder.begin_render_pass(pass_descriptor),
-                    };
-                    b.bind_pipeline();
-                    Some(b)
-                }
-                _ => None,
-            }
-        }
-    */
     fn on_update(
         &mut self,
         load_context: LoadContext<'_, Pipeline>,
@@ -337,6 +300,7 @@ impl<'a> DataUpdater<'a, Pipeline> for (&Context, &ShaderStore) {
 pub type PipelineStore = Store<Pipeline>;
 pub type PipelineStoreRead<'a> = ReadGuard<'a, Pipeline>;
 pub type PipelineIndex = Index<Pipeline>;
+pub type PipelineId = GeneralId<Pipeline>;
 
 pub mod systems {
     use super::*;
