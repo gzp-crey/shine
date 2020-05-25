@@ -306,19 +306,27 @@ pub mod systems {
     use super::*;
     use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
 
-    pub fn update_pipeline() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_pipeline")
+    pub fn update_pipelines() -> Box<dyn Schedulable> {
+        SystemBuilder::new("update_pipelines")
             .read_resource::<Context>()
             .read_resource::<ShaderStore>()
             .write_resource::<PipelineStore>()
-            .build(move |_, _, (context, shaders, pipeline), _| {
+            .build(move |_, _, (context, shaders, pipelines), _| {
                 //log::info!("pipeline");
-                let mut pipeline = pipeline.write();
+                let mut pipelines = pipelines.write();
                 let context: &Context = &*context;
                 let shaders: &ShaderStore = &*shaders;
-                //shaders.drain_unused();
-                pipeline.update(&mut (context, shaders));
-                pipeline.finalize_requests();
+                pipelines.update(&mut (context, shaders));
+                pipelines.finalize_requests();
+            })
+    }
+
+    pub fn gc_pipelines() -> Box<dyn Schedulable> {
+        SystemBuilder::new("gc_pipelines")
+            .write_resource::<PipelineStore>()
+            .build(move |_, _, pipelines, _| {
+                let mut pipelines = pipelines.write();
+                pipelines.drain_unused();
             })
     }
 }

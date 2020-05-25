@@ -6,10 +6,10 @@ use crate::render::{
     Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
     TextureStoreRead,
 };
-use crate::GameError;
+use crate::{GameError, GameRender};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
-    systems::{resource::Resources, SystemBuilder},
+    systems::SystemBuilder,
 };
 
 const VERTICES: &[Pos3fTex2f] = &[
@@ -105,15 +105,6 @@ impl TestScene {
     }
 }
 
-/// Add required resource for the test scene
-pub async fn add_test_scene(resources: &mut Resources) -> Result<(), GameError> {
-    log::info!("adding test scene to the world");
-
-    resources.insert(TestScene::new());
-
-    Ok(())
-}
-
 fn render_test() -> Box<dyn Schedulable> {
     SystemBuilder::new("test_render")
         .read_resource::<Context>()
@@ -163,6 +154,22 @@ fn render_test() -> Box<dyn Schedulable> {
         })
 }
 
-pub fn create_schedule() -> Schedule {
-    Schedule::builder().add_system(render_test()).flush().build()
+pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+    log::info!("Adding test3 scene to the world");
+
+    game.resources.insert(TestScene::new());
+
+    let render = Schedule::builder().add_system(render_test()).flush().build();
+    game.schedules.insert("render", render)?;
+
+    Ok(())
+}
+
+pub fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+    log::info!("Removing test3 scene from the world");
+
+    game.schedules.remove("render");
+    let _ = game.resources.remove::<TestScene>();
+
+    Ok(())
 }

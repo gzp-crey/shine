@@ -1,7 +1,6 @@
 #![feature(async_closure)]
 
-use shine_game::wgpu;
-use shine_game::{render::Surface, Config, GameRender};
+use shine_game::{render::Surface, wgpu, world, Config, GameRender};
 use tokio::runtime::Runtime;
 use winit::{
     event,
@@ -9,8 +8,6 @@ use winit::{
 };
 
 async fn run() {
-    //shine_game::render::foo();
-
     let event_loop = EventLoop::new();
     let window = {
         let mut builder = winit::window::WindowBuilder::new();
@@ -57,6 +54,11 @@ async fn run() {
                     ..
                 } => match virtual_keycode {
                     Some(event::VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
+                    Some(event::VirtualKeyCode::Key0) => world::unregister(&mut game_view).unwrap(),
+                    Some(event::VirtualKeyCode::Key1) => world::register_test1(&mut game_view).unwrap(),
+                    Some(event::VirtualKeyCode::Key2) => world::register_test2(&mut game_view).unwrap(),
+                    Some(event::VirtualKeyCode::Key3) => world::register_test3(&mut game_view).unwrap(),
+
                     Some(event::VirtualKeyCode::U) => game_view.update(),
                     Some(event::VirtualKeyCode::G) => game_view.gc_all(),
                     _ => {}

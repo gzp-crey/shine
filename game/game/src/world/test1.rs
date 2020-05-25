@@ -1,9 +1,9 @@
 use crate::assets::vertex;
 use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
-use crate::GameError;
+use crate::{GameError, GameRender};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
-    systems::{resource::Resources, SystemBuilder},
+    systems::SystemBuilder,
 };
 
 struct TestScene {
@@ -11,7 +11,7 @@ struct TestScene {
 }
 
 impl TestScene {
-    pub fn new() -> TestScene {
+    fn new() -> TestScene {
         TestScene {
             pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Null>(
                 "2efe/c9dbb5a6c535f3cddca3472280f53eff60f4bdd99f131383cfe45c67e99f.pl",
@@ -19,7 +19,7 @@ impl TestScene {
         }
     }
 
-    pub fn render(
+    fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
@@ -32,15 +32,6 @@ impl TestScene {
             pass.draw(0..3, 0..1);
         }
     }
-}
-
-/// Add required resource for the test scene
-pub async fn add_test_scene(resources: &mut Resources) -> Result<(), GameError> {
-    log::info!("adding test scene to the world");
-
-    resources.insert(TestScene::new());
-
-    Ok(())
 }
 
 fn render_test() -> Box<dyn Schedulable> {
@@ -82,6 +73,22 @@ fn render_test() -> Box<dyn Schedulable> {
         })
 }
 
-pub fn create_schedule() -> Schedule {
-    Schedule::builder().add_system(render_test()).flush().build()
+pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+    log::info!("Adding test1 scene to the world");
+
+    game.resources.insert(TestScene::new());
+
+    let render = Schedule::builder().add_system(render_test()).flush().build();
+    game.schedules.insert("render", render)?;
+
+    Ok(())
+}
+
+pub fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+    log::info!("Removing test1 scene from the world");
+
+    game.schedules.remove("render");
+    let _ = game.resources.remove::<TestScene>();
+
+    Ok(())
 }

@@ -1,60 +1,16 @@
 use crate::input::{self, add_input_system};
-use crate::render::{self, add_render_system, tech, Context, Frame, Surface};
-use crate::{Config, GameError};
+use crate::render::{self, add_render_system, Context, Frame, Surface};
+use crate::{Config, GameError, ScheduleSet};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
     world::World,
 };
-use std::collections::HashMap;
-
-struct ScheduleSet {
-    logics: HashMap<String, Schedule>,
-}
-
-impl ScheduleSet {
-    fn new() -> ScheduleSet {
-        let mut logics = HashMap::new();
-
-        logics.insert(
-            "update".to_owned(),
-            Schedule::builder()
-                .add_system(input::systems::advance_input_states())
-                .flush()
-                .build(),
-        );
-
-        logics.insert(
-            "update_render".to_owned(),
-            Schedule::builder()
-                .add_system(render::systems::update_shaders())
-                .add_system(render::systems::update_pipeline())
-                .add_system(render::systems::update_models())
-                .add_system(render::systems::update_textures())
-                .flush()
-                .build(),
-        );
-
-        logics.insert("test1".to_owned(), tech::test1::create_schedule());
-        logics.insert("test2".to_owned(), tech::test2::create_schedule());
-        logics.insert("test3".to_owned(), tech::test3::create_schedule());
-
-        ScheduleSet { logics }
-    }
-
-    fn execute(&mut self, logic: &str, world: &mut World, resources: &mut Resources) {
-        if let Some(schedule) = self.logics.get_mut(logic) {
-            schedule.execute(world, resources);
-        } else {
-            log::warn!("logic [{}] not found", logic);
-        }
-    }
-}
 
 pub struct GameRender {
     pub surface: Surface,
     pub resources: Resources,
     pub world: World,
-    schedules: ScheduleSet,
+    pub schedules: ScheduleSet,
 }
 
 impl GameRender {
@@ -65,15 +21,47 @@ impl GameRender {
         add_input_system(&mut resources).await?;
         add_render_system(&config, wgpu_instance, &mut resources).await?;
 
-        tech::test1::add_test_scene(&mut resources).await?;
-        tech::test2::add_test_scene(&mut resources).await?;
-        tech::test3::add_test_scene(&mut resources).await?;
+        let schedules = {
+            let mut schedules = ScheduleSet::new();
+
+            schedules.insert(
+                "update",
+                Schedule::builder()
+                    .add_system(input::systems::advance_input_states())
+                    .flush()
+                    .build(),
+            )?;
+
+            schedules.insert(
+                "update_stores",
+                Schedule::builder()
+                    .add_system(render::systems::update_shaders())
+                    .add_system(render::systems::update_textures())
+                    .add_system(render::systems::update_pipelines())
+                    .add_system(render::systems::update_models())
+                    .flush()
+                    .build(),
+            )?;
+
+            schedules.insert(
+                "gc_stores",
+                Schedule::builder()
+                    .add_system(render::systems::gc_models())
+                    .add_system(render::systems::gc_pipelines())
+                    .add_system(render::systems::gc_textures())
+                    .add_system(render::systems::gc_shaders())
+                    .flush()
+                    .build(),
+            )?;
+
+            schedules
+        };
 
         Ok(GameRender {
             surface,
             resources,
             world,
-            schedules: ScheduleSet::new(),
+            schedules,
         })
     }
 
@@ -106,14 +94,14 @@ impl GameRender {
     }
 
     pub fn render(&mut self, size: (u32, u32)) -> Result<(), String> {
-        self.run_logic("update_render");
+        self.run_logic("update_stores");
 
         self.start_frame(size)?;
-        self.run_logic("test3");
+        self.run_logic("render");
         self.end_frame()
     }
 
     pub fn gc_all(&mut self) {
-        self.run_logic("gc_all");
+        self.run_logic("gc_stores");
     }
 }

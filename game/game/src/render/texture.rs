@@ -179,9 +179,17 @@ pub mod systems {
             .build(move |_, _, (context, textures), _| {
                 let mut textures = textures.write();
                 let context: &Context = &*context;
-                //shaders.drain_unused();
                 textures.update(&mut TextureUpdater(context));
                 textures.finalize_requests();
+            })
+    }
+
+    pub fn gc_textures() -> Box<dyn Schedulable> {
+        SystemBuilder::new("gc_texture")
+            .write_resource::<TextureStore>()
+            .build(move |_, _, textures, _| {
+                let mut textures = textures.write();
+                textures.drain_unused();
             })
     }
 }

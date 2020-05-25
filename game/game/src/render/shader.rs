@@ -242,10 +242,18 @@ pub mod systems {
             .build(move |_, _, (context, shaders), _| {
                 //log::info!("shader");
                 let mut shaders = shaders.write();
-                //shaders.drain_unused();
                 let context: &Context = &*context;
                 shaders.update(&mut (context,));
                 shaders.finalize_requests();
+            })
+    }
+
+    pub fn gc_shaders() -> Box<dyn Schedulable> {
+        SystemBuilder::new("gc_shaders")
+            .write_resource::<ShaderStore>()
+            .build(move |_, _, shaders, _| {
+                let mut shaders = shaders.write();
+                shaders.drain_unused();
             })
     }
 }

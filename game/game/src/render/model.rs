@@ -168,4 +168,13 @@ pub mod systems {
                 models.finalize_requests();
             })
     }
+
+    pub fn gc_models() -> Box<dyn Schedulable> {
+        SystemBuilder::new("gc_model")
+            .write_resource::<ModelStore>()
+            .build(move |_, _, models, _| {
+                let mut models = models.write();
+                models.drain_unused();
+            })
+    }
 }

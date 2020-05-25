@@ -1,9 +1,9 @@
 use crate::assets::vertex::{self, Pos3fCol4f};
 use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
-use crate::GameError;
+use crate::{GameError, GameRender};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
-    systems::{resource::Resources, SystemBuilder},
+    systems::SystemBuilder,
 };
 
 const VERTICES: &[Pos3fCol4f] = &[
@@ -46,7 +46,7 @@ impl TestScene {
         }
     }
 
-    pub fn prepare(&mut self, device: &wgpu::Device) {
+    fn prepare(&mut self, device: &wgpu::Device) {
         self.buffers.get_or_insert_with(|| {
             (
                 device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
@@ -56,7 +56,7 @@ impl TestScene {
         });
     }
 
-    pub fn render(
+    fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
@@ -73,15 +73,6 @@ impl TestScene {
             }
         }
     }
-}
-
-/// Add required resource for the test scene
-pub async fn add_test_scene(resources: &mut Resources) -> Result<(), GameError> {
-    log::info!("adding test scene to the world");
-
-    resources.insert(TestScene::new());
-
-    Ok(())
 }
 
 fn render_test() -> Box<dyn Schedulable> {
@@ -127,6 +118,22 @@ fn render_test() -> Box<dyn Schedulable> {
         })
 }
 
-pub fn create_schedule() -> Schedule {
-    Schedule::builder().add_system(render_test()).flush().build()
+pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+    log::info!("Adding test2 scene to the world");
+
+    game.resources.insert(TestScene::new());
+
+    let render = Schedule::builder().add_system(render_test()).flush().build();
+    game.schedules.insert("render", render)?;
+
+    Ok(())
+}
+
+pub fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+    log::info!("Removing test2 scene from the world");
+
+    game.schedules.remove("render");
+    let _ = game.resources.remove::<TestScene>();
+
+    Ok(())
 }
