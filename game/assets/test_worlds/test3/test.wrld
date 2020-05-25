@@ -1,0 +1,6 @@
+{
+	"Test3":{
+		"pipeline": "hello.pl",
+		"texture": "checker.png"
+	}
+}

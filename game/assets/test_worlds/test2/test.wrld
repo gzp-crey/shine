@@ -1,0 +1,5 @@
+{
+	"Test2":{
+		"pipeline": "hello.pl"
+	}
+}
