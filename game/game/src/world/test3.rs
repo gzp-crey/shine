@@ -7,6 +7,7 @@ use crate::render::{
     TextureStoreRead,
 };
 use crate::{GameError, GameRender};
+use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
@@ -37,6 +38,12 @@ const VERTICES: &[Pos3fTex2f] = &[
 
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Test3 {
+    pub pipeline: String,
+    pub texture: String,
+}
+
 struct TestScene {
     pipeline: PipelineId,
     texture: TextureId,
@@ -45,14 +52,10 @@ struct TestScene {
 }
 
 impl TestScene {
-    fn new() -> TestScene {
+    fn new(test: Test3) -> TestScene {
         TestScene {
-            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fTex2f>(
-                "46f2/1b3a80275c203566e18c9aabb5409b19af2c48bda9db6d52b1f010e58094.pl",
-            )),
-            texture: TextureId::from_key(
-                "6832/55ae74cfa024e4cd2333c60aa24a2aceeb1886f5cce102095519ce5ae2df.tex".to_owned(),
-            ),
+            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fTex2f>(&test.pipeline)),
+            texture: TextureId::from_key(test.texture),
             buffers: None,
             bind_group: None,
         }
@@ -154,10 +157,10 @@ fn render_test() -> Box<dyn Schedulable> {
         })
 }
 
-pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub async fn register_test_scene(test: Test3, game: &mut GameRender) -> Result<(), GameError> {
     log::info!("Adding test3 scene to the world");
 
-    game.resources.insert(TestScene::new());
+    game.resources.insert(TestScene::new(test));
 
     let render = Schedule::builder().add_system(render_test()).flush().build();
     game.schedules.insert("render", render)?;
@@ -165,7 +168,7 @@ pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
     Ok(())
 }
 
-pub fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub async fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
     log::info!("Removing test3 scene from the world");
 
     game.schedules.remove("render");

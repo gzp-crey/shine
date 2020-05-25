@@ -36,6 +36,7 @@ fn register_store<D: Data, L: DataLoader<D>>(loader: L, store_page_size: usize, 
 /// - *Pipeline* store
 pub async fn add_render_system(
     config: &Config,
+    assetio: Arc<AssetIO>,
     wgpu_instance: wgpu::Instance,
     resources: &mut Resources,
 ) -> Result<(), GameError> {
@@ -46,8 +47,6 @@ pub async fn add_render_system(
 
     let base_url = Url::parse(&config.asset_base)
         .map_err(|err| GameError::Config(format!("Failed to parse base url for assets: {:?}", err)))?;
-    let assetio =
-        Arc::new(AssetIO::new().map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?);
 
     register_store(ShaderLoader::new(assetio.clone(), base_url.clone()), 16, resources);
     register_store(PipelineLoader::new(assetio.clone(), base_url.clone()), 16, resources);

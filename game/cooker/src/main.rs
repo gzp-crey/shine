@@ -1,4 +1,4 @@
-use shine_game::assets::{AssetIO, Url};
+use shine_game::assets::{AssetIO, Url, UrlError};
 use std::{error, fmt};
 use tokio::runtime::Runtime;
 
@@ -7,6 +7,7 @@ mod cook_gltf;
 mod cook_pipeline;
 mod cook_shader;
 mod cook_texture;
+mod cook_world;
 
 #[derive(Debug)]
 pub enum CookingError {
@@ -14,6 +15,7 @@ pub enum CookingError {
     Shader(cook_shader::Error),
     Pipeline(cook_pipeline::Error),
     Texture(cook_texture::Error),
+    World(cook_world::Error),
     Other(String),
 }
 
@@ -24,12 +26,19 @@ impl fmt::Display for CookingError {
             CookingError::Shader(ref err) => write!(f, "Failed to cook shader: {}", err),
             CookingError::Pipeline(ref err) => write!(f, "Failed to cook pipeline: {}", err),
             CookingError::Texture(ref err) => write!(f, "Failed to cook texture: {}", err),
+            CookingError::World(ref err) => write!(f, "Failed to cook world: {}", err),
             CookingError::Other(ref err) => write!(f, "Cooking failed: {}", err),
         }
     }
 }
 
 impl error::Error for CookingError {}
+
+impl From<UrlError> for CookingError {
+    fn from(err: UrlError) -> CookingError {
+        CookingError::Other(format!("Failed to parse url: {}", err))
+    }
+}
 
 impl From<cook_gltf::Error> for CookingError {
     fn from(err: cook_gltf::Error) -> CookingError {
@@ -55,12 +64,22 @@ impl From<cook_texture::Error> for CookingError {
     }
 }
 
-async fn cook(assetio: &AssetIO, source_base: &Url, target_base: &Url, url: &Url) -> Result<String, CookingError> {
-    let hashed_file = match url.extension() {
-        "vs" | "fs" | "cs" => cook_shader::cook_shader(assetio, &source_base, &target_base, &url).await?,
-        "pl" => cook_pipeline::cook_pipeline(assetio, &source_base, &target_base, &url).await?,
-        "glb" | "gltf" => cook_gltf::cook_gltf(assetio, &source_base, &target_base, &url).await?,
-        "jpg" | "png" => cook_texture::cook_texture(assetio, &source_base, &target_base, &url).await?,
+impl From<cook_world::Error> for CookingError {
+    fn from(err: cook_world::Error) -> CookingError {
+        CookingError::World(err)
+    }
+}
+
+async fn cook(assetio: &AssetIO, source_base: &Url, target_base: &Url, asset: &str) -> Result<String, CookingError> {
+    let asset_url = source_base.join(&asset)?;
+    let target_url = target_base.join(&asset)?;
+
+    let hashed_file = match asset_url.extension() {
+        "vs" | "fs" | "cs" => cook_shader::cook_shader(assetio, &source_base, &target_base, &asset_url).await?,
+        "pl" => cook_pipeline::cook_pipeline(assetio, &source_base, &target_base, &asset_url).await?,
+        "glb" | "gltf" => cook_gltf::cook_gltf(assetio, &source_base, &target_base, &asset_url).await?,
+        "jpg" | "png" => cook_texture::cook_texture(assetio, &source_base, &target_base, &asset_url).await?,
+        "wrld" => cook_world::cook_world(assetio, &source_base, &target_base, &asset_url, &target_url).await?,
         e => return Err(CookingError::Other(format!("Unknown asset type: {}", e))),
     };
 
@@ -74,8 +93,7 @@ async fn run(assets: Vec<String>) {
     let assetio = AssetIO::new().unwrap();
 
     for asset in &assets {
-        let asset_url = asset_source_base.join(&asset).unwrap();
-        match cook(&assetio, &asset_source_base, &asset_target_base, &asset_url).await {
+        match cook(&assetio, &asset_source_base, &asset_target_base, &asset).await {
             Ok(hashed_id) => log::info!("Cooking of [{}] done: [{}]", asset, hashed_id),
             Err(err) => log::error!("Cooking of [{}] failed: {}", asset, err),
         };
@@ -94,11 +112,13 @@ fn main() {
     let mut rt = Runtime::new().unwrap();
 
     let assets: Vec<_> = [
+        "test_worlds/test1/test.wrld",
+        "test_worlds/test2/test.wrld",
+        "test_worlds/test3/test.wrld",
         //"pipelines/hello/hello.pl",
         //"pipelines/hello2/hello.pl",
-        "pipelines/hello3/hello.pl",
         //"tex/checker.png",
-        "tex/farkas.jpg",
+        //"tex/farkas.jpg",
         //"models/VertexColorTest.glb",
     ]
     .iter()

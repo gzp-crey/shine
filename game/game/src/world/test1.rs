@@ -1,21 +1,25 @@
 use crate::assets::vertex;
 use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
 use crate::{GameError, GameRender};
+use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Test1 {
+    pub pipeline: String,
+}
 
 struct TestScene {
     pipeline: PipelineId,
 }
 
 impl TestScene {
-    fn new() -> TestScene {
+    fn new(test: Test1) -> TestScene {
         TestScene {
-            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Null>(
-                "2efe/c9dbb5a6c535f3cddca3472280f53eff60f4bdd99f131383cfe45c67e99f.pl",
-            )),
+            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Null>(&test.pipeline)),
         }
     }
 
@@ -73,10 +77,10 @@ fn render_test() -> Box<dyn Schedulable> {
         })
 }
 
-pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub async fn register_test_scene(test: Test1, game: &mut GameRender) -> Result<(), GameError> {
     log::info!("Adding test1 scene to the world");
 
-    game.resources.insert(TestScene::new());
+    game.resources.insert(TestScene::new(test));
 
     let render = Schedule::builder().add_system(render_test()).flush().build();
     game.schedules.insert("render", render)?;
@@ -84,7 +88,7 @@ pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
     Ok(())
 }
 
-pub fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub async fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
     log::info!("Removing test1 scene from the world");
 
     game.schedules.remove("render");

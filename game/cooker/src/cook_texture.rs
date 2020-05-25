@@ -64,10 +64,10 @@ impl From<ImageError> for Error {
 }
 
 pub async fn load_image(io: &AssetIO, image_url: &Url) -> Result<DynamicImage, Error> {
-    log::trace!("[{}] Downloading image...", image_url.as_str());
+    log::debug!("[{}] Downloading image...", image_url.as_str());
     let data = io.download_binary(&image_url).await?;
 
-    log::trace!("[{}] Docompressing image...", image_url.as_str());
+    log::debug!("[{}] Docompressing image...", image_url.as_str());
     let image = task::spawn_blocking(move || image::load_from_memory(&data)).await??;
 
     log::trace!(
@@ -80,7 +80,7 @@ pub async fn load_image(io: &AssetIO, image_url: &Url) -> Result<DynamicImage, E
 }
 
 pub async fn load_descriptor(io: &AssetIO, meta_url: &Url) -> Result<TextureDescriptor, Error> {
-    log::trace!("[{}] Downloading descriptor...", meta_url.as_str());
+    log::debug!("[{}] Downloading descriptor...", meta_url.as_str());
     match io.download_string(&meta_url).await {
         Ok(data) => Ok(serde_json::from_str(&data)?),
         Err(AssetError::AssetProvider(_)) => {
@@ -102,13 +102,13 @@ pub async fn cook_texture(
 
     if descriptor.size != (0, 0) {
         let (w, h) = descriptor.size;
-        log::trace!("[{}] Resizing texture to ({},{})...", texture_url.as_str(), w, h);
+        log::debug!("[{}] Resizing texture to ({},{})...", texture_url.as_str(), w, h);
         image = task::spawn_blocking(move || image.resize_exact(w, h, FilterType::CatmullRom)).await?;
     } else {
         descriptor.size = image.dimensions();
     }
 
-    log::trace!(
+    log::debug!(
         "[{}] Converting color space for texture format {:?}...",
         texture_url.as_str(),
         descriptor.format
@@ -124,7 +124,7 @@ pub async fn cook_texture(
     //todo: reshape image the match format
     log::trace!("[{}] Texture descriptor:\n{:#?}", texture_url.as_str(), descriptor);
 
-    log::trace!("[{}] Compressing texture...", texture_url.as_str());
+    log::debug!("[{}] Compressing texture...", texture_url.as_str());
     let encoding = descriptor.encoding;
     let image = task::spawn_blocking(move || match encoding {
         TextureImageEncoding::Png => {
@@ -134,10 +134,13 @@ pub async fn cook_texture(
         }
     })
     .await??;
+    log::trace!(
+        "[{}] Cooked texture descriptor:\n{:#?}",
+        texture_url.as_str(),
+        descriptor
+    );
 
-    log::trace!("{}", serde_json::to_string(&descriptor).unwrap());
-
-    log::trace!("[{}] Uploading...", texture_url.as_str());
+    log::debug!("[{}] Uploading...", texture_url.as_str());
     let cooked_texture = bincode::serialize(&TextureImage { descriptor, image })?;
     let target_id = io.upload_cooked_binary(&target_base, "tex", &cooked_texture).await?;
     Ok(target_id)

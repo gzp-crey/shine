@@ -1,3 +1,4 @@
+use crate::assets::AssetIO;
 use crate::input::{self, add_input_system};
 use crate::render::{self, add_render_system, Context, Frame, Surface};
 use crate::{Config, GameError, ScheduleSet};
@@ -5,8 +6,10 @@ use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
     world::World,
 };
+use std::sync::Arc;
 
 pub struct GameRender {
+    pub assetio: Arc<AssetIO>,
     pub surface: Surface,
     pub resources: Resources,
     pub world: World,
@@ -17,9 +20,11 @@ impl GameRender {
     pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameRender, GameError> {
         let mut resources = Resources::default();
         let world = World::new();
+        let assetio =
+            Arc::new(AssetIO::new().map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?);
 
         add_input_system(&mut resources).await?;
-        add_render_system(&config, wgpu_instance, &mut resources).await?;
+        add_render_system(&config, assetio.clone(), wgpu_instance, &mut resources).await?;
 
         let schedules = {
             let mut schedules = ScheduleSet::new();
@@ -58,6 +63,7 @@ impl GameRender {
         };
 
         Ok(GameRender {
+            assetio,
             surface,
             resources,
             world,

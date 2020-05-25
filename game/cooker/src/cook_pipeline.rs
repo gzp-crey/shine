@@ -59,9 +59,9 @@ pub async fn cook_pipeline(
     target_base: &Url,
     pipeline_url: &Url,
 ) -> Result<String, Error> {
-    log::trace!("[{}] Cooking...", pipeline_url.as_str());
+    log::debug!("[{}] Cooking...", pipeline_url.as_str());
 
-    log::trace!("[{}] Downloading...", pipeline_url.as_str());
+    log::debug!("[{}] Downloading...", pipeline_url.as_str());
     let pipeline = io.download_string(&pipeline_url).await?;
 
     let mut pipeline = serde_json::from_str::<PipelineDescriptor>(&pipeline)?;
@@ -76,17 +76,17 @@ pub async fn cook_pipeline(
     let local_layout = pipeline.get_local_uniform_layout()?;
     log::trace!("[{}] Local binding layout:\n{:#?}", pipeline_url.as_str(), local_layout);
 
-    log::trace!("[{}] Cooking vertex shader...", pipeline_url.as_str());
-    let vertex_shader_url = Url::from_base_or_current(&source_base, &pipeline_url, &pipeline.vertex_stage.shader)?;
+    log::debug!("[{}] Cooking vertex shader...", pipeline_url.as_str());
+    let vertex_shader_url = Url::from_base_or_current(source_base, pipeline_url, &pipeline.vertex_stage.shader)?;
     let vertex_shader_id = cook_shader::cook_shader(io, source_base, target_base, &vertex_shader_url).await?;
     pipeline.vertex_stage.shader = vertex_shader_id.to_owned();
 
-    log::trace!("[{}] Cooking fragment shader...", pipeline_url.as_str());
-    let fragment_shader_url = Url::from_base_or_current(&source_base, &pipeline_url, &pipeline.fragment_stage.shader)?;
+    log::debug!("[{}] Cooking fragment shader...", pipeline_url.as_str());
+    let fragment_shader_url = Url::from_base_or_current(source_base, pipeline_url, &pipeline.fragment_stage.shader)?;
     let fragment_shader_id = cook_shader::cook_shader(io, source_base, target_base, &fragment_shader_url).await?;
     pipeline.fragment_stage.shader = fragment_shader_id.to_owned();
 
-    log::trace!("[{}] Uploading...", pipeline_url.as_str());
+    log::debug!("[{}] Uploading...", pipeline_url.as_str());
     let cooked_pipeline = bincode::serialize(&pipeline)?;
     let target_id = io.upload_cooked_binary(&target_base, "pl", &cooked_pipeline).await?;
 

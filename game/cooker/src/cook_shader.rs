@@ -46,9 +46,9 @@ pub async fn cook_shader(
     target_base: &Url,
     shader_url: &Url,
 ) -> Result<String, Error> {
-    log::trace!("[{}] Cooking...", shader_url.as_str());
+    log::debug!("[{}] Cooking...", shader_url.as_str());
 
-    log::trace!("[{}] Downloading...", shader_url.as_str());
+    log::debug!("[{}] Downloading...", shader_url.as_str());
     let shader_source = io.download_string(&shader_url).await?;
 
     let ext = shader_url.extension();
@@ -59,14 +59,14 @@ pub async fn cook_shader(
         _ => return Err(Error::UnknownShader(ext.to_owned())),
     };
 
-    log::trace!("[{}] Compiling...", shader_url.as_str());
+    log::debug!("[{}] Compiling...", shader_url.as_str());
     log::trace!("[{}] Source:\n{}", shader_url.as_str(), shader_source);
     let mut compiler = shaderc::Compiler::new().unwrap();
     let options = shaderc::CompileOptions::new().unwrap();
     let compiled_artifact =
         compiler.compile_into_spirv(&shader_source, ty, shader_url.as_str(), "main", Some(&options))?;
 
-    log::trace!("[{}] Uploading...", shader_url.as_str());
+    log::debug!("[{}] Uploading...", shader_url.as_str());
     let target_id = io
         .upload_cooked_binary(&target_base, &format!("{}_spv", ext), compiled_artifact.as_binary_u8())
         .await?;

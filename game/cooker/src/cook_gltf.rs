@@ -67,16 +67,16 @@ pub fn serialize_gltf(document: Document, mut blob: Option<Vec<u8>>) -> Result<V
 pub async fn cook_gltf(io: &AssetIO, _source_base: &Url, target_base: &Url, gltf_url: &Url) -> Result<String, Error> {
     log::info!("[{}] Cooking...", gltf_url.as_str());
 
-    log::trace!("[{}] Downloading...", gltf_url.as_str());
+    log::debug!("[{}] Downloading...", gltf_url.as_str());
     let data = io.download_binary(&gltf_url).await?;
     let Gltf { document, blob } = Gltf::from_slice(&data)?;
 
     // parse, cook external, referenced resources
 
-    log::trace!("[{}] Creating binary gltf...", gltf_url.as_str());
+    log::debug!("[{}] Creating binary gltf...", gltf_url.as_str());
     let cooked_gltf = serialize_gltf(document, blob)?;
 
-    log::trace!("[{}] Uploading...", gltf_url.as_str());
+    log::debug!("[{}] Uploading...", gltf_url.as_str());
     let target_id = io.upload_cooked_binary(&target_base, "glb", &cooked_gltf).await?;
 
     Ok(target_id)

@@ -1,6 +1,7 @@
 use crate::assets::vertex::{self, Pos3fCol4f};
 use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
 use crate::{GameError, GameRender};
+use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
@@ -31,17 +32,20 @@ const VERTICES: &[Pos3fCol4f] = &[
 
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Test2 {
+    pub pipeline: String,
+}
+
 struct TestScene {
     pipeline: PipelineId,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 impl TestScene {
-    fn new() -> TestScene {
+    fn new(test: Test2) -> TestScene {
         TestScene {
-            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fCol4f>(
-                "63b0/81805928a06463d7d2cb05aad27312036f15fe7d2b90a272b95ce21a2a91.pl",
-            )),
+            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fCol4f>(&test.pipeline)),
             buffers: None,
         }
     }
@@ -118,10 +122,10 @@ fn render_test() -> Box<dyn Schedulable> {
         })
 }
 
-pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub async fn register_test_scene(test: Test2, game: &mut GameRender) -> Result<(), GameError> {
     log::info!("Adding test2 scene to the world");
 
-    game.resources.insert(TestScene::new());
+    game.resources.insert(TestScene::new(test));
 
     let render = Schedule::builder().add_system(render_test()).flush().build();
     game.schedules.insert("render", render)?;
@@ -129,7 +133,7 @@ pub fn register_test_scene(game: &mut GameRender) -> Result<(), GameError> {
     Ok(())
 }
 
-pub fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub async fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
     log::info!("Removing test2 scene from the world");
 
     game.schedules.remove("render");
