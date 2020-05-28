@@ -9,16 +9,13 @@ mod cook_shader;
 mod cook_texture;
 mod cook_world;
 mod error;
-//mod local_db;
 
 pub use self::config::Config;
 pub use error::CookingError;
-//pub use local_db::{CacheState, CompleteCache, IncompleteCache, LocalDB};
 
 #[derive(Clone)]
 pub struct Context {
     pub assetio: Arc<AssetIO>,
-    //pub local_db: LocalDB,
 }
 
 async fn cook(
@@ -82,16 +79,3 @@ fn main() {
     }
 }
 
-// local DB:
-// local relative uri, local source hash, cooked_uri
-// cook: if source hash != stored local source hash {
-//           cook and update remote db
-//           update local
-//           return new cooked_uri
-//       }
-//       else {
-//           return cooked_uri from db
-//       }
-//
-// remote db:
-//   uri -> dependency uri

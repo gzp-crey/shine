@@ -42,8 +42,6 @@ pub async fn cook_world(
     }
     log::trace!("[{}] Cooked world:\n{:#?}", world_url.as_str(), world);
 
-    log::error!("prefix{:?}", world_url.relative_path(&source_base));
-
     let target_url = target_base.join(world_url.relative_path(&source_base).ok_or(
         AssetError::UnsupportedFormat("Falied to create path for target".to_owned()),
     )?)?;
