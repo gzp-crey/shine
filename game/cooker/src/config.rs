@@ -6,6 +6,7 @@ use std::path::Path;
 pub struct Config {
     pub asset_source_base: String,
     pub asset_target_base: String,
+    pub local_db_connection: String,
 }
 
 impl Config {

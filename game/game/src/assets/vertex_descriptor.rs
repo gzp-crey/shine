@@ -1,8 +1,17 @@
-use crate::assets::VertexSemantic;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::{fmt, mem};
+
+#[derive(Clone, Debug, Serialize, Hash, Deserialize, PartialEq, Eq)]
+pub enum VertexSemantic {
+    Position,
+    Color(u8),
+    TexCoord(u8),
+    Normal,
+    Tangent,
+    Custom(String),
+}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct VertexTypeId(Vec<u8>);

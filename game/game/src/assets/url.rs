@@ -40,6 +40,16 @@ impl Url {
         ))
     }
 
+    pub fn path(&self) -> &str {
+        &self.inner[url::Position::BeforePath..url::Position::AfterPath]
+    }
+
+    pub fn relative_path(&self, base: &Url) -> Option<&str> {
+        let path = &self.inner[..url::Position::AfterPath];
+        let prefix = base.as_str();
+        path.strip_prefix(prefix)
+    }
+
     pub fn to_file_path(&self) -> PathBuf {
         PathBuf::from(&self.inner[url::Position::BeforeHost..url::Position::AfterPath])
     }

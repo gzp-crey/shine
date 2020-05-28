@@ -1,18 +1,13 @@
-use crate::assets::{AssetError, VertexBufferLayout};
+use crate::assets::{AssetError, Uniform, VertexBufferLayout, VertexSemantic};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
-#[derive(Clone, Debug, Serialize, Hash, Deserialize, PartialEq, Eq)]
-pub enum VertexSemantic {
-    Position,
-    Color(u8),
-    TexCoord(u8),
-    Normal,
-    Tangent,
-    Custom(String),
-}
+pub const UNIFORM_GROUP_COUNT: u32 = 2;
+pub const GLOBAL_UNIFORMS: u32 = 0;
+pub const LOCAL_UNIFORMS: u32 = 1;
 
+/// A vertex attribute requirement of the pipeline
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipelineAttribute(u32, VertexSemantic, wgpu::VertexFormat);
 
@@ -34,125 +29,107 @@ impl PipelineAttribute {
     }
 }
 
+/// A uniform requirement of the pipeline
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
-pub enum UniformSemantic {
-    ModelView,
-    Diffuse,
-    Normal,
-    Custom(String),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
-pub enum UniformFormat {
-    Sampler,
-    Texture,
-    //Binary(usize),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
-pub struct PipelineUniform(u32, UniformSemantic, UniformFormat);
+pub struct PipelineUniform(u32, Uniform);
 
 impl PipelineUniform {
-    pub fn new(location: u32, semantic: UniformSemantic, format: UniformFormat) -> PipelineUniform {
-        PipelineUniform(location, semantic, format)
+    pub fn new(location: u32, uniform: Uniform) -> PipelineUniform {
+        PipelineUniform(location, uniform)
     }
 
     pub fn location(&self) -> u32 {
         self.0
     }
 
-    pub fn semantic(&self) -> &UniformSemantic {
+    pub fn uniform(&self) -> &Uniform {
         &self.1
     }
-
-    pub fn format(&self) -> &UniformFormat {
-        &self.2
-    }
 }
 
-fn merge_uniforms(
-    layouts: &[(&[PipelineUniform], wgpu::ShaderStage)],
-) -> Result<Vec<(PipelineUniform, wgpu::ShaderStage)>, AssetError> {
-    let mut merged: HashMap<u32, (PipelineUniform, wgpu::ShaderStage)> = Default::default();
-    for (layout, stage) in layouts.iter() {
-        for uniform in layout.iter() {
-            if let Some(u) = merged.get_mut(&uniform.location()) {
-                if u.0 != *uniform {
-                    return Err(AssetError::Content(format!(
-                        "Incompatible uniform binding at {} location: {:?} vs {:?}",
-                        uniform.location(),
-                        u,
-                        (uniform, stage)
-                    )));
+/// Combined uniform requirements of the pipeline
+#[derive(Debug)]
+pub struct PipelineUniformLayout(Vec<(PipelineUniform, wgpu::ShaderStage)>);
+
+impl PipelineUniformLayout {
+    pub fn from_stages(layouts: &[(&[PipelineUniform], wgpu::ShaderStage)]) -> Result<Self, AssetError> {
+        let mut merged: HashMap<u32, (PipelineUniform, wgpu::ShaderStage)> = Default::default();
+        for (layout, stage) in layouts.iter() {
+            for uniform in layout.iter() {
+                if let Some(u) = merged.get_mut(&uniform.location()) {
+                    if u.0 != *uniform {
+                        return Err(AssetError::Content(format!(
+                            "Incompatible uniform binding at {} location: {:?} vs {:?}",
+                            uniform.location(),
+                            u,
+                            (uniform, stage)
+                        )));
+                    }
+                    u.1 |= *stage;
+                } else {
+                    merged.insert(uniform.location(), (uniform.clone(), *stage));
                 }
-                u.1 |= *stage;
-            } else {
-                merged.insert(uniform.location(), (uniform.clone(), *stage));
             }
         }
+
+        let mut result: Vec<_> = merged.values().cloned().collect();
+        result.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
+        Ok(PipelineUniformLayout(result))
     }
 
-    let mut result: Vec<_> = merged.values().cloned().collect();
-    result.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
-    Ok(result)
-}
-
-fn create_bind_group_layout_entries(
-    layout: &Vec<(PipelineUniform, wgpu::ShaderStage)>,
-) -> Result<Vec<wgpu::BindGroupLayoutEntry>, AssetError> {
-    let mut descriptor = Vec::new();
-    for (uniform, stages) in layout.iter() {
-        descriptor.push(match uniform.2 {
-            UniformFormat::Texture => wgpu::BindGroupLayoutEntry {
-                binding: uniform.location(),
-                visibility: *stages,
-                ty: wgpu::BindingType::SampledTexture {
-                    multisampled: false,
-                    dimension: wgpu::TextureViewDimension::D2,
-                    component_type: wgpu::TextureComponentType::Uint,
+    pub fn create_bind_group_layout_entries(&self) -> Result<Vec<wgpu::BindGroupLayoutEntry>, AssetError> {
+        let mut descriptor = Vec::new();
+        for (uniform, stages) in self.0.iter() {
+            descriptor.push(match uniform.1 {
+                Uniform::Texture(_) => wgpu::BindGroupLayoutEntry {
+                    binding: uniform.location(),
+                    visibility: *stages,
+                    ty: wgpu::BindingType::SampledTexture {
+                        multisampled: false,
+                        dimension: wgpu::TextureViewDimension::D2,
+                        component_type: wgpu::TextureComponentType::Uint,
+                    },
                 },
-            },
-            UniformFormat::Sampler => wgpu::BindGroupLayoutEntry {
-                binding: uniform.location(),
-                visibility: *stages,
-                ty: wgpu::BindingType::Sampler { comparison: false },
-            },
-        });
-    }
-    Ok(descriptor)
-}
-
-pub fn create_bind_group<'a, F>(
-    device: &wgpu::Device,
-    (bind_group_layout, uniforms): (&wgpu::BindGroupLayout, &[PipelineUniform]),
-    mut get_value: F,
-) -> wgpu::BindGroup
-where
-    F: FnMut(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
-{
-    let mut bindings = Vec::with_capacity(uniforms.len());
-    for u in uniforms {
-        let resource = get_value(u.semantic(), u.format());
-        //todo: check if resource is conforming to uniform
-        bindings.push(wgpu::Binding {
-            binding: u.location(),
-            resource,
-        });
+                Uniform::Sampler(_) => wgpu::BindGroupLayoutEntry {
+                    binding: uniform.location(),
+                    visibility: *stages,
+                    ty: wgpu::BindingType::Sampler { comparison: false },
+                },
+                Uniform::UniformBuffer(_) => wgpu::BindGroupLayoutEntry {
+                    binding: uniform.location(),
+                    visibility: *stages,
+                    ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                },
+            });
+        }
+        Ok(descriptor)
     }
 
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: bind_group_layout,
-        bindings: &bindings,
-    })
+    pub fn create_bind_group_layout(
+        self,
+        device: &wgpu::Device,
+    ) -> Result<Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>, AssetError> {
+        let bindings = self.create_bind_group_layout_entries()?;
+        let layout: Vec<_> = self.0.into_iter().map(|(u, _)| u).collect();
+        if !bindings.is_empty() {
+            Ok(Some((
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    bindings: &bindings,
+                }),
+                layout,
+            )))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct VertexStage {
     pub shader: String,
     pub attributes: Vec<PipelineAttribute>,
-    pub global_uniforms: Vec<PipelineUniform>,
-    pub local_uniforms: Vec<PipelineUniform>,
+    pub uniforms: [Vec<PipelineUniform>; UNIFORM_GROUP_COUNT as usize],
 }
 
 impl VertexStage {
@@ -229,8 +206,7 @@ impl VertexStage {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FragmentStage {
     pub shader: String,
-    pub global_uniforms: Vec<PipelineUniform>,
-    pub local_uniforms: Vec<PipelineUniform>,
+    pub uniforms: [Vec<PipelineUniform>; UNIFORM_GROUP_COUNT as usize],
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -241,28 +217,63 @@ pub enum Blending {
 /// Compiled pipeline with related binding information
 pub struct PipelineBuffer {
     pub pipeline: wgpu::RenderPipeline,
-    pub global_bind_group_layout: Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>,
-    pub local_bind_group_layout: Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>,
+    pub uniforms: [Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>; UNIFORM_GROUP_COUNT as usize],
 }
 
 impl PipelineBuffer {
-    pub fn create_global_bind_group<'a, F>(&self, device: &wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
-    where
-        F: FnMut(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
-    {
-        if let Some((ref bind_group_layout, ref uniforms)) = self.global_bind_group_layout {
-            Some(create_bind_group(device, (bind_group_layout, &*uniforms), get_value))
+    fn get_uniform_buffer_size(&self, group: u32) -> usize {
+        self.uniforms[group as usize]
+            .as_ref()
+            .map(|layout| {
+                layout.1.iter().fold(0, |size, u| {
+                    if let Uniform::UniformBuffer(ref b) = u.1 {
+                        size + b.size()
+                    } else {
+                        size
+                    }
+                })
+            })
+            .unwrap_or(0)
+    }
+
+    pub fn create_buffer(&self, group: u32, device: &wgpu::Device) -> Option<wgpu::Buffer> {
+        let size = self.get_uniform_buffer_size(group);
+        if size > 0 {
+            Some(device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: size as wgpu::BufferAddress,
+                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            }))
         } else {
             None
         }
     }
 
-    pub fn create_local_bind_group<'a, F>(&self, device: &wgpu::Device, get_value: F) -> Option<wgpu::BindGroup>
+    pub fn create_bind_group<'a, F>(
+        &self,
+        group: u32,
+        device: &wgpu::Device,
+        mut get_value: F,
+    ) -> Option<wgpu::BindGroup>
     where
-        F: FnMut(&UniformSemantic, &UniformFormat) -> wgpu::BindingResource<'a>,
+        F: FnMut(&Uniform) -> wgpu::BindingResource<'a>,
     {
-        if let Some((ref layout, ref uniforms)) = self.local_bind_group_layout {
-            Some(create_bind_group(device, (layout, &*uniforms), get_value))
+        if let Some((ref bind_group_layout, ref uniforms)) = self.uniforms[group as usize] {
+            let mut bindings = Vec::with_capacity(uniforms.len());
+            for u in uniforms {
+                let resource = get_value(u.uniform());
+                //todo: check if resource is conforming to uniform
+                bindings.push(wgpu::Binding {
+                    binding: u.location(),
+                    resource,
+                });
+            }
+
+            Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: bind_group_layout,
+                bindings: &bindings,
+            }))
         } else {
             None
         }
@@ -282,54 +293,24 @@ impl PipelineBuffer {
     }
 }
 
-/// Pipeline rendering context (render pass)
-pub struct BoundPipeline<'a: 'pass, 'pass> {
-    pub(crate) pipeline: &'a PipelineBuffer,
-    pub(crate) render_pass: wgpu::RenderPass<'pass>,
-}
-
-impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
-    #[inline]
-    pub(crate) fn bind_pipeline(&mut self) {
-        self.render_pass.set_pipeline(&self.pipeline.pipeline);
-    }
-}
-
-impl<'a: 'pass, 'pass> Deref for BoundPipeline<'a, 'pass> {
-    type Target = wgpu::RenderPass<'pass>;
-    fn deref(&self) -> &Self::Target {
-        &self.render_pass
-    }
-}
-
-impl<'a: 'pass, 'pass> DerefMut for BoundPipeline<'a, 'pass> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.render_pass
-    }
-}
-
 /// Deserialized pipeline data
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipelineDescriptor {
     pub primitive_topology: wgpu::PrimitiveTopology,
     pub vertex_stage: VertexStage,
     pub fragment_stage: FragmentStage,
-    color_stage: Blending,
+    pub color_stage: Blending,
     //depth_stencile_stage:
 }
 
 impl PipelineDescriptor {
-    pub fn get_global_uniform_layout(&self) -> Result<Vec<(PipelineUniform, wgpu::ShaderStage)>, AssetError> {
-        merge_uniforms(&[
-            (&self.vertex_stage.global_uniforms, wgpu::ShaderStage::VERTEX),
-            (&self.fragment_stage.global_uniforms, wgpu::ShaderStage::FRAGMENT),
-        ])
-    }
-
-    pub fn get_local_uniform_layout(&self) -> Result<Vec<(PipelineUniform, wgpu::ShaderStage)>, AssetError> {
-        merge_uniforms(&[
-            (&self.vertex_stage.local_uniforms, wgpu::ShaderStage::VERTEX),
-            (&self.fragment_stage.local_uniforms, wgpu::ShaderStage::FRAGMENT),
+    pub fn get_uniform_layout(&self, group: u32) -> Result<PipelineUniformLayout, AssetError> {
+        PipelineUniformLayout::from_stages(&[
+            (&self.vertex_stage.uniforms[group as usize], wgpu::ShaderStage::VERTEX),
+            (
+                &self.fragment_stage.uniforms[group as usize],
+                wgpu::ShaderStage::FRAGMENT,
+            ),
         ])
     }
 
@@ -353,53 +334,22 @@ impl PipelineDescriptor {
             index_format: wgpu::IndexFormat::Uint16,
             vertex_buffers: &vertex_buffers,
         };
-        log::info!("vertex_state: {:?}", vertex_state);
+        log::trace!("Vertex state: {:?}", vertex_state);
 
-        let global_bind_group_layout = {
-            let layout = self.get_global_uniform_layout()?;
-            let bindings = create_bind_group_layout_entries(&layout)?;
-            let layout: Vec<_> = layout.into_iter().map(|(u, _)| u).collect();
-            if !bindings.is_empty() {
-                Some((
-                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: None,
-                        bindings: &bindings,
-                    }),
-                    layout,
-                ))
-            } else {
-                None
-            }
-        };
-
-        let local_bind_group_layout = {
-            let layout = self.get_local_uniform_layout()?;
-            let bindings = create_bind_group_layout_entries(&layout)?;
-            let layout: Vec<_> = layout.into_iter().map(|(u, _)| u).collect();
-            if !bindings.is_empty() {
-                Some((
-                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: None,
-                        bindings: &bindings,
-                    }),
-                    layout,
-                ))
-            } else {
-                None
-            }
-        };
+        let mut uniforms = [None, None];
+        for i in 0..UNIFORM_GROUP_COUNT {
+            let layout = self.get_uniform_layout(i)?;
+            log::trace!("Bind group({}) layout {:#?}", i, layout);
+            uniforms[i as usize] = layout.create_bind_group_layout(device)?;
+        }
 
         let pipeline_layout = {
             let mut bind_group_layouts = Vec::new();
-            if let Some((ref bind_group_layout, _)) = global_bind_group_layout {
-                bind_group_layouts.push(bind_group_layout);
+            for i in 0..UNIFORM_GROUP_COUNT {
+                if let Some((ref bind_group_layout, _)) = uniforms[i as usize] {
+                    bind_group_layouts.push(bind_group_layout);
+                }
             }
-            if let Some((ref bind_group_layout, _)) = local_bind_group_layout {
-                bind_group_layouts.push(bind_group_layout);
-            }
-
-            log::trace!("bind_group_layouts: {:?}", bind_group_layouts.len());
-
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 bind_group_layouts: &bind_group_layouts,
             })
@@ -437,55 +387,32 @@ impl PipelineDescriptor {
             alpha_to_coverage_enabled: false,
         });
 
-        Ok(PipelineBuffer {
-            pipeline,
-            global_bind_group_layout,
-            local_bind_group_layout,
-        })
+        Ok(PipelineBuffer { pipeline, uniforms })
     }
 }
 
-pub fn foo() {
-    use wgpu::VertexFormat as VF;
-    use UniformFormat as UF;
-    use UniformSemantic as US;
-    use VertexSemantic as VS;
+/// Pipeline rendering context (render pass)
+pub struct BoundPipeline<'a: 'pass, 'pass> {
+    pub(crate) pipeline: &'a PipelineBuffer,
+    pub(crate) render_pass: wgpu::RenderPass<'pass>,
+}
 
-    let p = PipelineDescriptor {
-        primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-        vertex_stage: VertexStage {
-            shader: "pipeline/hello.vs".to_owned(),
-            attributes: [
-                PipelineAttribute(0, VS::Position, VF::Float2),
-                PipelineAttribute(1, VS::Normal, VF::Float3),
-                PipelineAttribute(3, VS::Color(3), VF::Float3),
-                PipelineAttribute(2, VS::Custom("c1".to_owned()), VF::Ushort2Norm),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
-            global_uniforms: [
-                //PipelineUniform(0, US::ModelView, UF::Binary),
-                PipelineUniform(1, US::Diffuse, UF::Texture),
-                PipelineUniform(2, US::Diffuse, UF::Sampler),
-                PipelineUniform(3, US::Custom("u1".to_owned()), UF::Texture),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
-            local_uniforms: [/*PipelineUniform(0, US::ModelView, UF::Binary)*/]
-                .iter()
-                .cloned()
-                .collect(),
-        },
-        fragment_stage: FragmentStage {
-            shader: "pipeline/hello.fs".to_owned(),
-            global_uniforms: Default::default(),
-            local_uniforms: Default::default(),
-        },
-        color_stage: Blending::Replace,
-        //depth_stencile_stage:
-    };
+impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
+    #[inline]
+    pub(crate) fn bind_pipeline(&mut self) {
+        self.render_pass.set_pipeline(&self.pipeline.pipeline);
+    }
+}
 
-    println!("{}", serde_json::to_string(&p).unwrap());
+impl<'a: 'pass, 'pass> Deref for BoundPipeline<'a, 'pass> {
+    type Target = wgpu::RenderPass<'pass>;
+    fn deref(&self) -> &Self::Target {
+        &self.render_pass
+    }
+}
+
+impl<'a: 'pass, 'pass> DerefMut for BoundPipeline<'a, 'pass> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.render_pass
+    }
 }

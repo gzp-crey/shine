@@ -1,6 +1,7 @@
 use crate::assets::{
+    uniform::ViewProj,
     vertex::{self, Pos3fTex2f},
-    TextureSemantic, Uniform, GLOBAL_UNIFORMS,
+    TextureSemantic, Uniform, UniformSemantic, GLOBAL_UNIFORMS,
 };
 use crate::render::{
     Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
@@ -39,7 +40,7 @@ const VERTICES: &[Pos3fTex2f] = &[
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Test3 {
+pub struct Test4 {
     pub pipeline: String,
     pub texture: String,
 }
@@ -47,28 +48,65 @@ pub struct Test3 {
 struct TestScene {
     pipeline: PipelineId,
     texture: TextureId,
-    buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
+    geometry: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
+    uniforms: Option<wgpu::Buffer>,
     bind_group: Option<wgpu::BindGroup>,
+
+    scale: f32,
+    time: f32,
 }
 
 impl TestScene {
-    fn new(test: Test3) -> TestScene {
+    fn new(test: Test4) -> TestScene {
         TestScene {
             pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fTex2f>(&test.pipeline)),
             texture: TextureId::from_key(test.texture),
-            buffers: None,
+            geometry: None,
+            uniforms: None,
             bind_group: None,
+            scale: 1.,
+            time: 0.,
         }
     }
 
-    pub fn prepare(&mut self, device: &wgpu::Device) {
-        self.buffers.get_or_insert_with(|| {
+    pub fn prepare(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder) {
+        self.geometry.get_or_insert_with(|| {
             (
                 device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
                 device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
                 INDICES.len() as u32,
             )
         });
+
+        let (s, c) = self.time.sin_cos();
+
+        let uniforms = ViewProj {
+            mx: [c, s, 0.0, 0.0, -s, c, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        };
+
+        self.scale *= 0.99;
+        self.time += 0.03;
+
+        match &self.uniforms {
+            None => {
+                self.uniforms = Some(device.create_buffer_with_data(
+                    bytemuck::cast_slice(&[uniforms]),
+                    wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                ))
+            }
+            Some(buffer) => {
+                let staging_buffer =
+                    device.create_buffer_with_data(bytemuck::cast_slice(&[uniforms]), wgpu::BufferUsage::COPY_SRC);
+
+                encoder.copy_buffer_to_buffer(
+                    &staging_buffer,
+                    0,
+                    &buffer,
+                    0,
+                    std::mem::size_of::<ViewProj>() as wgpu::BufferAddress,
+                );
+            }
+        }
     }
 
     pub fn render(
@@ -82,8 +120,9 @@ impl TestScene {
         let pipeline = self.pipeline.get(pipelines);
         let texture = self.texture.get(textures);
 
-        if let (Some(ref buffers), Some(pipeline), Some(texture)) = (
-            self.buffers.as_ref(),
+        if let (Some(ref geometry), Some(ref uniforms), Some(pipeline), Some(texture)) = (
+            self.geometry.as_ref(),
+            self.uniforms.as_ref(),
             pipeline.pipeline_buffer(),
             texture.texture_buffer(),
         ) {
@@ -92,16 +131,19 @@ impl TestScene {
                     .create_bind_group(GLOBAL_UNIFORMS, device, |u| match u {
                         Uniform::Texture(TextureSemantic::Diffuse) => wgpu::BindingResource::TextureView(&texture.view),
                         Uniform::Sampler(TextureSemantic::Diffuse) => wgpu::BindingResource::Sampler(&texture.sampler),
+                        Uniform::UniformBuffer(UniformSemantic::ViewProj) => {
+                            wgpu::BindingResource::Buffer(uniforms.slice(..))
+                        }
                         _ => unreachable!(),
                     })
                     .unwrap()
             });
 
             let mut pass = pipeline.bind(encoder, pass_descriptor);
-            pass.set_vertex_buffer(0, buffers.0.slice(..));
-            pass.set_index_buffer(buffers.1.slice(..));
+            pass.set_vertex_buffer(0, geometry.0.slice(..));
+            pass.set_index_buffer(geometry.1.slice(..));
             pass.set_bind_group(GLOBAL_UNIFORMS, bind_group, &[]);
-            pass.draw_indexed(0..buffers.2, 0, 0..1);
+            pass.draw_indexed(0..geometry.2, 0, 0..1);
         }
     }
 }
@@ -111,7 +153,13 @@ fn prepare_render() -> Box<dyn Schedulable> {
         .read_resource::<Context>()
         .write_resource::<TestScene>()
         .build(move |_, _, (context, scene), _| {
-            scene.prepare(&context.device());
+            let mut encoder = context
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+            scene.prepare(&context.device(), &mut encoder);
+
+            context.queue().submit(Some(encoder.finish()));
         })
 }
 
@@ -125,10 +173,6 @@ fn render() -> Box<dyn Schedulable> {
         .build(move |_, _, (context, frame, pipelines, textures, scene), _| {
             let mut pipelines = pipelines.read();
             let mut textures = textures.read();
-
-            {
-                scene.prepare(&context.device());
-            }
 
             let mut encoder = context
                 .device()
@@ -164,8 +208,8 @@ fn render() -> Box<dyn Schedulable> {
         })
 }
 
-pub async fn register_test_scene(test: Test3, game: &mut GameRender) -> Result<(), GameError> {
-    log::info!("Adding test3 scene to the world");
+pub async fn register_test_scene(test: Test4, game: &mut GameRender) -> Result<(), GameError> {
+    log::info!("Adding test4 scene to the world");
 
     game.resources.insert(TestScene::new(test));
 
@@ -183,7 +227,7 @@ pub async fn register_test_scene(test: Test3, game: &mut GameRender) -> Result<(
 }
 
 pub async fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
-    log::info!("Removing test3 scene from the world");
+    log::info!("Removing test4 scene from the world");
 
     game.schedules.remove("render");
     let _ = game.resources.remove::<TestScene>();

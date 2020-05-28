@@ -3,13 +3,11 @@
     "vertex_stage": {
         "shader": "./hello.vs",
         "attributes": [],
-        "global_uniforms":[],
-        "local_uniforms": []
+        "uniforms":[[],[]]
     },
     "fragment_stage": {
         "shader": "./hello.fs",
-        "global_uniforms": [],
-        "local_uniforms": []
+        "uniforms": [[],[]]
     },
     "color_stage": "Replace"
 }

@@ -1,42 +1,11 @@
+use crate::{Context, CookingError};
 use gltf::{binary, Document, Gltf};
-use shine_game::assets::{AssetError, AssetIO, Url};
+use shine_game::assets::{AssetError, Url};
 use std::borrow::Cow;
-use std::{error, fmt};
 
-#[derive(Debug)]
-pub enum Error {
-    Asset(AssetError),
-    Gltf(gltf::Error),
-    Json(serde_json::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::Asset(ref err) => write!(f, "Asset error: {}", err),
-            Error::Gltf(ref err) => write!(f, "Gltf error: {}", err),
-            Error::Json(ref err) => write!(f, "Json error: {}", err),
-        }
-    }
-}
-
-impl error::Error for Error {}
-
-impl From<AssetError> for Error {
-    fn from(err: AssetError) -> Error {
-        Error::Asset(err)
-    }
-}
-
-impl From<gltf::Error> for Error {
-    fn from(err: gltf::Error) -> Error {
-        Error::Gltf(err)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(err: serde_json::Error) -> Error {
-        Error::Json(err)
+impl From<gltf::Error> for CookingError {
+    fn from(err: gltf::Error) -> CookingError {
+        AssetError::Content(format!("Gltf error: {}", err)).into()
     }
 }
 
@@ -44,7 +13,7 @@ fn align_to_multiple_of_four(n: usize) -> usize {
     (n + 3) & !3
 }
 
-pub fn serialize_gltf(document: Document, mut blob: Option<Vec<u8>>) -> Result<Vec<u8>, Error> {
+pub fn serialize_gltf(document: Document, mut blob: Option<Vec<u8>>) -> Result<Vec<u8>, CookingError> {
     let json = gltf_json::serialize::to_string(&document.into_json())?;
     let json_offset = align_to_multiple_of_four(json.len());
 
@@ -64,11 +33,16 @@ pub fn serialize_gltf(document: Document, mut blob: Option<Vec<u8>>) -> Result<V
     Ok(data)
 }
 
-pub async fn cook_gltf(io: &AssetIO, _source_base: &Url, target_base: &Url, gltf_url: &Url) -> Result<String, Error> {
+pub async fn cook_gltf(
+    context: &Context,
+    _source_base: &Url,
+    target_base: &Url,
+    gltf_url: &Url,
+) -> Result<String, CookingError> {
     log::info!("[{}] Cooking...", gltf_url.as_str());
 
     log::debug!("[{}] Downloading...", gltf_url.as_str());
-    let data = io.download_binary(&gltf_url).await?;
+    let data = context.assetio.download_binary(&gltf_url).await?;
     let Gltf { document, blob } = Gltf::from_slice(&data)?;
 
     // parse, cook external, referenced resources
@@ -77,7 +51,10 @@ pub async fn cook_gltf(io: &AssetIO, _source_base: &Url, target_base: &Url, gltf
     let cooked_gltf = serialize_gltf(document, blob)?;
 
     log::debug!("[{}] Uploading...", gltf_url.as_str());
-    let target_id = io.upload_cooked_binary(&target_base, "glb", &cooked_gltf).await?;
+    let target_id = context
+        .assetio
+        .upload_cooked_binary(&target_base, "glb", &cooked_gltf)
+        .await?;
 
     Ok(target_id)
 }
