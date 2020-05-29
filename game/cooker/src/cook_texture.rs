@@ -1,6 +1,8 @@
 use crate::{Context, CookingError};
 use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
-use shine_game::assets::{AssetError, AssetIO, TextureDescriptor, TextureImage, TextureImageEncoding, Url};
+use shine_game::assets::{
+    AssetError, AssetIO, AssetNaming, TextureDescriptor, TextureImage, TextureImageEncoding, Url,
+};
 use shine_game::wgpu;
 use tokio::task;
 
@@ -40,12 +42,11 @@ pub async fn load_descriptor(assetio: &AssetIO, meta_url: &Url) -> Result<Textur
 
 pub async fn cook_texture(
     context: &Context,
-    _source_base: &Url,
-    target_base: &Url,
+    asset_base: &Url,
     texture_url: &Url,
-) -> Result<String, CookingError> {
-    let mut image = load_image(&context.assetio, texture_url).await?;
-    let mut descriptor = load_descriptor(&context.assetio, &texture_url.set_extension("tex")?).await?;
+) -> Result<Url, CookingError> {
+    let mut image = load_image(&context.source_io, texture_url).await?;
+    let mut descriptor = load_descriptor(&context.source_io, &texture_url.set_extension("tex")?).await?;
 
     if descriptor.size != (0, 0) {
         let (w, h) = descriptor.size;
@@ -89,9 +90,13 @@ pub async fn cook_texture(
 
     log::debug!("[{}] Uploading...", texture_url.as_str());
     let cooked_texture = bincode::serialize(&TextureImage { descriptor, image })?;
-    let target_id = context
-        .assetio
-        .upload_cooked_binary(&target_base, "tex", &cooked_texture)
-        .await?;
-    Ok(target_id)
+    Ok(context
+        .target_io
+        .upload_cooked_binary(
+            &asset_base,
+            &texture_url.set_extension("tex")?,
+            AssetNaming::Hash,
+            &cooked_texture,
+        )
+        .await?)
 }

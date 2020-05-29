@@ -45,11 +45,10 @@ async fn run() {
 
         let surface = Surface::new(surface, size);
         let config = Config::new().unwrap();
-        let asset_base = Url::parse(&config.asset_base).unwrap();
-        let test1_url = asset_base.join("test_worlds/test1/test.wrld").unwrap();
-        let test2_url = asset_base.join("test_worlds/test2/test.wrld").unwrap();
-        let test3_url = asset_base.join("test_worlds/test3/test.wrld").unwrap();
-        let test4_url = asset_base.join("test_worlds/test4/test.wrld").unwrap();
+        let test1_url = Url::parse("world://test_worlds/test1/test.wrld").unwrap();
+        let test2_url = Url::parse("world://test_worlds/test2/test.wrld").unwrap();
+        let test3_url = Url::parse("world://test_worlds/test3/test.wrld").unwrap();
+        let test4_url = Url::parse("world://test_worlds/test4/test.wrld").unwrap();
         let mut game = rt.block_on(GameRender::new(config, wgpu_instance, surface)).unwrap();
 
         let event_proxy = event_loop.create_proxy();

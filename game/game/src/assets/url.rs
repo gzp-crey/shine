@@ -3,7 +3,7 @@ pub use url::ParseError as UrlError;
 pub use url::Position;
 
 ///A wrapper around url as it has some strange sematics due to the web sepcification.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Url {
     inner: url::Url,
 }
@@ -73,6 +73,10 @@ impl Url {
 
     pub fn set_scheme(&self, scheme: &str) -> Result<Url, UrlError> {
         Url::parse(&format!("{}{}", scheme, &self.inner[url::Position::AfterScheme..]))
+    }
+
+    pub fn replace_virtual_scheme(&self, base: &str) -> Result<Url, UrlError> {
+        Url::parse(&format!("{}{}", base, &self.inner[url::Position::BeforeHost..]))
     }
 
     pub fn extension(&self) -> &str {

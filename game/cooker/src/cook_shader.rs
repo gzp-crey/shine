@@ -1,5 +1,5 @@
 use crate::{Context, CookingError};
-use shine_game::assets::{AssetError, Url};
+use shine_game::assets::{AssetError, AssetNaming, Url};
 
 impl From<shaderc::Error> for CookingError {
     fn from(err: shaderc::Error) -> CookingError {
@@ -9,14 +9,13 @@ impl From<shaderc::Error> for CookingError {
 
 pub async fn cook_shader(
     context: &Context,
-    _source_base: &Url,
-    target_base: &Url,
+    asset_base: &Url,
     shader_url: &Url,
-) -> Result<String, CookingError> {
+) -> Result<Url, CookingError> {
     log::debug!("[{}] Cooking...", shader_url.as_str());
 
     log::debug!("[{}] Downloading...", shader_url.as_str());
-    let shader_source = context.assetio.download_string(&shader_url).await?;
+    let shader_source = context.source_io.download_string(&shader_url).await?;
     let ext = shader_url.extension();
     let ty = match ext {
         "vs" => Ok(shaderc::ShaderKind::Vertex),
@@ -33,9 +32,13 @@ pub async fn cook_shader(
         compiler.compile_into_spirv(&shader_source, ty, shader_url.as_str(), "main", Some(&options))?;
 
     log::debug!("[{}] Uploading...", shader_url.as_str());
-    let target_id = context
-        .assetio
-        .upload_cooked_binary(&target_base, &format!("{}_spv", ext), compiled_artifact.as_binary_u8())
-        .await?;
-    Ok(target_id)
+    Ok(context
+        .target_io
+        .upload_cooked_binary(
+            &asset_base,
+            &shader_url.set_extension(&format!("{}_spv", ext))?,
+            AssetNaming::Hash,
+            compiled_artifact.as_binary_u8(),
+        )
+        .await?)
 }

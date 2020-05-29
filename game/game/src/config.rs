@@ -1,11 +1,12 @@
 use crate::GameError;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub asset_base: String,
+    pub virtual_schemes: HashMap<String, String>,
     pub swap_chain_format: wgpu::TextureFormat,
 }
 

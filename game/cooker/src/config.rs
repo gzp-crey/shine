@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub asset_source_base: String,
-    pub asset_target_base: String,
+    pub virtual_source_schemes: HashMap<String, String>,
     pub local_db_connection: String,
+    pub virtual_target_schemes: HashMap<String, String>,
 }
 
 impl Config {

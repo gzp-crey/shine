@@ -1,6 +1,6 @@
 use crate::{Context, CookingError};
 use gltf::{binary, Document, Gltf};
-use shine_game::assets::{AssetError, Url};
+use shine_game::assets::{AssetError, AssetNaming, Url};
 use std::borrow::Cow;
 
 impl From<gltf::Error> for CookingError {
@@ -35,14 +35,13 @@ pub fn serialize_gltf(document: Document, mut blob: Option<Vec<u8>>) -> Result<V
 
 pub async fn cook_gltf(
     context: &Context,
-    _source_base: &Url,
-    target_base: &Url,
+    asset_base: &Url,
     gltf_url: &Url,
-) -> Result<String, CookingError> {
+) -> Result<Url, CookingError> {
     log::info!("[{}] Cooking...", gltf_url.as_str());
 
     log::debug!("[{}] Downloading...", gltf_url.as_str());
-    let data = context.assetio.download_binary(&gltf_url).await?;
+    let data = context.source_io.download_binary(&gltf_url).await?;
     let Gltf { document, blob } = Gltf::from_slice(&data)?;
 
     // parse, cook external, referenced resources
@@ -51,10 +50,13 @@ pub async fn cook_gltf(
     let cooked_gltf = serialize_gltf(document, blob)?;
 
     log::debug!("[{}] Uploading...", gltf_url.as_str());
-    let target_id = context
-        .assetio
-        .upload_cooked_binary(&target_base, "glb", &cooked_gltf)
-        .await?;
-
-    Ok(target_id)
+    Ok(context
+        .target_io
+        .upload_cooked_binary(
+            &asset_base,
+            &gltf_url.set_extension("glb")?,
+            AssetNaming::Hash,
+            &cooked_gltf,
+        )
+        .await?)
 }

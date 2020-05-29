@@ -15,21 +15,17 @@ pub use error::CookingError;
 
 #[derive(Clone)]
 pub struct Context {
-    pub assetio: Arc<AssetIO>,
+    pub source_io: Arc<AssetIO>,
+    pub target_io: Arc<AssetIO>,
 }
 
-async fn cook(
-    context: &Context,
-    source_base: &Url,
-    target_base: &Url,
-    asset_url: &Url,
-) -> Result<String, CookingError> {
+async fn cook(context: &Context, asset_base: &Url, asset_url: &Url) -> Result<Url, CookingError> {
     let cooked_id = match asset_url.extension() {
-        "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, &source_base, &target_base, &asset_url).await?,
-        "pl" => cook_pipeline::cook_pipeline(&context, &source_base, &target_base, &asset_url).await?,
-        "glb" | "gltf" => cook_gltf::cook_gltf(&context, &source_base, &target_base, &asset_url).await?,
-        "jpg" | "png" => cook_texture::cook_texture(&context, &source_base, &target_base, &asset_url).await?,
-        "wrld" => cook_world::cook_world(&context, &source_base, &target_base, &asset_url).await?,
+        "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, &asset_base, &asset_url).await?,
+        "pl" => cook_pipeline::cook_pipeline(&context, &asset_base, &asset_url).await?,
+        "glb" | "gltf" => cook_gltf::cook_gltf(&context, &asset_base, &asset_url).await?,
+        "jpg" | "png" => cook_texture::cook_texture(&context, &asset_base, &asset_url).await?,
+        "wrld" => cook_world::cook_world(&context, &asset_base, &asset_url).await?,
         e => return Err(CookingError::Other(format!("Unknown asset type: {}", e))),
     };
 
@@ -39,17 +35,17 @@ async fn cook(
 async fn run(assets: Vec<String>) -> Result<(), CookingError> {
     let config = Config::new().unwrap();
     let asset_source_base = Url::parse(&config.asset_source_base)?;
-    let asset_target_base = Url::parse(&config.asset_target_base)?;
 
     let context = {
-        let assetio = Arc::new(AssetIO::new()?);
+        let source_io = Arc::new(AssetIO::new(config.virtual_source_schemes.clone())?);
+        let target_io = Arc::new(AssetIO::new(config.virtual_target_schemes.clone())?);
         //let local_db = LocalDB::new(&config).await?;
-        Context { assetio }
+        Context { source_io, target_io }
     };
 
     for asset in &assets {
         let asset_url = asset_source_base.join(&asset)?;
-        let _ = cook(&context, &asset_source_base, &asset_target_base, &asset_url).await?;
+        let _ = cook(&context, &asset_source_base, &asset_url).await?;
     }
 
     Ok(())
@@ -78,4 +74,3 @@ fn main() {
         println!("Cooking failed: {}", err);
     }
 }
-

@@ -166,13 +166,12 @@ pub type ShaderLoadRequest = String;
 pub type ShaderLoadResponse = Result<(ShaderType, Vec<u32>), ShaderLoadError>;
 
 pub struct ShaderLoader {
-    base_url: Url,
     assetio: Arc<AssetIO>,
 }
 
 impl ShaderLoader {
-    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> ShaderLoader {
-        ShaderLoader { base_url, assetio }
+    pub fn new(assetio: Arc<AssetIO>) -> ShaderLoader {
+        ShaderLoader { assetio }
     }
 
     async fn load_from_url(
@@ -184,7 +183,7 @@ impl ShaderLoader {
             return Err(ShaderLoadError::Canceled);
         }
 
-        let url = self.base_url.join(&source_id)?;
+        let url = Url::parse(&source_id)?;
         let ty = ShaderType::from_str(url.extension())?;
 
         log::debug!("[{}] Loading shader...", url.as_str());

@@ -1,4 +1,4 @@
-use crate::assets::{AssetError, Url};
+use crate::assets::{io::sha256_bytes, AssetError, Url};
 use reqwest::{self, Client, Response};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
@@ -29,6 +29,24 @@ impl AssetLowIO {
             )))
         } else {
             Ok(response)
+        }
+    }
+
+    pub async fn download_etag(&self, url: &Url) -> Result<String, AssetError> {
+        match url.scheme() {
+            "file" => {
+                let mut data = Vec::new();
+                let _ = fs::File::open(&url.to_file_path())
+                    .await
+                    .map_err(|err| AssetError::AssetProvider(format!("Failed to open file {}: {}", url.as_str(), err)))?
+                    .read_to_end(&mut data)
+                    .await
+                    .map_err(|err| AssetError::ContentLoad(format!("Failed to read from {}: {}", url.as_str(), err)))?;
+                Ok(sha256_bytes(&data))
+            }
+            "http" | "https" => unimplemented!(),
+            "blobs" => unimplemented!(),
+            sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
         }
     }
 

@@ -100,13 +100,12 @@ pub type TextureLoadRequest = String;
 pub type TextureLoadResponse = Result<TextureImage, TextureLoadError>;
 
 pub struct TextureLoader {
-    base_url: Url,
     assetio: Arc<AssetIO>,
 }
 
 impl TextureLoader {
-    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> TextureLoader {
-        TextureLoader { base_url, assetio }
+    pub fn new(assetio: Arc<AssetIO>) -> TextureLoader {
+        TextureLoader { assetio }
     }
 
     async fn load_from_url(
@@ -118,8 +117,7 @@ impl TextureLoader {
             return Err(TextureLoadError::Canceled);
         }
 
-        let url = self.base_url.join(&source_id)?;
-
+        let url = Url::parse(&source_id)?;
         log::debug!("[{}] Loading texture...", url.as_str());
         let data = self.assetio.download_binary(&url).await?;
 

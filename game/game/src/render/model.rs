@@ -85,13 +85,12 @@ pub type ModelLoadRequest = String;
 pub type ModelLoadResponse = Result<ModelData, ModelLoadError>;
 
 pub struct ModelLoader {
-    base_url: Url,
     assetio: Arc<AssetIO>,
 }
 
 impl ModelLoader {
-    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> ModelLoader {
-        ModelLoader { base_url, assetio }
+    pub fn new(assetio: Arc<AssetIO>) -> ModelLoader {
+        ModelLoader { assetio }
     }
 
     async fn load_from_url(
@@ -102,7 +101,7 @@ impl ModelLoader {
         if cancellation_token.is_canceled() {
             return Err(ModelLoadError::Canceled);
         }
-        let url = self.base_url.join(&source_id)?;
+        let url = Url::parse(&source_id)?;
         log::debug!("[{}] Loading model...", url.as_str());
         match url.extension() {
             "gltf" | "glb" => Ok(gltf::load_from_url(&self.assetio, &url).await?),

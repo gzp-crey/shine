@@ -20,8 +20,10 @@ impl GameRender {
     pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameRender, GameError> {
         let mut resources = Resources::default();
         let world = World::new();
-        let assetio =
-            Arc::new(AssetIO::new().map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?);
+        let assetio = Arc::new(
+            AssetIO::new(config.virtual_schemes.clone())
+                .map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?,
+        );
 
         add_input_system(&mut resources).await?;
         add_render_system(&config, assetio.clone(), wgpu_instance, &mut resources).await?;

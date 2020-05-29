@@ -231,13 +231,12 @@ pub type PipelineLoadRequest = PipelineKey;
 pub type PipelineLoadResponse = Result<PipelineLoadData, PipelineLoadError>;
 
 pub struct PipelineLoader {
-    base_url: Url,
     assetio: Arc<AssetIO>,
 }
 
 impl PipelineLoader {
-    pub fn new(assetio: Arc<AssetIO>, base_url: Url) -> PipelineLoader {
-        PipelineLoader { base_url, assetio }
+    pub fn new(assetio: Arc<AssetIO>) -> PipelineLoader {
+        PipelineLoader { assetio }
     }
 
     async fn load_from_url(
@@ -250,7 +249,7 @@ impl PipelineLoader {
         }
 
         let source_id = &pipeline_key.name;
-        let url = self.base_url.join(&source_id)?;
+        let url = Url::parse(&source_id)?;
         log::debug!("[{}] Loading pipeline...", url.as_str());
 
         let vertex_layouts = pipeline_key.vertex_type.to_layout();
