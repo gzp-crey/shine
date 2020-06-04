@@ -1,5 +1,5 @@
-use crate::{Context, CookingError};
-use shine_game::assets::{AssetError, AssetNaming, Url};
+use crate::{AssetNaming, Context, CookingError, TargetDependency};
+use shine_game::assets::{AssetError, Url};
 
 impl From<shaderc::Error> for CookingError {
     fn from(err: shaderc::Error) -> CookingError {
@@ -7,12 +7,19 @@ impl From<shaderc::Error> for CookingError {
     }
 }
 
+pub async fn get_shader_etag(context: &Context, shader_url: &Url) -> Result<String, CookingError> {
+    Ok(context.source_io.download_etag(&shader_url).await?)
+}
+
 pub async fn cook_shader(
     context: &Context,
     asset_base: &Url,
-    shader_url: &Url,
-) -> Result<Url, CookingError> {
+    shader_id: &AssetId,
+) -> Result<TargetDependency, CookingError> {
+    let shader_url = shader_id.to_url(asset_base)?;
+    
     log::debug!("[{}] Cooking...", shader_url.as_str());
+    let source_hash = get_shader_etag(context, &shader_url).await?;
 
     log::debug!("[{}] Downloading...", shader_url.as_str());
     let shader_source = context.source_io.download_string(&shader_url).await?;
@@ -32,13 +39,19 @@ pub async fn cook_shader(
         compiler.compile_into_spirv(&shader_source, ty, shader_url.as_str(), "main", Some(&options))?;
 
     log::debug!("[{}] Uploading...", shader_url.as_str());
-    Ok(context
-        .target_io
+    let cooked_dependency = context
+        .target_db
         .upload_cooked_binary(
-            &asset_base,
+            shader_id,
             &shader_url.set_extension(&format!("{}_spv", ext))?,
-            AssetNaming::Hash,
+            AssetNaming::Hard,
             compiled_artifact.as_binary_u8(),
+            Vec::new(),
         )
-        .await?)
+        .await?;
+    context
+        .cache_db
+        .set_info(shader_url.as_str(), &source_hash, shader_id.as_str())
+        .await?;
+    Ok(cooked_dependency)
 }

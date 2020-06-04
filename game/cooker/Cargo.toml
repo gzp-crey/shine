@@ -13,7 +13,7 @@ serde_json = "1.0"
 bincode = "1.2"
 tokio = {version = "0.2", features = ["time", "blocking", "rt-threaded", "rt-util"]}
 
-sqlx = { version = "0.3", default-features = false, features = [ "runtime-tokio", "macros", "sqlite", "postgres" ] }
+sqlx = { version = "0.3", default-features = false, features = [ "runtime-tokio", "macros", "sqlite", "postgres", "tls" ] }
 
 image = "0.23"
 shaderc = {version = "0.6", features = ["build-from-source"] }

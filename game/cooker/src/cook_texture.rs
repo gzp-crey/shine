@@ -1,8 +1,6 @@
-use crate::{Context, CookingError};
+use crate::{AssetNaming, Context, CookingError, TargetDependency};
 use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
-use shine_game::assets::{
-    AssetError, AssetIO, AssetNaming, TextureDescriptor, TextureImage, TextureImageEncoding, Url,
-};
+use shine_game::assets::{AssetError, TextureDescriptor, TextureImage, TextureImageEncoding, Url};
 use shine_game::wgpu;
 use tokio::task;
 
@@ -12,29 +10,40 @@ impl From<ImageError> for CookingError {
     }
 }
 
-pub async fn load_image(assetio: &AssetIO, image_url: &Url) -> Result<DynamicImage, CookingError> {
-    log::debug!("[{}] Downloading image...", image_url.as_str());
-    let data = assetio.download_binary(&image_url).await?;
+async fn load_etag(context: &Context, texture_url: &Url) -> Result<(String, Option<String>), CookingError> {
+    log::debug!("[{}] Downloading texture...", texture_url.as_str());
+    let image_etag = context.source_io.download_etag(&texture_url).await?;
 
-    log::debug!("[{}] Docompressing image...", image_url.as_str());
-    let image = task::spawn_blocking(move || image::load_from_memory(&data)).await??;
-
-    log::trace!(
-        "[{}] Image:\n  size: {:?}\n  color: {:?}",
-        image_url.as_str(),
-        image.dimensions(),
-        image.color()
-    );
-    Ok(image)
-}
-
-pub async fn load_descriptor(assetio: &AssetIO, meta_url: &Url) -> Result<TextureDescriptor, CookingError> {
+    let meta_url = texture_url.set_extension("tex")?;
     log::debug!("[{}] Downloading descriptor...", meta_url.as_str());
-    match assetio.download_string(&meta_url).await {
-        Ok(data) => Ok(serde_json::from_str(&data)?),
+    match context.source_io.download_etag(&meta_url).await {
+        Ok(meta_etag) => Ok((image_etag, Some(meta_etag))),
         Err(AssetError::AssetProvider(_)) => {
             log::warn!("[{}] Missing  texture descriptor", meta_url.as_str());
-            Ok(TextureDescriptor::new())
+            Ok((image_etag, None))
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub async fn get_texture_etag(context: &Context, texture_url: &Url) -> Result<String, CookingError> {
+    match load_etag(context, texture_url).await? {
+        (img, Some(meta)) => Ok(format!("{},{}", img, meta)),
+        (img, None) => Ok(img),
+    }
+}
+
+async fn load_data(context: &Context, texture_url: &Url) -> Result<(Vec<u8>, Option<Vec<u8>>), CookingError> {
+    log::debug!("[{}] Downloading texture...", texture_url.as_str());
+    let image_data = context.source_io.download_binary(&texture_url).await?;
+
+    let meta_url = texture_url.set_extension("tex")?;
+    log::debug!("[{}] Downloading descriptor...", meta_url.as_str());
+    match context.source_io.download_binary(&meta_url).await {
+        Ok(meta_data) => Ok((image_data, Some(meta_data))),
+        Err(AssetError::AssetProvider(_)) => {
+            log::warn!("[{}] Missing  texture descriptor", meta_url.as_str());
+            Ok((image_data, None))
         }
         Err(err) => Err(err.into()),
     }
@@ -44,9 +53,24 @@ pub async fn cook_texture(
     context: &Context,
     asset_base: &Url,
     texture_url: &Url,
-) -> Result<Url, CookingError> {
-    let mut image = load_image(&context.source_io, texture_url).await?;
-    let mut descriptor = load_descriptor(&context.source_io, &texture_url.set_extension("tex")?).await?;
+) -> Result<TargetDependency, CookingError> {
+    log::debug!("[{}] Cooking...", texture_url.as_str());
+    let source_hash = get_texture_etag(context, &texture_url).await?;
+
+    log::debug!("[{}] Downloading image...", texture_url.as_str());
+    let (image_data, mut descriptor) = match load_data(context, texture_url).await? {
+        (img, Some(meta)) => (img, serde_json::from_slice(&meta)?),
+        (img, None) => (img, TextureDescriptor::new()),
+    };
+
+    log::debug!("[{}] Docompressing image...", texture_url.as_str());
+    let mut image = task::spawn_blocking(move || image::load_from_memory(&image_data)).await??;
+    log::trace!(
+        "[{}] Image:\n  size: {:?}\n  color: {:?}",
+        texture_url.as_str(),
+        image.dimensions(),
+        image.color()
+    );
 
     if descriptor.size != (0, 0) {
         let (w, h) = descriptor.size;
@@ -90,13 +114,19 @@ pub async fn cook_texture(
 
     log::debug!("[{}] Uploading...", texture_url.as_str());
     let cooked_texture = bincode::serialize(&TextureImage { descriptor, image })?;
-    Ok(context
-        .target_io
+    let cooked_dependency = context
+        .target_db
         .upload_cooked_binary(
             &asset_base,
             &texture_url.set_extension("tex")?,
-            AssetNaming::Hash,
+            AssetNaming::Hard,
             &cooked_texture,
+            Vec::new(),
         )
-        .await?)
+        .await?;
+    context
+        .cache_db
+        .set_info(texture_url.as_str(), &source_hash, cooked_dependency.url())
+        .await?;
+    Ok(cooked_dependency)
 }

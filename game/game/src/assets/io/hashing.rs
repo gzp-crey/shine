@@ -1,10 +1,18 @@
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA256};
 
-/// Helper to construct hash for content
 pub fn sha256_bytes(data: &[u8]) -> String {
     let mut context = Context::new(&SHA256);
     context.update(data);
+    let hash = context.finish();
+    HEXLOWER.encode(hash.as_ref())
+}
+
+pub fn sha256_multiple_bytes(data: &[&[u8]]) -> String {
+    let mut context = Context::new(&SHA256);
+    for d in data {
+        context.update(d);
+    }
     let hash = context.finish();
     HEXLOWER.encode(hash.as_ref())
 }

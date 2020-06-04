@@ -1,14 +1,17 @@
 use serde::{Deserialize, Serialize};
+use shine_game::assets::Url;
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub asset_source_base: String,
-    pub virtual_source_schemes: HashMap<String, String>,
-    pub local_db_connection: String,
-    pub virtual_target_schemes: HashMap<String, String>,
+    pub asset_source_base: Url,
+    pub source_virtual_schemes: HashMap<String, Url>,
+    pub cache_db_connection: String,
+
+    pub target_db_connection: String,
+    pub target_virtual_schemes: HashMap<String, Url>,
 }
 
 impl Config {

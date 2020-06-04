@@ -33,6 +33,7 @@ impl AssetLowIO {
     }
 
     pub async fn download_etag(&self, url: &Url) -> Result<String, AssetError> {
+        log::debug!("Downloading etag from {}", url.as_str());
         match url.scheme() {
             "file" => {
                 let mut data = Vec::new();
@@ -51,6 +52,7 @@ impl AssetLowIO {
     }
 
     pub async fn download_binary(&self, url: &Url) -> Result<Vec<u8>, AssetError> {
+        log::debug!("Downloading data from {}", url.as_str());
         match url.scheme() {
             "file" => {
                 let mut data = Vec::new();
@@ -90,6 +92,7 @@ impl AssetLowIO {
     }
 
     pub async fn upload_binary(&self, url: &Url, data: &[u8]) -> Result<(), AssetError> {
+        log::debug!("Uploading data to {}", url.as_str());
         match url.scheme() {
             "file" => {
                 fs::create_dir_all(url.to_file_folder())

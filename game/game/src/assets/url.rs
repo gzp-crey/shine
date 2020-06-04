@@ -2,6 +2,60 @@ use std::path::PathBuf;
 pub use url::ParseError as UrlError;
 pub use url::Position;
 
+#[derive(Debug, Clone)]
+pub struct AssetId {
+    inner: String,
+}
+
+impl AssetId {
+    pub fn new(id: &str) -> Result<AssetId, UrlError>{
+        if id.chars().any(|c| c == '?' || c == '&') {
+            Err(UrlError::InvalidDomainCharacter)
+        } else {
+            Ok(AssetId{inner: id.to_owned()})
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.inner
+    }
+
+    pub fn extension(&self) -> &str {
+        let mut parts = self.inner.rsplitn(2, '.');
+        let first = parts.next();
+        let second = parts.next();
+        second.and(first).unwrap_or("")
+    }
+
+    pub fn set_extension(&self, ext: &str) -> Result<AssetId, UrlError> {
+        let mut parts = self.inner.rsplitn(2, '.');
+        let first = parts.next();
+        let second = parts.next();
+        let base = second.or(first).unwrap_or("");
+
+        Ok(AssetId{
+            inner: format!(
+            "{}.{}",
+            base,
+            ext
+        )})
+    }
+
+    pub fn get_base<'a, 'u>(&'a self, base: &'u Url, current_base: &'u Url) -> &'u Url {
+        if self.inner.starts_with('/') {
+            // input is relative to the base
+            base
+        } else {
+            // input is relative to the current
+            current_base
+        }
+    }
+
+    pub fn to_url(&self, base: &Url) -> Result<Url, UrlError>  {
+        base.join(&self.inner)
+    }
+}
+
 ///A wrapper around url as it has some strange sematics due to the web sepcification.
 #[derive(Debug, Clone)]
 pub struct Url {
@@ -15,7 +69,7 @@ impl Url {
         })
     }
 
-    pub fn from_base_or_current(base: &Url, current: &Url, input: &str) -> Result<Self, UrlError> {
+    /*pub fn from_base_or_current(base: &Url, current: &Url, input: &str) -> Result<Self, UrlError> {
         if input.starts_with('/') {
             // input is relative to the base
             base.join(input)
@@ -23,7 +77,7 @@ impl Url {
             // input is relative to the current
             current.to_folder().and_then(|url| url.join(input))
         }
-    }
+    }*/
 
     pub fn to_folder(&self) -> Result<Url, UrlError> {
         let path = &self.inner[url::Position::BeforeHost..url::Position::AfterPath];
@@ -44,11 +98,11 @@ impl Url {
         &self.inner[url::Position::BeforePath..url::Position::AfterPath]
     }
 
-    pub fn relative_path(&self, base: &Url) -> Option<&str> {
+    /*pub fn relative_path(&self, base: &Url) -> Option<&str> {
         let path = &self.inner[..url::Position::AfterPath];
         let prefix = base.as_str();
         path.strip_prefix(prefix)
-    }
+    }*/
 
     pub fn to_file_path(&self) -> PathBuf {
         PathBuf::from(&self.inner[url::Position::BeforeHost..url::Position::AfterPath])
@@ -75,8 +129,17 @@ impl Url {
         Url::parse(&format!("{}{}", scheme, &self.inner[url::Position::AfterScheme..]))
     }
 
-    pub fn replace_virtual_scheme(&self, base: &str) -> Result<Url, UrlError> {
-        Url::parse(&format!("{}{}", base, &self.inner[url::Position::BeforeHost..]))
+    pub fn replace_virtual_scheme(&self, base: &Url) -> Result<Url, UrlError> {
+        let prefix = &base.inner[..url::Position::AfterPath];
+        let postfix = &base.inner[url::Position::BeforeQuery..];
+        let path = &self.inner[url::Position::BeforeHost..url::Position::AfterPath];
+        let query = &self.inner[url::Position::BeforeQuery..];
+        match (postfix.is_empty(), query.is_empty()) {
+            (true, true) => Url::parse(&format!("{}{}", prefix, path)),
+            (true, false) => Url::parse(&format!("{}{}?{}", prefix, path, query)),
+            (false, true) => Url::parse(&format!("{}{}?{}", prefix, path, postfix)),
+            (false, false) => Url::parse(&format!("{}{}?{}&{}", prefix, path, query, postfix)),
+        }
     }
 
     pub fn extension(&self) -> &str {
@@ -103,12 +166,55 @@ impl Url {
         ))
     }
 
-    pub fn join(&self, path: &str) -> Result<Url, UrlError> {
+    pub fn join(&self, path: &str) -> Result<Url, UrlError> {        
         Url::parse(&format!(
             "{}{}{}",
             &self.inner[..url::Position::AfterPath],
             path,
             &self.inner[url::Position::AfterPath..]
-        ))
+        ))        
+    }
+}
+
+mod serde_ser_de {
+    use super::*;
+    use serde::de::{self, Deserializer, Visitor};
+    use serde::ser::Serializer;
+    use serde::{Deserialize, Serialize};
+    use std::fmt;
+
+    impl Serialize for Url {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.serialize_str(self.as_str())
+        }
+    }
+
+    struct UrlVisitor;
+
+    impl<'de> Visitor<'de> for UrlVisitor {
+        type Value = Url;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("An url was excpected")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Url::parse(value).map_err(|err| E::custom(format!("Failed to parse url: {}", err)))
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Url {
+        fn deserialize<D>(deserializer: D) -> Result<Url, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserializer.deserialize_str(UrlVisitor)
+        }
     }
 }

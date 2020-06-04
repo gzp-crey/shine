@@ -56,3 +56,9 @@ impl From<task::JoinError> for CookingError {
         CookingError::Runtime(err)
     }
 }
+
+impl From<sqlx::Error> for CookingError {
+    fn from(err: sqlx::Error) -> CookingError {
+        CookingError::Db(format!("{}", err))
+    }
+}

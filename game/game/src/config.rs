@@ -1,4 +1,4 @@
-use crate::GameError;
+use crate::{assets::Url, GameError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
@@ -6,7 +6,7 @@ use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub virtual_schemes: HashMap<String, String>,
+    pub virtual_schemes: HashMap<String, Url>,
     pub swap_chain_format: wgpu::TextureFormat,
 }
 

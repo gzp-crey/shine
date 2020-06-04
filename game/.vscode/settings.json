@@ -1,0 +1,22 @@
+{
+    "sqltools.connections": [
+        {
+            "database": "${workspaceFolder:game}/cooked_assets/cache.db",
+            "driver": "SQLite",
+            "name": "cache",
+            "previewLimit": 50
+        },
+        {
+            "askForPassword": false,
+            "database": "d1b9m46qi8c531",
+            "driver": "PostgreSQL",
+            "name": "test",
+            "password": "e59a831c4a8bed2a588dbd9ac61afefe60d80b4dd4995ae77b4858c57c8bfe30",
+            "port": 5432,
+            "previewLimit": 50,
+            "server": "ec2-54-246-115-40.eu-west-1.compute.amazonaws.com",
+            "username": "gatsewzyqthkbl"
+        }
+    ],
+    "sqltools.useNodeRuntime": true
+}
