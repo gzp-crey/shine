@@ -125,19 +125,15 @@ pub async fn cook_texture(
 
     log::debug!("[{}] Uploading...", texture_url.as_str());
     let cooked_texture = bincode::serialize(&TextureImage { descriptor, image })?;
-    let cooked_dependency = context
+    Ok(context
         .target_db
         .upload_cooked_binary(
             texture_id.clone(),
             texture_url.set_extension("tex")?,
             AssetNaming::Hard,
             &cooked_texture,
+            source_hash,
             Vec::new(),
         )
-        .await?;
-    context
-        .cache_db
-        .set_info(&texture_url, &source_hash, &cooked_dependency)
-        .await?;
-    Ok(cooked_dependency)
+        .await?)
 }

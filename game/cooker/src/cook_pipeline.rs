@@ -58,19 +58,15 @@ pub async fn cook_pipeline(
 
     log::debug!("[{}] Uploading...", pipeline_url.as_str());
     let cooked_pipeline = bincode::serialize(&pipeline)?;
-    let cooked_dependency = context
+    Ok(context
         .target_db
         .upload_cooked_binary(
             pipeline_id.clone(),
-            pipeline_url.clone(),
+            pipeline_url,
             AssetNaming::SoftScheme("pipeline".to_owned()),
             &cooked_pipeline,
+            source_hash,
             dependencies,
         )
-        .await?;
-    context
-        .cache_db
-        .set_info(&pipeline_url, &source_hash, &cooked_dependency)
-        .await?;
-    Ok(cooked_dependency)
+        .await?)
 }

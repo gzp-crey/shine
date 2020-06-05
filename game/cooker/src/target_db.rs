@@ -90,19 +90,21 @@ impl TargetDB {
                 CREATE TABLE IF NOT EXISTS 
                     sources (
                         source_id TEXT NOT NULL,
+                        source_hash TEXT NOT NULL,
                         cooked_url TEXT NOT NULL );
                 CREATE UNIQUE INDEX IF NOT EXISTS sources_source_id ON sources(source_id); 
                 CREATE INDEX IF NOT EXISTS sources_cooked_url ON sources(cooked_url);
             "#,
             )
             .await?;
-            println!("2");
+        println!("2");
         Ok(())
     }
 
     async fn update_dependencies(
         &self,
         parent: &Dependency,
+        source_hash: String,
         dependencies: Vec<Dependency>,
     ) -> Result<(), CookingError> {
         let mut tx = self.pool.begin().await?;
@@ -144,14 +146,15 @@ impl TargetDB {
 
         sqlx::query(
             r#"
-                INSERT INTO sources(source_id, cooked_url)
-                    VALUES($1, $2)
+                INSERT INTO sources(source_id, cooked_url, source_hash)
+                    VALUES($1, $2, $3)
                 ON CONFLICT (source_id)
-                    DO UPDATE SET cooked_url = $2
+                    DO UPDATE SET cooked_url = $2, source_hash = $3
             "#,
         )
         .bind(parent.id().as_str())
         .bind(parent.url().as_str())
+        .bind(source_hash)
         .execute(&self.pool)
         .await?;
 
@@ -160,29 +163,43 @@ impl TargetDB {
     }
 
     // Return the affected root parents with hard dependency. It recursively travels all the parent from the given children
-    // following only the hard links and rturn the root elements.
-    pub async fn get_affected_roots(&self, asset_ids: &[&AssetId]) -> Result<Vec<AssetId>, CookingError> {
+    // following only the hard links and return the root elements. The response also contains the unknow resources.
+    pub async fn get_affected_roots(&self, asset_ids: &[AssetId]) -> Result<Vec<AssetId>, CookingError> {
         log::info!("asset_ids: {:?}", asset_ids);
 
         let asset_ids_str = asset_ids.iter().map(|x| x.as_str()).collect::<Vec<_>>();
         let roots = sqlx::query_as::<_, (String,)>(
             r#"
-            WITH RECURSIVE roots AS (
-                SELECT child, parent
-                    FROM source_dependencies
-                    WHERE child = ANY($1)
-                UNION
-                    SELECT d.child, d.parent
-                        FROM source_dependencies d
-                        INNER JOIN roots r ON d.child = r.parent
-                        WHERE NOT d.is_soft
-            ) SELECT DISTINCT(parent)
-                FROM roots r1
-                WHERE NOT EXISTS (
-                    SELECT *
-                        FROM roots r2
-                        WHERE r1.parent = r2.child
-                )
+            ( 
+                -- collect all the roots with a soft parent (the top-most roots are not part of this recursive query)
+                WITH RECURSIVE roots AS (
+                    SELECT child, parent
+                        FROM source_dependencies
+                        WHERE child = ANY($1)
+                    UNION
+                        SELECT d.child, d.parent
+                            FROM source_dependencies d 		
+                            INNER JOIN roots r ON d.child = r.parent
+                            WHERE NOT d.is_soft
+                ) SELECT DISTINCT(parent)
+                    FROM roots r1 
+                    WHERE NOT EXISTS (
+                        SELECT * 
+                            FROM roots r2 
+                            WHERE r1.parent = r2.child 
+                    )
+            )
+            UNION
+            (
+                -- collect unknown ids as roots
+                -- and collect the topmost parent those were excluded from the previous query
+                SELECT parent
+                FROM (
+                    SELECT unnest($1) as parent
+                ) AS seeds 
+                WHERE NOT EXISTS (SELECT * from sources WHERE source_id = seeds.parent)
+                    OR EXISTS (SELECT * from source_dependencies d WHERE d.parent = seeds.parent AND d.is_soft)
+            )            
             "#,
         )
         .bind(&asset_ids_str)
@@ -224,10 +241,12 @@ impl TargetDB {
         asset_url: Url,
         naming: AssetNaming,
         content: &[u8],
+        source_hash: String,
         dependencies: Vec<Dependency>,
     ) -> Result<Dependency, CookingError> {
         let target_dependency = self.upload_binary_content(asset_id, asset_url, naming, content).await?;
-        self.update_dependencies(&target_dependency, dependencies).await?;
+        self.update_dependencies(&target_dependency, source_hash, dependencies)
+            .await?;
         Ok(target_dependency)
     }
 }

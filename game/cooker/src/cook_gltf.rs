@@ -60,19 +60,15 @@ pub async fn cook_gltf(context: &Context, asset_base: &Url, gltf_id: &AssetId) -
     let cooked_gltf = serialize_gltf(document, blob)?;
 
     log::debug!("[{}] Uploading...", gltf_url.as_str());
-    let cooked_dependency = context
+    Ok(context
         .target_db
         .upload_cooked_binary(
             gltf_id.clone(),
             gltf_url.set_extension("glb")?,
             AssetNaming::Hard,
             &cooked_gltf,
+            source_hash,
             dependencies,
         )
-        .await?;
-    context
-        .cache_db
-        .set_info(&gltf_url, &source_hash, &cooked_dependency)
-        .await?;
-    Ok(cooked_dependency)
+        .await?)
 }

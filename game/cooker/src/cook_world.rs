@@ -66,19 +66,15 @@ pub async fn cook_world(context: &Context, asset_base: &Url, world_id: &AssetId)
 
     log::debug!("[{}] Uploading...", world_url.as_str());
     let cooked_world = bincode::serialize(&world)?;
-    let cooked_dependency = context
+    Ok(context
         .target_db
         .upload_cooked_binary(
             world_id.clone(),
-            world_url.clone(),
+            world_url,
             AssetNaming::SoftScheme("world".to_owned()),
             &cooked_world,
+            source_hash,
             dependnecies,
         )
-        .await?;
-    context
-        .cache_db
-        .set_info(&world_url, &source_hash, &cooked_dependency)
-        .await?;
-    Ok(cooked_dependency)
+        .await?)
 }

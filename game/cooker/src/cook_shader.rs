@@ -40,19 +40,15 @@ pub async fn cook_shader(context: &Context, asset_base: &Url, shader_id: &AssetI
         compiler.compile_into_spirv(&shader_source, ty, shader_url.as_str(), "main", Some(&options))?;
 
     log::debug!("[{}] Uploading...", shader_url.as_str());
-    let cooked_dependency = context
+    Ok(context
         .target_db
         .upload_cooked_binary(
             shader_id.clone(),
             shader_url.set_extension(&format!("{}_spv", ext))?,
             AssetNaming::Hard,
             compiled_artifact.as_binary_u8(),
+            source_hash,
             Vec::new(),
         )
-        .await?;
-    context
-        .cache_db
-        .set_info(&shader_url, &source_hash, &cooked_dependency)
-        .await?;
-    Ok(cooked_dependency)
+        .await?)
 }
