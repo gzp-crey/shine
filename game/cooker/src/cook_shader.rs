@@ -1,5 +1,5 @@
-use crate::{AssetNaming, Context, CookingError, TargetDependency};
-use shine_game::assets::{AssetError, Url};
+use crate::{AssetNaming, Context, CookingError, Dependency};
+use shine_game::assets::{AssetError, AssetId, Url};
 
 impl From<shaderc::Error> for CookingError {
     fn from(err: shaderc::Error) -> CookingError {
@@ -7,19 +7,20 @@ impl From<shaderc::Error> for CookingError {
     }
 }
 
-pub async fn get_shader_etag(context: &Context, shader_url: &Url) -> Result<String, CookingError> {
+async fn find_shader_etag(context: &Context, shader_url: &Url) -> Result<String, CookingError> {
     Ok(context.source_io.download_etag(&shader_url).await?)
 }
 
-pub async fn cook_shader(
-    context: &Context,
-    asset_base: &Url,
-    shader_id: &AssetId,
-) -> Result<TargetDependency, CookingError> {
+pub async fn get_shader_etag(context: &Context, asset_base: &Url, shader_id: &AssetId) -> Result<String, CookingError> {
     let shader_url = shader_id.to_url(asset_base)?;
-    
+    find_shader_etag(context, &shader_url).await
+}
+
+pub async fn cook_shader(context: &Context, asset_base: &Url, shader_id: &AssetId) -> Result<Dependency, CookingError> {
+    let shader_url = shader_id.to_url(asset_base)?;
+
     log::debug!("[{}] Cooking...", shader_url.as_str());
-    let source_hash = get_shader_etag(context, &shader_url).await?;
+    let source_hash = find_shader_etag(context, &shader_url).await?;
 
     log::debug!("[{}] Downloading...", shader_url.as_str());
     let shader_source = context.source_io.download_string(&shader_url).await?;
@@ -42,8 +43,8 @@ pub async fn cook_shader(
     let cooked_dependency = context
         .target_db
         .upload_cooked_binary(
-            shader_id,
-            &shader_url.set_extension(&format!("{}_spv", ext))?,
+            shader_id.clone(),
+            shader_url.set_extension(&format!("{}_spv", ext))?,
             AssetNaming::Hard,
             compiled_artifact.as_binary_u8(),
             Vec::new(),
@@ -51,7 +52,7 @@ pub async fn cook_shader(
         .await?;
     context
         .cache_db
-        .set_info(shader_url.as_str(), &source_hash, shader_id.as_str())
+        .set_info(&shader_url, &source_hash, &cooked_dependency)
         .await?;
     Ok(cooked_dependency)
 }

@@ -1,5 +1,5 @@
 use crate::{Config, CookingError};
-use shine_game::assets::{io::HashableContent, AssetError, AssetIO, Url, UrlError};
+use shine_game::assets::{io::HashableContent, AssetError, AssetIO, AssetId, Url};
 use sqlx::{
     self,
     executor::Executor,
@@ -12,30 +12,21 @@ pub enum AssetNaming {
     SoftScheme(String),
 }
 
-#[derive(Debug, sqlx::FromRow)]
 pub struct Dependency {
-    pub parent_url: String,
-    pub child_url: String,
-    pub is_soft: bool,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-pub struct TargetDependency {
-    child_url: String,
+    id: AssetId,
+    url: Url,
     is_soft: bool,
 }
 
-impl TargetDependency {
-    pub fn soft(child_url: &str) -> TargetDependency {
-        TargetDependency {
-            child_url: child_url.to_owned(),
-            is_soft: true,
-        }
+impl Dependency {
+    pub fn soft(id: AssetId, url: Url) -> Dependency {
+        Dependency { id, url, is_soft: true }
     }
 
-    pub fn hard(child_url: &str) -> TargetDependency {
-        TargetDependency {
-            child_url: child_url.to_owned(),
+    pub fn hard(id: AssetId, url: Url) -> Dependency {
+        Dependency {
+            id,
+            url,
             is_soft: false,
         }
     }
@@ -48,12 +39,12 @@ impl TargetDependency {
         !self.is_soft
     }
 
-    pub fn url(&self) -> &str {
-        &self.child_url
+    pub fn url(&self) -> &Url {
+        &self.url
     }
 
-    pub fn to_url(&self) -> Result<Url, UrlError> {
-        Url::parse(&self.child_url)
+    pub fn id(&self) -> &AssetId {
+        &self.id
     }
 }
 
@@ -79,143 +70,164 @@ impl TargetDB {
             .execute(
                 r#"
                 CREATE TABLE IF NOT EXISTS
-                    dependencies (
-                        parent_url TEXT NOT NULL,
-                        child_url TEXT NOT NULL,
+                    source_dependencies (
+                        parent TEXT NOT NULL,
+                        child TEXT NOT NULL,
                         is_soft BOOLEAN );
-                CREATE UNIQUE INDEX IF NOT EXISTS dependencies_parent_url_child_url ON dependencies(parent_url, child_url);
-                CREATE INDEX IF NOT EXISTS dependencies_child_url ON dependencies(child_url);
-                CREATE INDEX IF NOT EXISTS dependencies_parent_url ON dependencies(parent_url);
+                CREATE UNIQUE INDEX IF NOT EXISTS source_dependencies_parent_child ON source_dependencies(parent, child);
+                CREATE INDEX IF NOT EXISTS source_dependencies_child ON source_dependencies(child);
+                CREATE INDEX IF NOT EXISTS source_dependencies_parent ON source_dependencies(parent);
+
+                CREATE TABLE IF NOT EXISTS
+                    cooked_dependencies (
+                        parent TEXT NOT NULL,
+                        child TEXT NOT NULL,
+                        is_soft BOOLEAN );
+                CREATE UNIQUE INDEX IF NOT EXISTS cooked_dependencies_parent_child ON cooked_dependencies(parent, child);
+                CREATE INDEX IF NOT EXISTS cooked_dependencies_child ON cooked_dependencies(child);
+                CREATE INDEX IF NOT EXISTS cooked_dependencies_parent ON cooked_dependencies(parent);
 
                 CREATE TABLE IF NOT EXISTS 
-                    asset_sources (
+                    sources (
                         source_id TEXT NOT NULL,
                         cooked_url TEXT NOT NULL );
-                CREATE UNIQUE INDEX IF NOT EXISTS asset_sources_source_id ON asset_sources(source_id); 
-                CREATE INDEX IF NOT EXISTS asset_sources_cooked_url ON asset_sources(cooked_url);
+                CREATE UNIQUE INDEX IF NOT EXISTS sources_source_id ON sources(source_id); 
+                CREATE INDEX IF NOT EXISTS sources_cooked_url ON sources(cooked_url);
             "#,
             )
             .await?;
-        println!("2");
+            println!("2");
         Ok(())
     }
 
-    async fn update_dependencies_and_source_id(
+    async fn update_dependencies(
         &self,
-        target_url: &str,
-        source_id: &str,
-        dependencies: Vec<TargetDependency>,
+        parent: &Dependency,
+        dependencies: Vec<Dependency>,
     ) -> Result<(), CookingError> {
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query("DELETE FROM dependencies where parent_url = $1")
-            .bind(target_url)
+        sqlx::query("DELETE FROM source_dependencies where parent = $1")
+            .bind(parent.id().as_str())
+            .execute(&mut tx)
+            .await?;
+        sqlx::query("DELETE FROM cooked_dependencies where parent = $1")
+            .bind(parent.url().as_str())
             .execute(&mut tx)
             .await?;
 
+        for dep in dependencies {
+            sqlx::query(
+                r#"
+                    INSERT INTO source_dependencies(parent, child, is_soft)
+                    VALUES ($1,$2,$3)
+                "#,
+            )
+            .bind(parent.id().as_str())
+            .bind(dep.id().as_str())
+            .bind(dep.is_soft)
+            .execute(&mut tx)
+            .await?;
+
+            sqlx::query(
+                r#"
+                    INSERT INTO cooked_dependencies(parent, child, is_soft)
+                    VALUES ($1,$2,$3)
+                "#,
+            )
+            .bind(parent.url().as_str())
+            .bind(dep.url().as_str())
+            .bind(dep.is_soft)
+            .execute(&mut tx)
+            .await?;
+        }
+
         sqlx::query(
             r#"
-                INSERT INTO asset_sources(source_id, cooked_url)
+                INSERT INTO sources(source_id, cooked_url)
                     VALUES($1, $2)
                 ON CONFLICT (source_id)
                     DO UPDATE SET cooked_url = $2
             "#,
         )
-        .bind(target_url)
-        .bind(&source_id)
+        .bind(parent.id().as_str())
+        .bind(parent.url().as_str())
         .execute(&self.pool)
         .await?;
-
-        for dep in dependencies {
-            sqlx::query(
-                r#"
-                    INSERT INTO dependencies(parent_url, child_url, is_soft) 
-                    VALUES ($1,$2,$3)
-                "#,
-            )
-            .bind(target_url)
-            .bind(&dep.child_url)
-            .bind(&dep.is_soft)
-            .execute(&mut tx)
-            .await?;
-        }
 
         tx.commit().await?;
         Ok(())
     }
 
-    pub async fn get_all_dependencies(&self) -> Result<Vec<Dependency>, CookingError> {
-        let dependencies = sqlx::query_as::<_, Dependency>("SELECT * FROM dependencies")
-            .fetch_all(&self.pool)
-            .await?;
-        Ok(dependencies)
-    }
-
-    // Return the affected root parents with hard dependency. It recursively travels all the parent from the given child
+    // Return the affected root parents with hard dependency. It recursively travels all the parent from the given children
     // following only the hard links and rturn the root elements.
-    pub async fn get_affected_roots(&self, child_urls: &[&str]) -> Result<Vec<String>, CookingError> {
-        log::info!("child_urls: {:?}", child_urls);
+    pub async fn get_affected_roots(&self, asset_ids: &[&AssetId]) -> Result<Vec<AssetId>, CookingError> {
+        log::info!("asset_ids: {:?}", asset_ids);
+
+        let asset_ids_str = asset_ids.iter().map(|x| x.as_str()).collect::<Vec<_>>();
         let roots = sqlx::query_as::<_, (String,)>(
             r#"
             WITH RECURSIVE roots AS (
-                SELECT child_url, parent_url
-                    FROM dependencies
-                    WHERE child_url = ANY($1)
+                SELECT child, parent
+                    FROM source_dependencies
+                    WHERE child = ANY($1)
                 UNION
-                    SELECT d.child_url, d.parent_url
-                        FROM dependencies d 		
-                        INNER JOIN roots r ON d.child_url = r.parent_url
+                    SELECT d.child, d.parent
+                        FROM source_dependencies d
+                        INNER JOIN roots r ON d.child = r.parent
                         WHERE NOT d.is_soft
-            ) SELECT DISTINCT(parent_url) 
-                FROM roots r1 
+            ) SELECT DISTINCT(parent)
+                FROM roots r1
                 WHERE NOT EXISTS (
-                    SELECT * 
-                        FROM roots r2 
-                        WHERE r1.parent_url = r2.child_url
+                    SELECT *
+                        FROM roots r2
+                        WHERE r1.parent = r2.child
                 )
             "#,
         )
-        .bind(child_urls)
+        .bind(&asset_ids_str)
         .fetch_all(&self.pool)
         .await?
         .into_iter()
-        .map(|x| x.0)
-        .collect();
+        .map(|x| AssetId::new(&x.0))
+        .collect::<Result<Vec<_>, _>>()?;
         Ok(roots)
     }
 
     async fn upload_binary_content(
         &self,
-        source_id: &str,
-        asset_url: &Url,
+        asset_id: AssetId,
+        asset_url: Url,
         naming: AssetNaming,
         content: &[u8],
-    ) -> Result<TargetDependency, AssetError> {
+    ) -> Result<Dependency, AssetError> {
         let target_dependency = match naming {
             AssetNaming::Hard => {
                 let hashed_path = content.hashed_path();
                 let target_id = format!("{}.{}", hashed_path, asset_url.extension());
-                TargetDependency::hard(&format!("hash://{}", target_id))
+                let url = Url::parse(&format!("hash://{}", target_id))?;
+                Dependency::hard(asset_id, url)
             }
-            AssetNaming::SoftScheme(scheme) => TargetDependency::soft(&format!("{}://{}", scheme, source_id)),
+            AssetNaming::SoftScheme(scheme) => {
+                let url = Url::parse(&format!("{}://{}", scheme, asset_id.as_str()))?;
+                Dependency::soft(asset_id, url)
+            }
         };
-        self.io.upload_binary(&target_dependency.to_url()?, &content).await?;
+
+        self.io.upload_binary(&target_dependency.url(), &content).await?;
         Ok(target_dependency)
     }
 
     pub async fn upload_cooked_binary(
         &self,
-        asset_id: &AssetId,
-        asset_url: &Url,
+        asset_id: AssetId,
+        asset_url: Url,
         naming: AssetNaming,
         content: &[u8],
-        dependencies: Vec<TargetDependency>,
-    ) -> Result<TargetDependency, CookingError> {
-        let target_dependency = self
-            .upload_binary_content(asset_id.as_str(), asset_url, naming, content)
-            .await?;
-        self.update_dependencies_and_source_id(target_dependency.url(), asset_id.as_str(), dependencies)
-            .await?;
+        dependencies: Vec<Dependency>,
+    ) -> Result<Dependency, CookingError> {
+        let target_dependency = self.upload_binary_content(asset_id, asset_url, naming, content).await?;
+        self.update_dependencies(&target_dependency, dependencies).await?;
         Ok(target_dependency)
     }
 }

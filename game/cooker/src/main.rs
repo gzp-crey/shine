@@ -1,4 +1,4 @@
-use shine_game::assets::{AssetIO, Url, AssetId};
+use shine_game::assets::{AssetIO, AssetId, Url};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -15,7 +15,7 @@ mod target_db;
 pub use self::config::Config;
 pub use cache_db::{CacheDB, SourceCacheEntry};
 pub use error::CookingError;
-pub use target_db::{AssetNaming, Dependency, TargetDB, TargetDependency};
+pub use target_db::{AssetNaming, Dependency, TargetDB};
 
 #[derive(Clone)]
 pub struct Context {
@@ -24,7 +24,7 @@ pub struct Context {
     pub target_db: TargetDB,
 }
 
-async fn cook(context: &Context, asset_base: &Url, asset_id: &AssetId) -> Result<TargetDependency, CookingError> {
+async fn cook(context: &Context, asset_base: &Url, asset_id: &AssetId) -> Result<Dependency, CookingError> {
     let cooked_dependency = match asset_id.extension() {
         "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, &asset_base, &asset_id).await?,
         "pl" => cook_pipeline::cook_pipeline(&context, &asset_base, &asset_id).await?,
@@ -37,7 +37,7 @@ async fn cook(context: &Context, asset_base: &Url, asset_id: &AssetId) -> Result
     Ok(cooked_dependency)
 }
 
-async fn find_cook_roots(context: &Context, assets_url: &Vec<Url>) -> Result<Vec<Url>, CookingError> {
+/*async fn find_cook_roots(context: &Context, assets_url: &Vec<Url>) -> Result<Vec<Url>, CookingError> {
     //source
     let assets_str = assets_url.iter().map(|url| url.as_str()).collect::<Vec<_>>();
     log::info!("seeds: {:?}", assets_str);
@@ -62,7 +62,7 @@ async fn find_cook_roots(context: &Context, assets_url: &Vec<Url>) -> Result<Vec
 
     Ok(roots_url)
 }
-
+*/
 async fn run(assets: Vec<AssetId>) -> Result<(), CookingError> {
     let config = Config::new().unwrap();
 
@@ -104,8 +104,8 @@ fn main() {
         //"test_worlds/test4/test.wrld",
     ]
     .iter()
-    .map(|x| AssetId::new(x))
-    .collect::Result<Vec<_>,_>().unwrap();
+    .map(|x| AssetId::new(x).unwrap())
+    .collect();
 
     if let Err(err) = rt.block_on(run(assets)) {
         println!("Cooking failed: {}", err);

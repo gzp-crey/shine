@@ -8,11 +8,11 @@ pub struct AssetId {
 }
 
 impl AssetId {
-    pub fn new(id: &str) -> Result<AssetId, UrlError>{
+    pub fn new(id: &str) -> Result<AssetId, UrlError> {
         if id.chars().any(|c| c == '?' || c == '&') {
             Err(UrlError::InvalidDomainCharacter)
         } else {
-            Ok(AssetId{inner: id.to_owned()})
+            Ok(AssetId { inner: id.to_owned() })
         }
     }
 
@@ -33,25 +33,22 @@ impl AssetId {
         let second = parts.next();
         let base = second.or(first).unwrap_or("");
 
-        Ok(AssetId{
-            inner: format!(
-            "{}.{}",
-            base,
-            ext
-        )})
+        Ok(AssetId {
+            inner: format!("{}.{}", base, ext),
+        })
     }
 
-    pub fn get_base<'a, 'u>(&'a self, base: &'u Url, current_base: &'u Url) -> &'u Url {
+    pub fn to_absolute_id<'a, 'u>(&'a self, base: &'u Url, current_base: &'u Url) -> Result<AssetId, UrlError> {
         if self.inner.starts_with('/') {
-            // input is relative to the base
-            base
+            Ok(self.clone())
         } else {
-            // input is relative to the current
-            current_base
+            let absolute = current_base.join(&self.inner)?;
+            let relative = absolute.relative_path(base).ok_or(UrlError::RelativeUrlWithoutBase)?;
+            Ok(AssetId::new(relative)?)
         }
     }
 
-    pub fn to_url(&self, base: &Url) -> Result<Url, UrlError>  {
+    pub fn to_url(&self, base: &Url) -> Result<Url, UrlError> {
         base.join(&self.inner)
     }
 }
@@ -98,11 +95,11 @@ impl Url {
         &self.inner[url::Position::BeforePath..url::Position::AfterPath]
     }
 
-    /*pub fn relative_path(&self, base: &Url) -> Option<&str> {
+    pub fn relative_path(&self, base: &Url) -> Option<&str> {
         let path = &self.inner[..url::Position::AfterPath];
         let prefix = base.as_str();
         path.strip_prefix(prefix)
-    }*/
+    }
 
     pub fn to_file_path(&self) -> PathBuf {
         PathBuf::from(&self.inner[url::Position::BeforeHost..url::Position::AfterPath])
@@ -166,13 +163,13 @@ impl Url {
         ))
     }
 
-    pub fn join(&self, path: &str) -> Result<Url, UrlError> {        
+    pub fn join(&self, path: &str) -> Result<Url, UrlError> {
         Url::parse(&format!(
             "{}{}{}",
             &self.inner[..url::Position::AfterPath],
             path,
             &self.inner[url::Position::AfterPath..]
-        ))        
+        ))
     }
 }
 

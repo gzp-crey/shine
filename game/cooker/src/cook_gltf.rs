@@ -1,6 +1,6 @@
-use crate::{AssetNaming, Context, CookingError, TargetDependency};
+use crate::{AssetNaming, Context, CookingError, Dependency};
 use gltf::{binary, Document, Gltf};
-use shine_game::assets::{AssetError, Url, AssetId};
+use shine_game::assets::{AssetError, AssetId, Url};
 use std::borrow::Cow;
 
 impl From<gltf::Error> for CookingError {
@@ -33,15 +33,20 @@ fn serialize_gltf(document: Document, mut blob: Option<Vec<u8>>) -> Result<Vec<u
     Ok(data)
 }
 
-pub async fn get_gltf_etag(context: &Context, gltf_url: &Url) -> Result<String, CookingError> {
+async fn find_gltf_etag(context: &Context, gltf_url: &Url) -> Result<String, CookingError> {
     Ok(context.source_io.download_etag(&gltf_url).await?)
 }
 
-pub async fn cook_gltf(context: &Context, asset_base: &Url, gltf_id: &AssetId) -> Result<TargetDependency, CookingError> {
+pub async fn get_gltf_etag(context: &Context, asset_base: &Url, gltf_id: &AssetId) -> Result<String, CookingError> {
+    let gltf_url = gltf_id.to_url(&asset_base)?;
+    find_gltf_etag(context, &gltf_url).await
+}
+
+pub async fn cook_gltf(context: &Context, asset_base: &Url, gltf_id: &AssetId) -> Result<Dependency, CookingError> {
     let gltf_url = gltf_id.to_url(&asset_base)?;
 
     log::info!("[{}] Cooking...", gltf_url.as_str());
-    let source_hash = get_gltf_etag(context, &gltf_url).await?;
+    let source_hash = find_gltf_etag(context, &gltf_url).await?;
 
     log::debug!("[{}] Downloading...", gltf_url.as_str());
     let data = context.source_io.download_binary(&gltf_url).await?;
@@ -58,8 +63,8 @@ pub async fn cook_gltf(context: &Context, asset_base: &Url, gltf_id: &AssetId) -
     let cooked_dependency = context
         .target_db
         .upload_cooked_binary(
-            gltf_id,
-            &gltf_url.set_extension("glb")?,
+            gltf_id.clone(),
+            gltf_url.set_extension("glb")?,
             AssetNaming::Hard,
             &cooked_gltf,
             dependencies,
@@ -67,7 +72,7 @@ pub async fn cook_gltf(context: &Context, asset_base: &Url, gltf_id: &AssetId) -
         .await?;
     context
         .cache_db
-        .set_info(gltf_url.as_str(), &source_hash, cooked_dependency.url())
+        .set_info(&gltf_url, &source_hash, &cooked_dependency)
         .await?;
     Ok(cooked_dependency)
 }

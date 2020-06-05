@@ -1,5 +1,5 @@
 use crate::{Config, CookingError, Dependency, TargetDB};
-use shine_game::assets::io;
+use shine_game::assets::{io, Url};
 use sqlx::{
     self,
     sqlite::{SqlitePool, SqliteQueryAs},
@@ -7,7 +7,7 @@ use sqlx::{
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct SourceCacheEntry {
-    pub source_url: String,
+    pub source_id: String,
     pub source_hash: String,
     pub cooked_url: String,
 }
@@ -29,21 +29,21 @@ impl CacheDB {
     }
 
     async fn init(&self) -> Result<(), CookingError> {
-        sqlx::query(
+        /*sqlx::query(
             r#"
                 CREATE TABLE IF NOT EXISTS 
                     cooked_sources (
                         config_hash TEXT NOT NULL,
-                        source_url TEXT NOT NULL,
+                        source_id TEXT NOT NULL,
                         source_hash TEXT NOT NULL,
                         cooked_url TEXT NOT NULL );
-                CREATE UNIQUE INDEX IF NOT EXISTS cooked_sources_source_url ON cooked_sources(source_url); 
+                CREATE UNIQUE INDEX IF NOT EXISTS cooked_sources_source_id ON cooked_sources(source_id); 
                 CREATE INDEX IF NOT EXISTS cooked_sources_source_hash ON cooked_sources(cooked_url); 
                 CREATE INDEX IF NOT EXISTS cooked_sources_cooked_url ON cooked_sources(cooked_url);
             "#,
         )
         .execute(&self.pool)
-        .await?;
+        .await?;*/
         Ok(())
     }
 
@@ -52,7 +52,7 @@ impl CacheDB {
     }
 
     /// Remove all entries not matching the current config
-    pub async fn purge_config(&self) -> Result<(), CookingError> {
+    /*pub async fn purge_config(&self) -> Result<(), CookingError> {
         sqlx::query("DELETE FROM cooked_sources WHERE config_hash != ?")
             .bind(&self.config_hash)
             .execute(&self.pool)
@@ -75,11 +75,11 @@ impl CacheDB {
         Ok(())
     }
 
-    pub async fn get_info(&self, source_url: &str) -> Result<Option<SourceCacheEntry>, CookingError> {
+    pub async fn get_info(&self, source_id: &str) -> Result<Option<SourceCacheEntry>, CookingError> {
         let info = sqlx::query_as::<_, SourceCacheEntry>(
             r#"
-                SELECT source_url, source_hash, cooked_url 
-                    FROM cooked_sources 
+                SELECT source_url, source_hash, cooked_url
+                    FROM cooked_sources
                     WHERE config_hash = ? and source_url = ?")
             "#,
         )
@@ -99,8 +99,8 @@ impl CacheDB {
                 .join(",");
             format!(
                 r#"
-                    SELECT cooked_url 
-                        FROM cooked_sources 
+                    SELECT cooked_url
+                        FROM cooked_sources
                         WHERE source_url IN ({})
                 "#,
                 in_clause
@@ -121,8 +121,8 @@ impl CacheDB {
         for cooked_url in cooked_urls {
             let entry = sqlx::query_as::<_, (String,)>(
                 r#"
-                    SELECT source_url 
-                        FROM cooked_sources 
+                    SELECT source_url
+                        FROM cooked_sources
                         WHERE cooked_url = ?
                 "#,
             )
@@ -138,8 +138,8 @@ impl CacheDB {
     pub async fn get_all_infos(&self) -> Result<Vec<SourceCacheEntry>, CookingError> {
         let entries = sqlx::query_as::<_, SourceCacheEntry>(
             r#"
-                SELECT * 
-                    FROM cooked_sources 
+                SELECT *
+                    FROM cooked_sources
                     WHERE config_hash = ?;
                     "#,
         )
@@ -156,10 +156,16 @@ impl CacheDB {
             .execute(&self.pool)
             .await?;
         Ok(())
-    }
-
-    pub async fn set_info(&self, source_url: &str, source_hash: &str, cooked_url: &str) -> Result<(), CookingError> {
-        sqlx::query(
+    }*/
+    
+    pub async fn set_info(
+        &self,
+        source_url: &Url,
+        source_hash: &str,
+        dependency: &Dependency,
+    ) -> Result<(), CookingError> {
+        Ok(())
+        /*sqlx::query(
             r#"
                 INSERT OR REPLACE INTO cooked_sources (config_hash, source_url, source_hash, cooked_url)
                 VALUES (?,?,?,?)
@@ -171,6 +177,6 @@ impl CacheDB {
         .bind(&cooked_url)
         .execute(&self.pool)
         .await?;
-        Ok(())
+        Ok(())*/
     }
 }

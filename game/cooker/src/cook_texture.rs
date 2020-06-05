@@ -1,6 +1,6 @@
-use crate::{AssetNaming, Context, CookingError, TargetDependency};
+use crate::{AssetNaming, Context, CookingError, Dependency};
 use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
-use shine_game::assets::{AssetError, TextureDescriptor, TextureImage, TextureImageEncoding, Url};
+use shine_game::assets::{AssetError, AssetId, TextureDescriptor, TextureImage, TextureImageEncoding, Url};
 use shine_game::wgpu;
 use tokio::task;
 
@@ -26,13 +26,6 @@ async fn load_etag(context: &Context, texture_url: &Url) -> Result<(String, Opti
     }
 }
 
-pub async fn get_texture_etag(context: &Context, texture_url: &Url) -> Result<String, CookingError> {
-    match load_etag(context, texture_url).await? {
-        (img, Some(meta)) => Ok(format!("{},{}", img, meta)),
-        (img, None) => Ok(img),
-    }
-}
-
 async fn load_data(context: &Context, texture_url: &Url) -> Result<(Vec<u8>, Option<Vec<u8>>), CookingError> {
     log::debug!("[{}] Downloading texture...", texture_url.as_str());
     let image_data = context.source_io.download_binary(&texture_url).await?;
@@ -49,16 +42,34 @@ async fn load_data(context: &Context, texture_url: &Url) -> Result<(Vec<u8>, Opt
     }
 }
 
+async fn find_texture_etag(context: &Context, texture_url: &Url) -> Result<String, CookingError> {
+    match load_etag(context, texture_url).await? {
+        (img, Some(meta)) => Ok(format!("{},{}", img, meta)),
+        (img, None) => Ok(img),
+    }
+}
+
+pub async fn get_texture_etag(
+    context: &Context,
+    asset_base: &Url,
+    texture_id: &AssetId,
+) -> Result<String, CookingError> {
+    let texture_url = texture_id.to_url(asset_base)?;
+    find_texture_etag(context, &texture_url).await
+}
+
 pub async fn cook_texture(
     context: &Context,
     asset_base: &Url,
-    texture_url: &Url,
-) -> Result<TargetDependency, CookingError> {
+    texture_id: &AssetId,
+) -> Result<Dependency, CookingError> {
+    let texture_url = texture_id.to_url(asset_base)?;
+
     log::debug!("[{}] Cooking...", texture_url.as_str());
-    let source_hash = get_texture_etag(context, &texture_url).await?;
+    let source_hash = find_texture_etag(context, &texture_url).await?;
 
     log::debug!("[{}] Downloading image...", texture_url.as_str());
-    let (image_data, mut descriptor) = match load_data(context, texture_url).await? {
+    let (image_data, mut descriptor) = match load_data(context, &texture_url).await? {
         (img, Some(meta)) => (img, serde_json::from_slice(&meta)?),
         (img, None) => (img, TextureDescriptor::new()),
     };
@@ -117,8 +128,8 @@ pub async fn cook_texture(
     let cooked_dependency = context
         .target_db
         .upload_cooked_binary(
-            &asset_base,
-            &texture_url.set_extension("tex")?,
+            texture_id.clone(),
+            texture_url.set_extension("tex")?,
             AssetNaming::Hard,
             &cooked_texture,
             Vec::new(),
@@ -126,7 +137,7 @@ pub async fn cook_texture(
         .await?;
     context
         .cache_db
-        .set_info(texture_url.as_str(), &source_hash, cooked_dependency.url())
+        .set_info(&texture_url, &source_hash, &cooked_dependency)
         .await?;
     Ok(cooked_dependency)
 }
