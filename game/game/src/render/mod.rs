@@ -4,13 +4,14 @@ use shine_ecs::core::store::{Data, DataLoader, Store};
 use shine_ecs::legion::systems::resource::Resources;
 use std::sync::Arc;
 
+mod game_render;
+pub use self::game_render::*;
 mod surface;
 pub use self::surface::*;
 mod context;
 pub use self::context::*;
 mod frame;
 pub use self::frame::*;
-
 mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderLoader, ShaderStore, ShaderStoreRead, ShaderType};
 mod pipeline;
@@ -38,11 +39,12 @@ pub async fn add_render_system(
     config: &Config,
     assetio: Arc<AssetIO>,
     wgpu_instance: wgpu::Instance,
+    surface: &Surface,
     resources: &mut Resources,
 ) -> Result<(), GameError> {
     log::info!("adding render system to the world");
 
-    resources.insert(Context::new(wgpu_instance, config).await?);
+    resources.insert(Context::new(wgpu_instance, surface, config).await?);
     resources.insert(Frame::new());
 
     register_store(ShaderLoader::new(assetio.clone()), 16, resources);

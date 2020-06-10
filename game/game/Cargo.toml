@@ -17,6 +17,7 @@ wasm = [
 native = [ 
     "tokio", 
     "reqwest",
+    "winit",
     "shine-ecs/native",
     "shine-input/native" ]
 
@@ -34,15 +35,19 @@ data-encoding = "2.2"
 itertools = "0.9"
 image = "0.23"
 
+nalgebra = "0.21"
+
 # render
-wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "a203333c3e144cfd431c812213966ee32ae59d98", features = ["trace", "replay"] }
+wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "eaf8f4af87237373105b016832662e7943b3899c", features = ["trace", "replay"] }
 wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
+#wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master", features = ["trace", "replay"] }
 bytemuck = "1.2"
 gltf = "0.15"
 
 # native
 tokio = { version = "0.2", features = ["rt-core", "fs"], optional = true }
 reqwest = { version = "0.10", features = ["gzip"], optional = true }
+winit = { version ="0.22", optional = true }
 
 # wasm support
 wasm-bindgen = { version = "0.2", optional = true }

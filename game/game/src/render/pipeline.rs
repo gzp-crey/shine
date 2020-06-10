@@ -257,7 +257,7 @@ impl PipelineLoader {
 
         let data = self.assetio.download_binary(&url).await?;
         let descriptor = bincode::deserialize::<PipelineDescriptor>(&data)?;
-        log::trace!("pipeline [{}]: {:#?}", source_id, descriptor);
+        log::trace!("pipeline: {:#?}", descriptor);
 
         descriptor.vertex_stage.check_vertex_layouts(&vertex_layouts)?;
         Ok(PipelineLoadData::Descriptor(Box::new(descriptor), vertex_layouts))

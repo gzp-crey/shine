@@ -87,7 +87,7 @@ impl PipelineUniformLayout {
                     ty: wgpu::BindingType::SampledTexture {
                         multisampled: false,
                         dimension: wgpu::TextureViewDimension::D2,
-                        component_type: wgpu::TextureComponentType::Uint,
+                        component_type: wgpu::TextureComponentType::Float,
                     },
                 },
                 Uniform::Sampler(_) => wgpu::BindGroupLayoutEntry {
@@ -243,6 +243,7 @@ impl PipelineBuffer {
                 label: None,
                 size: size as wgpu::BufferAddress,
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                mapped_at_creation: false,
             }))
         } else {
             None
@@ -334,7 +335,7 @@ impl PipelineDescriptor {
             index_format: wgpu::IndexFormat::Uint16,
             vertex_buffers: &vertex_buffers,
         };
-        log::trace!("Vertex state: {:?}", vertex_state);
+        log::trace!("Vertex state: {:#?}", vertex_state);
 
         let mut uniforms = [None, None];
         for i in 0..UNIFORM_GROUP_COUNT {

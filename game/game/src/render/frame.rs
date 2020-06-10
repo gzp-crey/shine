@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 pub struct FrameOutput {
-    pub frame: wgpu::SwapChainOutput,
+    pub frame: wgpu::SwapChainTexture,
     pub descriptor: wgpu::SwapChainDescriptor,
 }
 

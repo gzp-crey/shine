@@ -1,4 +1,4 @@
-use crate::{Guesture, InputState};
+use crate::{GuestureManager, InputState};
 use std::mem;
 
 #[cfg(feature = "native")]
@@ -8,8 +8,6 @@ use wasm_timer::SystemTime;
 
 pub struct InputManager {
     time: u128,
-    guestures: Vec<Box<dyn Guesture>>,
-    guestures_order: Vec<usize>,
 }
 
 impl InputManager {
@@ -21,41 +19,38 @@ impl InputManager {
     }
 
     pub fn new() -> InputManager {
-        InputManager {
-            time: 0,
-            guestures: Vec::new(),
-            guestures_order: Vec::new(),
-        }
+        InputManager { time: 0 }
     }
 
-    pub fn add_guesture<G: 'static + Guesture>(&mut self, guesture: G) {
-        self.guestures.push(Box::new(guesture));
-        self.guestures_order.clear();
+    /// Prepare for the next input frame.
+    pub fn advance_states(&mut self, previous: &mut InputState, current: &mut InputState) {
+        self.advance_states_with(previous, current, |_, _| {});
     }
 
     /// Prepare for the next input frame. The current state is made the previous state
     /// and the current state is prepared to accept new inputs.
-    pub fn advance_states(&mut self, previous: &mut InputState, current: &mut InputState) {
+    /// An update function can be also given to handle other state transitions, ex guestures.
+    pub fn advance_states_with<F: FnOnce(&mut InputState, &mut InputState)>(
+        &mut self,
+        previous: &mut InputState,
+        current: &mut InputState,
+        on_update: F,
+    ) {
         self.time = Self::now();
-        self.process_guestures(previous, current);
+        //todo:state time is off by one frame, current time is the end of the prev update
+        on_update(previous, current);
         mem::swap(previous, current);
         current.init_from(previous, self.time);
     }
 
-    fn update_guesture_order(&mut self) {
-        //todo: topo order by input/output
-        if self.guestures_order.is_empty() {
-            self.guestures_order = (0..self.guestures.len()).collect();
-        }
-    }
-
-    /// Perform the guesture handling based on previous and current states
-    fn process_guestures(&mut self, previous: &InputState, current: &mut InputState) {
-        self.update_guesture_order();
-        for i in &self.guestures_order {
-            let guesture = &mut self.guestures[*i];
-            guesture.on_update(previous, current);
-        }
+    /// Prepare for the next input frame.
+    pub fn advance_states_with_guestures(
+        &mut self,
+        previous: &mut InputState,
+        current: &mut InputState,
+        guestures: &mut GuestureManager,
+    ) {
+        self.advance_states_with(previous, current, |p, c| guestures.process_guestures(p, c));
     }
 }
 

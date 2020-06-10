@@ -1,5 +1,5 @@
-mod guesture;
-pub use self::guesture::*;
+mod manager;
+pub use self::manager::*;
 
 mod buttonaxis;
 pub use self::buttonaxis::*;

@@ -3,10 +3,10 @@ use crate::assets::{
     TextureSemantic, Uniform, GLOBAL_UNIFORMS,
 };
 use crate::render::{
-    Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
+    Context, Frame, GameRender, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
     TextureStoreRead,
 };
-use crate::{GameError, GameRender};
+use crate::GameError;
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},

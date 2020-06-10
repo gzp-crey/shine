@@ -60,6 +60,11 @@ impl AssetLowIO {
         }
     }
 
+    pub async fn download_etag(&self, url: &Url) -> Result<String, AssetError> {
+        log::debug!("Downloading etag from {}", url.as_str());
+        unimplemented!()
+    }
+
     pub async fn download_binary(&self, url: &Url) -> Result<Vec<u8>, AssetError> {
         match url.scheme() {
             "http" | "https" => {

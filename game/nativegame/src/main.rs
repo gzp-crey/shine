@@ -1,6 +1,10 @@
 #![feature(async_closure)]
 
-use shine_game::{assets::Url, render::Surface, wgpu, world, Config, GameRender};
+use shine_game::{
+    assets::Url,
+    render::{GameRender, Surface},
+    wgpu, world, Config,
+};
 use std::time::{Duration, Instant};
 use tokio::runtime::{Handle as RuntimeHandle, Runtime};
 use winit::{
@@ -57,6 +61,7 @@ async fn run() {
         event_loop.run(move |event, _, control_flow| {
             let start_time = Instant::now();
             *control_flow = ControlFlow::Poll;
+
             match event {
                 Event::MainEventsCleared => window.request_redraw(),
                 Event::WindowEvent {
@@ -70,10 +75,10 @@ async fn run() {
                         log::warn!("render failed: {}", err);
                     }
                 }
-                Event::UserEvent(event) => {
+                Event::UserEvent(ref _event) => {
                     //log::info!("User event: {:?}", event);
                 }
-                Event::WindowEvent { event, .. } => match event {
+                Event::WindowEvent { ref event, .. } => match event {
                     WindowEvent::KeyboardInput {
                         input:
                             KeyboardInput {
@@ -89,7 +94,6 @@ async fn run() {
                         Some(VirtualKeyCode::Key2) => rt.block_on(world::load_world(&test2_url, &mut game)).unwrap(),
                         Some(VirtualKeyCode::Key3) => rt.block_on(world::load_world(&test3_url, &mut game)).unwrap(),
                         Some(VirtualKeyCode::Key4) => rt.block_on(world::load_world(&test4_url, &mut game)).unwrap(),
-                        Some(VirtualKeyCode::U) => game.update(),
                         Some(VirtualKeyCode::G) => game.gc_all(),
                         _ => {}
                     },
@@ -97,7 +101,7 @@ async fn run() {
                         *control_flow = ControlFlow::Exit;
                     }
                     _ => {
-                        game.update();
+                        //game.render();
                     }
                 },
                 _ => {}
@@ -106,6 +110,10 @@ async fn run() {
             match control_flow {
                 ControlFlow::Exit => rt.block_on(world::unload_world(&mut game)).unwrap(),
                 _ => {
+                    if let Ok(event) = event.map_nonuser_event::<()>() {
+                        let _ = game.inject_input(&event);
+                    }
+
                     let elapsed_time = Instant::now().duration_since(start_time).as_millis() as i64;
                     let wait_millis = ((1000 / TARGET_FPS) as i64) - elapsed_time;
                     if wait_millis > 0 {
@@ -128,6 +136,7 @@ fn main() {
         .filter_module("shine_ecs", log::LevelFilter::Trace)
         .filter_module("shine_game", log::LevelFilter::Trace)
         .filter_module("wgpu_core", log::LevelFilter::Warn)
+        .filter_module("mio", log::LevelFilter::Warn)
         .try_init();
     let mut rt = Runtime::new().unwrap();
 

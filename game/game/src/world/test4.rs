@@ -3,11 +3,12 @@ use crate::assets::{
     vertex::{self, Pos3fTex2f},
     TextureSemantic, Uniform, UniformSemantic, GLOBAL_UNIFORMS,
 };
+use crate::input::{self, CurrentInputState, FPSInputMapper};
 use crate::render::{
-    Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
+    Context, Frame, GameRender, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
     TextureStoreRead,
 };
-use crate::{GameError, GameRender};
+use crate::{camera, GameError};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -51,9 +52,8 @@ struct TestScene {
     geometry: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
     uniforms: Option<wgpu::Buffer>,
     bind_group: Option<wgpu::BindGroup>,
-
-    scale: f32,
-    time: f32,
+    camera: camera::FirstPerson,
+    projection: camera::Projection,
 }
 
 impl TestScene {
@@ -64,8 +64,8 @@ impl TestScene {
             geometry: None,
             uniforms: None,
             bind_group: None,
-            scale: 1.,
-            time: 0.,
+            camera: Default::default(),
+            projection: Default::default(),
         }
     }
 
@@ -78,14 +78,7 @@ impl TestScene {
             )
         });
 
-        let (s, c) = self.time.sin_cos();
-
-        let uniforms = ViewProj {
-            mx: [c, s, 0.0, 0.0, -s, c, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
-        };
-
-        self.scale *= 0.99;
-        self.time += 0.03;
+        let uniforms = ViewProj::from(&self.projection);
 
         match &self.uniforms {
             None => {
@@ -146,6 +139,13 @@ impl TestScene {
             pass.draw_indexed(0..geometry.2, 0, 0..1);
         }
     }
+}
+
+fn update_camera() -> Box<dyn Schedulable> {
+    SystemBuilder::new("update_camera")
+        .read_resource::<CurrentInputState>()
+        .write_resource::<TestScene>()
+        .build(move |_, _, (input, scene), _| {})
 }
 
 fn prepare_render() -> Box<dyn Schedulable> {
@@ -212,12 +212,21 @@ pub async fn register_test_scene(test: Test4, game: &mut GameRender) -> Result<(
     log::info!("Adding test4 scene to the world");
 
     game.resources.insert(TestScene::new(test));
+    game.add_input_system(FPSInputMapper::new()).await?;
+
+    game.schedules.insert(
+        "update",
+        Schedule::builder()
+            .add_system(input::systems::advance_input_states())
+            .add_system(update_camera())
+            .flush()
+            .build(),
+    )?;
 
     game.schedules.insert(
         "render",
         Schedule::builder()
             .add_system(prepare_render())
-            .flush()
             .add_system(render())
             .flush()
             .build(),
@@ -230,7 +239,9 @@ pub async fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameErro
     log::info!("Removing test4 scene from the world");
 
     game.schedules.remove("render");
+    game.schedules.remove("update");
     let _ = game.resources.remove::<TestScene>();
+    game.remove_input_system().await?;
 
     Ok(())
 }

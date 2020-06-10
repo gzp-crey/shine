@@ -65,7 +65,6 @@ impl TargetDB {
     }
 
     async fn init(&self) -> Result<(), CookingError> {
-        println!("1");
         (&self.pool)
             .execute(
                 r#"
@@ -97,7 +96,6 @@ impl TargetDB {
             "#,
             )
             .await?;
-        println!("2");
         Ok(())
     }
 

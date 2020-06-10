@@ -1,5 +1,5 @@
 pub mod guestures;
-pub use self::guestures::Guesture;
+pub use self::guestures::{Guesture, GuestureManager};
 
 mod manager;
 pub use self::manager::*;
@@ -18,11 +18,4 @@ impl InputId {
     pub fn id(self) -> u32 {
         self.0
     }
-}
-
-/// Trait to map OS events into state change
-pub trait InputMapper {
-    type InputEvent;
-
-    fn update_state(&self, event: &Self::InputEvent, state: &mut InputState);
 }

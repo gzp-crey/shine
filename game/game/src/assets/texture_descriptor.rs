@@ -25,7 +25,8 @@ pub struct TextureDescriptor {
     pub mipmap_filter: wgpu::FilterMode,
     pub lod_min_clamp: f32,
     pub lod_max_clamp: f32,
-    pub compare: wgpu::CompareFunction,
+    pub compare: Option<wgpu::CompareFunction>,
+    pub anisotropy_clamp: Option<u8>,
 }
 
 impl TextureDescriptor {
@@ -43,7 +44,8 @@ impl TextureDescriptor {
             mipmap_filter: wgpu::FilterMode::Nearest,
             lod_min_clamp: 0.0,
             lod_max_clamp: 100.0,
-            compare: wgpu::CompareFunction::Undefined,
+            compare: None,
+            anisotropy_clamp: None,
         }
     }
 
@@ -59,6 +61,8 @@ impl TextureDescriptor {
             lod_min_clamp: self.lod_min_clamp,
             lod_max_clamp: self.lod_max_clamp,
             compare: self.compare,
+            anisotropy_clamp: self.anisotropy_clamp,
+            ..Default::default()
         }
     }
 
@@ -125,18 +129,19 @@ impl TextureImage {
         let init_cmd_buffer = {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             let buffer = device.create_buffer_with_data(&self.image, wgpu::BufferUsage::COPY_SRC);
-            let (bpr, rpi) = self.descriptor.get_upload_info();
+            let (bytes_per_row, rows_per_image) = self.descriptor.get_upload_info();
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
                     buffer: &buffer,
-                    offset: 0,
-                    bytes_per_row: bpr,
-                    rows_per_image: rpi,
+                    layout: wgpu::TextureDataLayout {
+                        offset: 0,
+                        bytes_per_row,
+                        rows_per_image,
+                    },
                 },
                 wgpu::TextureCopyView {
                     texture: &texture,
                     mip_level: 0,
-                    array_layer: 0,
                     origin: wgpu::Origin3d::ZERO,
                 },
                 size,

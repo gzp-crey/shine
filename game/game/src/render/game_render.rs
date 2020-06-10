@@ -1,6 +1,6 @@
 use crate::assets::AssetIO;
-use crate::input::{self, add_input_system};
-use crate::render::{self, add_render_system, Context, Frame, Surface};
+use crate::input::{self, GameInput, InputEvent, InputHandler};
+use crate::render::{self, Context, Frame, Surface};
 use crate::{Config, GameError, ScheduleSet};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
@@ -25,19 +25,10 @@ impl GameRender {
                 .map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?,
         );
 
-        add_input_system(&mut resources).await?;
-        add_render_system(&config, assetio.clone(), wgpu_instance, &mut resources).await?;
+        render::add_render_system(&config, assetio.clone(), wgpu_instance, &surface, &mut resources).await?;
 
         let schedules = {
             let mut schedules = ScheduleSet::new();
-
-            schedules.insert(
-                "update",
-                Schedule::builder()
-                    .add_system(input::systems::advance_input_states())
-                    .flush()
-                    .build(),
-            )?;
 
             schedules.insert(
                 "update_stores",
@@ -75,14 +66,27 @@ impl GameRender {
 
     pub fn init_world() {}
 
+    pub async fn add_input_system<I: GameInput>(&mut self, input: I) -> Result<(), GameError> {
+        input::add_input_system(&mut self.resources, input).await
+    }
+
+    pub fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), GameError> {
+        if let Some(mut input) = self.resources.get_mut::<InputHandler>() {
+            input.inject_input(event);
+            Ok(())
+        } else {
+            Err(GameError::Setup(format!("Input system not found")))
+        }
+    }
+
+    pub async fn remove_input_system(&mut self) -> Result<(), GameError> {
+        input::remove_input_system(&mut self.resources).await
+    }
+
     pub fn run_logic(&mut self, logic: &str) {
         let world = &mut self.world;
         let resources = &mut self.resources;
         self.schedules.execute(logic, world, resources);
-    }
-
-    pub fn update(&mut self) {
-        self.run_logic("update");
     }
 
     fn start_frame(&mut self, size: (u32, u32)) -> Result<(), String> {
@@ -103,6 +107,7 @@ impl GameRender {
 
     pub fn render(&mut self, size: (u32, u32)) -> Result<(), String> {
         self.run_logic("update_stores");
+        self.run_logic("update");
 
         self.start_frame(size)?;
         self.run_logic("render");

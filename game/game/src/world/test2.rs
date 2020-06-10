@@ -1,6 +1,6 @@
 use crate::assets::vertex::{self, Pos3fCol4f};
-use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
-use crate::{GameError, GameRender};
+use crate::render::{Context, Frame, GameRender, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
+use crate::GameError;
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},

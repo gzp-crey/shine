@@ -11,13 +11,14 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn new(instance: wgpu::Instance, config: &Config) -> Result<Context, GameError> {
+    pub async fn new(instance: wgpu::Instance, surface: &Surface, config: &Config) -> Result<Context, GameError> {
         let adapter = instance
             .request_adapter(
                 &wgpu::RequestAdapterOptions {
                     power_preference: wgpu::PowerPreference::Default,
-                    compatible_surface: None,
+                    compatible_surface: Some(surface.surface()),
                 },
+                wgpu::UnsafeExtensions::disallow(),
                 wgpu::BackendBit::PRIMARY,
             )
             .await
@@ -28,10 +29,9 @@ impl Context {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    extensions: wgpu::Extensions {
-                        anisotropic_filtering: false,
-                    },
+                    extensions: wgpu::Extensions::empty(),
                     limits: wgpu::Limits::default(),
+                    shader_validation: true,
                 },
                 None,
             )
@@ -88,8 +88,9 @@ impl Context {
         });
 
         let frame = sc
-            .get_next_texture()
-            .map_err(|err| format!("Frame request error: {:?}", err))?;
+            .get_next_frame()
+            .map_err(|err| format!("Frame request error: {:?}", err))?
+            .output;
         Ok(FrameOutput {
             frame,
             descriptor: sd.clone(),
