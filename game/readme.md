@@ -24,6 +24,8 @@
 
 * [x] input handling (for fps)
 
+* [ ] fix prev/current state time and elapsed time for inputs
+
 ### WASM sample
 
 * [ ] fix compilation
