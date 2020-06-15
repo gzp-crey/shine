@@ -131,7 +131,7 @@ impl InputState {
 
     pub fn set_input(&mut self, id: InputId, value: InputValue, auto_reset: bool) {
         if value == InputValue::Off {
-            self.remove_input(id);
+            self.clear_input(id);
         } else {
             let entry = self.inputs.entry(id);
             #[cfg(debug_assertions)]
@@ -153,7 +153,7 @@ impl InputState {
         }
     }
 
-    pub fn remove_input(&mut self, id: InputId) {
+    pub fn clear_input(&mut self, id: InputId) {
         #[cfg(debug_assertions)]
         {
             if self.inputs.contains_key(&id) {

@@ -1,6 +1,6 @@
 use nalgebra::{Isometry3, Perspective3};
 
-pub trait Camera: Default {
+pub trait Camera: 'static + Sync + Send {
     /// Get the view part of projection
     fn get_view(&self) -> Isometry3<f32>;
 
@@ -18,6 +18,7 @@ pub trait Camera: Default {
 
 mod firstperson;
 pub use self::firstperson::*;
-
 mod projection;
 pub use self::projection::*;
+
+pub mod systems;

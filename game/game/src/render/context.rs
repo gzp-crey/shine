@@ -31,7 +31,7 @@ impl Context {
                 &wgpu::DeviceDescriptor {
                     extensions: wgpu::Extensions::empty(),
                     limits: wgpu::Limits::default(),
-                    shader_validation: true,
+                    shader_validation: config.enable_validation,
                 },
                 None,
             )

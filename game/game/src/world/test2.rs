@@ -1,6 +1,6 @@
 use crate::assets::vertex::{self, Pos3fCol4f};
-use crate::render::{Context, Frame, GameRender, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
-use crate::GameError;
+use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
+use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -122,7 +122,7 @@ fn render_test() -> Box<dyn Schedulable> {
         })
 }
 
-pub async fn register_test_scene(test: Test2, game: &mut GameRender) -> Result<(), GameError> {
+pub fn register_test_scene(test: Test2, game: &mut GameView) -> Result<(), GameError> {
     log::info!("Adding test2 scene to the world");
 
     game.resources.insert(TestScene::new(test));
@@ -133,7 +133,7 @@ pub async fn register_test_scene(test: Test2, game: &mut GameRender) -> Result<(
     Ok(())
 }
 
-pub async fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub fn unregister_test_scene(game: &mut GameView) -> Result<(), GameError> {
     log::info!("Removing test2 scene from the world");
 
     game.schedules.remove("render");

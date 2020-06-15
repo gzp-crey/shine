@@ -34,6 +34,7 @@ impl GuestureManager {
 
     /// Perform the guesture handling based on previous and current states
     pub fn process_guestures(&mut self, previous: &InputState, current: &mut InputState) {
+        log::trace!("processing guestures");
         self.update_guesture_order();
         for i in &self.guestures_order {
             let guesture = &mut self.guestures[*i];

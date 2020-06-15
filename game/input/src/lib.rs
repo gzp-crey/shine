@@ -19,3 +19,20 @@ impl InputId {
         self.0
     }
 }
+
+pub struct InputIdGenerator(u32);
+
+impl InputIdGenerator {
+    pub fn new() -> InputIdGenerator {
+        InputIdGenerator(0)
+    }
+
+    pub fn with_start(start: u32) -> InputIdGenerator {
+        InputIdGenerator(start)
+    }
+
+    pub fn next(&mut self) -> InputId {
+        self.0 += 1;
+        InputId(self.0)
+    }
+}

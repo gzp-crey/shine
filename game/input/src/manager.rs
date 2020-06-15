@@ -37,7 +37,7 @@ impl InputManager {
         on_update: F,
     ) {
         self.time = Self::now();
-        //todo:state time is off by one frame, current time is the end of the prev update
+        //fixme: state time is off by one frame, current time is the end of the prev update
         on_update(previous, current);
         mem::swap(previous, current);
         current.init_from(previous, self.time);

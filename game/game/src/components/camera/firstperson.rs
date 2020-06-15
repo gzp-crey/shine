@@ -1,4 +1,4 @@
-use crate::camera::Camera;
+use crate::components::camera::Camera;
 use nalgebra::{Isometry3, Perspective3, Point3, Translation3, UnitQuaternion, Vector3};
 
 /// First person camera

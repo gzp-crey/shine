@@ -1,5 +1,5 @@
 use crate::assets::AssetIO;
-use crate::input::{self, GameInput, InputEvent, InputHandler};
+use crate::input::{self, InputSystem};
 use crate::render::{self, Context, Frame, Surface};
 use crate::{Config, GameError, ScheduleSet};
 use shine_ecs::legion::{
@@ -8,7 +8,7 @@ use shine_ecs::legion::{
 };
 use std::sync::Arc;
 
-pub struct GameRender {
+pub struct GameView {
     pub assetio: Arc<AssetIO>,
     pub surface: Surface,
     pub resources: Resources,
@@ -16,8 +16,8 @@ pub struct GameRender {
     pub schedules: ScheduleSet,
 }
 
-impl GameRender {
-    pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameRender, GameError> {
+impl GameView {
+    pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameView, GameError> {
         let mut resources = Resources::default();
         let world = World::new();
         let assetio = Arc::new(
@@ -31,12 +31,13 @@ impl GameRender {
             let mut schedules = ScheduleSet::new();
 
             schedules.insert(
-                "update_stores",
+                "prepare_update",
                 Schedule::builder()
                     .add_system(render::systems::update_shaders())
                     .add_system(render::systems::update_textures())
                     .add_system(render::systems::update_pipelines())
                     .add_system(render::systems::update_models())
+                    .add_system(input::systems::advance_input_states())
                     .flush()
                     .build(),
             )?;
@@ -55,33 +56,19 @@ impl GameRender {
             schedules
         };
 
-        Ok(GameRender {
+        let mut view = GameView {
             assetio,
             surface,
             resources,
             world,
             schedules,
-        })
+        };
+
+        view.add_input_system()?;
+        Ok(view)
     }
 
     pub fn init_world() {}
-
-    pub async fn add_input_system<I: GameInput>(&mut self, input: I) -> Result<(), GameError> {
-        input::add_input_system(&mut self.resources, input).await
-    }
-
-    pub fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), GameError> {
-        if let Some(mut input) = self.resources.get_mut::<InputHandler>() {
-            input.inject_input(event);
-            Ok(())
-        } else {
-            Err(GameError::Setup(format!("Input system not found")))
-        }
-    }
-
-    pub async fn remove_input_system(&mut self) -> Result<(), GameError> {
-        input::remove_input_system(&mut self.resources).await
-    }
 
     pub fn run_logic(&mut self, logic: &str) {
         let world = &mut self.world;
@@ -106,7 +93,7 @@ impl GameRender {
     }
 
     pub fn render(&mut self, size: (u32, u32)) -> Result<(), String> {
-        self.run_logic("update_stores");
+        self.run_logic("prepare_update");
         self.run_logic("update");
 
         self.start_frame(size)?;

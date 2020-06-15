@@ -30,6 +30,9 @@ impl Guesture for ButtonAxis {
         let is_pos = state.get_input(self.pos_axis).as_button().unwrap();
         let is_neg = state.get_input(self.neg_axis).as_button().unwrap();
 
+        log::trace!("is_pos {:?} = {}", self.pos_axis, is_pos);
+        log::trace!("is_neg {:?} = {}", self.neg_axis, is_neg);
+
         if is_pos && !is_neg {
             state.set_input(self.out, InputValue::D1(1.), true);
         } else if !is_pos && is_neg {

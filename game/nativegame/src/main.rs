@@ -1,14 +1,10 @@
 #![feature(async_closure)]
 
-use shine_game::{
-    assets::Url,
-    render::{GameRender, Surface},
-    wgpu, world, Config,
-};
+use shine_game::{assets::Url, input::InputSystem, render::Surface, wgpu, world, Config, GameView};
 use std::time::{Duration, Instant};
 use tokio::runtime::{Handle as RuntimeHandle, Runtime};
 use winit::{
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{ElementState, Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
 };
 
@@ -53,7 +49,7 @@ async fn run() {
         let test2_url = Url::parse("world://test_worlds/test2/test.wrld").unwrap();
         let test3_url = Url::parse("world://test_worlds/test3/test.wrld").unwrap();
         let test4_url = Url::parse("world://test_worlds/test4/test.wrld").unwrap();
-        let mut game = rt.block_on(GameRender::new(config, wgpu_instance, surface)).unwrap();
+        let mut game = rt.block_on(GameView::new(config, wgpu_instance, surface)).unwrap();
 
         let event_proxy = event_loop.create_proxy();
         tokio::task::spawn(logic(event_proxy));
@@ -62,41 +58,46 @@ async fn run() {
             let start_time = Instant::now();
             *control_flow = ControlFlow::Poll;
 
-            match event {
+            match &event {
                 Event::MainEventsCleared => window.request_redraw(),
                 Event::WindowEvent {
                     event: WindowEvent::Resized(s),
                     ..
                 } => {
-                    size = s.into();
+                    size = (*s).into();
                 }
                 Event::RedrawRequested(_) => {
                     if let Err(err) = game.render(size) {
                         log::warn!("render failed: {}", err);
                     }
                 }
-                Event::UserEvent(ref _event) => {
+                Event::UserEvent(_event) => {
                     //log::info!("User event: {:?}", event);
                 }
-                Event::WindowEvent { ref event, .. } => match event {
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode,
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    } => match virtual_keycode {
-                        Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
-                        Some(VirtualKeyCode::Key0) => rt.block_on(world::unload_world(&mut game)).unwrap(),
-                        Some(VirtualKeyCode::Key1) => rt.block_on(world::load_world(&test1_url, &mut game)).unwrap(),
-                        Some(VirtualKeyCode::Key2) => rt.block_on(world::load_world(&test2_url, &mut game)).unwrap(),
-                        Some(VirtualKeyCode::Key3) => rt.block_on(world::load_world(&test3_url, &mut game)).unwrap(),
-                        Some(VirtualKeyCode::Key4) => rt.block_on(world::load_world(&test4_url, &mut game)).unwrap(),
-                        Some(VirtualKeyCode::G) => game.gc_all(),
-                        _ => {}
-                    },
+                Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::KeyboardInput { input, .. } => {
+                        let _ = game.inject_input(input);
+                        if input.state == ElementState::Pressed {
+                            match input.virtual_keycode {
+                                Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
+                                Some(VirtualKeyCode::Key0) => world::unload_world(&mut game).unwrap(),
+                                Some(VirtualKeyCode::Key1) => {
+                                    rt.block_on(world::load_world(&test1_url, &mut game)).unwrap()
+                                }
+                                Some(VirtualKeyCode::Key2) => {
+                                    rt.block_on(world::load_world(&test2_url, &mut game)).unwrap()
+                                }
+                                Some(VirtualKeyCode::Key3) => {
+                                    rt.block_on(world::load_world(&test3_url, &mut game)).unwrap()
+                                }
+                                Some(VirtualKeyCode::Key4) => {
+                                    rt.block_on(world::load_world(&test4_url, &mut game)).unwrap()
+                                }
+                                Some(VirtualKeyCode::G) => game.gc_all(),
+                                _ => {}
+                            }
+                        }
+                    }
                     WindowEvent::CloseRequested => {
                         *control_flow = ControlFlow::Exit;
                     }
@@ -108,12 +109,8 @@ async fn run() {
             }
 
             match control_flow {
-                ControlFlow::Exit => rt.block_on(world::unload_world(&mut game)).unwrap(),
+                ControlFlow::Exit => world::unload_world(&mut game).unwrap(),
                 _ => {
-                    if let Ok(event) = event.map_nonuser_event::<()>() {
-                        let _ = game.inject_input(&event);
-                    }
-
                     let elapsed_time = Instant::now().duration_since(start_time).as_millis() as i64;
                     let wait_millis = ((1000 / TARGET_FPS) as i64) - elapsed_time;
                     if wait_millis > 0 {
@@ -135,6 +132,7 @@ fn main() {
         .filter_level(log::LevelFilter::Info)
         .filter_module("shine_ecs", log::LevelFilter::Trace)
         .filter_module("shine_game", log::LevelFilter::Trace)
+        .filter_module("shine_input", log::LevelFilter::Info)
         .filter_module("wgpu_core", log::LevelFilter::Warn)
         .filter_module("mio", log::LevelFilter::Warn)
         .try_init();

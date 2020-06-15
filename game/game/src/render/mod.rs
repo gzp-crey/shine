@@ -4,8 +4,6 @@ use shine_ecs::core::store::{Data, DataLoader, Store};
 use shine_ecs::legion::systems::resource::Resources;
 use std::sync::Arc;
 
-mod game_render;
-pub use self::game_render::*;
 mod surface;
 pub use self::surface::*;
 mod context;

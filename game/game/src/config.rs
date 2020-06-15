@@ -8,6 +8,7 @@ use std::path::Path;
 pub struct Config {
     pub virtual_schemes: HashMap<String, Url>,
     pub swap_chain_format: wgpu::TextureFormat,
+    pub enable_validation: bool,
 }
 
 impl Config {
@@ -16,8 +17,9 @@ impl Config {
 
         s.merge(File::from_str(
             r#"{
-    "swap_chain_format": "Bgra8UnormSrgb"
-}"#,
+                "swap_chain_format": "Bgra8UnormSrgb",
+                "enable_validation": false
+            }"#,
             FileFormat::Json,
         ))
         .map_err(|err| GameError::Config(format!("configuration error in defaults: {:?}", err)))?;

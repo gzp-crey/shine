@@ -3,10 +3,10 @@ use crate::assets::{
     TextureSemantic, Uniform, GLOBAL_UNIFORMS,
 };
 use crate::render::{
-    Context, Frame, GameRender, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
+    Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
     TextureStoreRead,
 };
-use crate::GameError;
+use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -164,7 +164,7 @@ fn render() -> Box<dyn Schedulable> {
         })
 }
 
-pub async fn register_test_scene(test: Test3, game: &mut GameRender) -> Result<(), GameError> {
+pub fn register_test_scene(test: Test3, game: &mut GameView) -> Result<(), GameError> {
     log::info!("Adding test3 scene to the world");
 
     game.resources.insert(TestScene::new(test));
@@ -182,7 +182,7 @@ pub async fn register_test_scene(test: Test3, game: &mut GameRender) -> Result<(
     Ok(())
 }
 
-pub async fn unregister_test_scene(game: &mut GameRender) -> Result<(), GameError> {
+pub fn unregister_test_scene(game: &mut GameView) -> Result<(), GameError> {
     log::info!("Removing test3 scene from the world");
 
     game.schedules.remove("render");

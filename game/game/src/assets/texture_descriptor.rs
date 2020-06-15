@@ -66,10 +66,16 @@ impl TextureDescriptor {
         }
     }
 
-    pub fn get_upload_info(&self) -> (u32, u32) {
-        match self.format {
+    pub fn get_texture_data_layout(&self) -> wgpu::TextureDataLayout {
+        let (bytes_per_row, rows_per_image) = match self.format {
             wgpu::TextureFormat::Rgba8UnormSrgb => (4 * self.size.0, self.size.1),
             _ => unimplemented!(),
+        };
+
+        wgpu::TextureDataLayout {
+            offset: 0,
+            bytes_per_row,
+            rows_per_image,
         }
     }
 }
@@ -92,7 +98,7 @@ impl TextureImage {
         match self.descriptor.encoding {
             TextureImageEncoding::Png => {
                 let img = image::load_from_memory(&self.image).unwrap();
-                log::info!("color: {:?}", img.color());
+                log::info!("Image color format: {:?}", img.color());
                 self.image = match (img.color(), self.descriptor.format) {
                     (ColorType::Rgba8, wgpu::TextureFormat::Rgba8UnormSrgb) => Ok(img.as_rgba8().unwrap().to_vec()),
                     (ColorType::Rgba8, wgpu::TextureFormat::Rgba8Unorm) => Ok(img.as_rgba8().unwrap().to_vec()),
@@ -129,15 +135,11 @@ impl TextureImage {
         let init_cmd_buffer = {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             let buffer = device.create_buffer_with_data(&self.image, wgpu::BufferUsage::COPY_SRC);
-            let (bytes_per_row, rows_per_image) = self.descriptor.get_upload_info();
+            let texture_data_layout = self.descriptor.get_texture_data_layout();
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
                     buffer: &buffer,
-                    layout: wgpu::TextureDataLayout {
-                        offset: 0,
-                        bytes_per_row,
-                        rows_per_image,
-                    },
+                    layout: texture_data_layout,
                 },
                 wgpu::TextureCopyView {
                     texture: &texture,

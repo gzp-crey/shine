@@ -2,7 +2,7 @@
 #![feature(str_strip)]
 
 pub mod assets;
-pub mod camera;
+pub mod components;
 pub mod input;
 pub mod render;
 pub mod world;
@@ -13,5 +13,7 @@ mod config;
 pub use self::config::*;
 mod scheduleset;
 pub use self::scheduleset::*;
+mod game_view;
+pub use self::game_view::*;
 
 pub use wgpu;

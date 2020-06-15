@@ -31,8 +31,6 @@ pub enum Uniform {
 }
 
 pub mod uniform {
-    use crate::camera;
-
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct ViewProj {
@@ -41,12 +39,4 @@ pub mod uniform {
 
     unsafe impl bytemuck::Pod for ViewProj {}
     unsafe impl bytemuck::Zeroable for ViewProj {}
-
-    impl From<&camera::Projection> for ViewProj {
-        fn from(proj: &camera::Projection) -> ViewProj {
-            let mut mx = [0.0f32; 16];
-            mx.copy_from_slice(proj.projection_view_matrix().as_slice());
-            ViewProj { mx }
-        }
-    }
 }
