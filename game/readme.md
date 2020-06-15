@@ -12,7 +12,7 @@
 
 #### render
 
-* [ ] pipeline target concept
+* [ ] pipeline render target
 
 * [ ] frame target
 
@@ -20,7 +20,9 @@
 
 ### Native sample
 
-* [ ] input handling (for fps)
+* [x] update and render loop
+
+* [x] input handling (for fps)
 
 ### WASM sample
 
