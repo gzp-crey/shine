@@ -38,7 +38,6 @@ impl Projection {
     }
 
     pub fn set_perspective(&mut self, view: &Isometry3<f32>, perspective: &Perspective3<f32>) {
-        
         self.view_matrix = view.to_homogeneous();
         self.inverse_view_matrix = view.inverse().to_homogeneous();
         //let flip_y = Matrix4::new_nonuniform_scaling(&Vector3::new(1., -1., 1.));

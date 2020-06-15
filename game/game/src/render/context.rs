@@ -22,7 +22,7 @@ impl Context {
                 wgpu::BackendBit::PRIMARY,
             )
             .await
-            .ok_or_else(|| GameError::RenderContext("Adapter not found".to_owned()))?;
+            .ok_or_else(|| GameError::Render("Adapter not found".to_owned()))?;
 
         //log::info!("Graphics adapter: {:?}", adapter.get_info());
 
@@ -36,7 +36,7 @@ impl Context {
                 None,
             )
             .await
-            .map_err(|err| GameError::RenderContext(format!("Failed to create device: {:?}", err)))?;
+            .map_err(|err| GameError::Render(format!("Failed to create device: {:?}", err)))?;
 
         Ok(Context {
             //instance,
@@ -59,7 +59,7 @@ impl Context {
         self.swap_chain_format
     }
 
-    pub fn create_frame(&mut self, surface: &Surface) -> Result<FrameOutput, String> {
+    pub fn create_frame(&mut self, surface: &Surface) -> Result<FrameOutput, GameError> {
         let device = &self.device;
 
         let format = self.swap_chain_format;
@@ -89,7 +89,7 @@ impl Context {
 
         let frame = sc
             .get_next_frame()
-            .map_err(|err| format!("Frame request error: {:?}", err))?
+            .map_err(|err| GameError::Render(format!("Frame request error: {:?}", err)))?
             .output;
         Ok(FrameOutput {
             frame,

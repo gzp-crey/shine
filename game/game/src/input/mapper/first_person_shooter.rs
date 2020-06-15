@@ -21,14 +21,17 @@ pub struct FirstPersonShooter {
     roll_pos: InputId,
     roll_neg: InputId,
     roll: InputId,
+    roll_scale: f32,
 
     pitch_pos: InputId,
     pitch_neg: InputId,
     pitch: InputId,
+    pitch_scale: f32,
 
     yaw_pos: InputId,
     yaw_neg: InputId,
     yaw: InputId,
+    yaw_scale: f32,
 }
 
 impl FirstPersonShooter {
@@ -53,14 +56,17 @@ impl FirstPersonShooter {
             roll_pos: gen_id.next(),
             roll_neg: gen_id.next(),
             roll: gen_id.next(),
+            roll_scale: 1.,
 
             pitch_pos: gen_id.next(),
             pitch_neg: gen_id.next(),
             pitch: gen_id.next(),
+            pitch_scale: 1.,
 
             yaw_pos: gen_id.next(),
             yaw_neg: gen_id.next(),
             yaw: gen_id.next(),
+            yaw_scale: 1.,
         }
     }
 }
@@ -76,6 +82,18 @@ impl FirstPersonShooter {
 
     pub fn z(&self, state: &CurrentInputState) -> f32 {
         state.get_input(self.move_z).as_offset1().unwrap_or(0.) * self.move_z_scale
+    }
+
+    pub fn roll(&self, state: &CurrentInputState) -> f32 {
+        state.get_input(self.roll).as_offset1().unwrap_or(0.) * self.roll_scale
+    }
+
+    pub fn yaw(&self, state: &CurrentInputState) -> f32 {
+        state.get_input(self.yaw).as_offset1().unwrap_or(0.) * self.yaw_scale
+    }
+
+    pub fn pitch(&self, state: &CurrentInputState) -> f32 {
+        state.get_input(self.pitch).as_offset1().unwrap_or(0.) * self.pitch_scale
     }
 }
 
@@ -104,6 +122,9 @@ impl GameInput for FirstPersonShooter {
             self.move_neg_z,
             self.move_z,
         ));
+        guestures.add_guesture(guestures::ButtonAxis::new(self.roll_pos, self.roll_neg, self.roll));
+        guestures.add_guesture(guestures::ButtonAxis::new(self.yaw_pos, self.yaw_neg, self.yaw));
+        guestures.add_guesture(guestures::ButtonAxis::new(self.pitch_pos, self.pitch_neg, self.pitch));
     }
 
     fn update_state<'e>(&self, event: InputEvent<'e>, input_state: &mut InputState) {
@@ -130,6 +151,26 @@ impl GameInput for FirstPersonShooter {
                     //F
                     (33, ElementState::Pressed) => input_state.set_input(self.move_neg_y, InputValue::D0, false),
                     (33, ElementState::Released) => input_state.clear_input(self.move_neg_y),
+
+                    //Q
+                    (16, ElementState::Pressed) => input_state.set_input(self.roll_pos, InputValue::D0, false),
+                    (16, ElementState::Released) => input_state.clear_input(self.roll_pos),
+                    //E
+                    (18, ElementState::Pressed) => input_state.set_input(self.roll_neg, InputValue::D0, false),
+                    (18, ElementState::Released) => input_state.clear_input(self.roll_neg),
+
+                    //I
+                    (23, ElementState::Pressed) => input_state.set_input(self.pitch_pos, InputValue::D0, false),
+                    (23, ElementState::Released) => input_state.clear_input(self.pitch_pos),
+                    //K
+                    (37, ElementState::Pressed) => input_state.set_input(self.pitch_neg, InputValue::D0, false),
+                    (37, ElementState::Released) => input_state.clear_input(self.pitch_neg),
+                    //J
+                    (36, ElementState::Pressed) => input_state.set_input(self.yaw_pos, InputValue::D0, false),
+                    (36, ElementState::Released) => input_state.clear_input(self.yaw_pos),
+                    //L
+                    (38, ElementState::Pressed) => input_state.set_input(self.yaw_neg, InputValue::D0, false),
+                    (38, ElementState::Released) => input_state.clear_input(self.yaw_neg),
                     _ => {}
                 }
             }

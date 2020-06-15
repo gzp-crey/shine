@@ -54,8 +54,10 @@ async fn run() {
         let event_proxy = event_loop.create_proxy();
         tokio::task::spawn(logic(event_proxy));
 
+        let mut prev_render_time = Instant::now();
+        let mut is_closing = false;
+        //flame::start("frame");
         event_loop.run(move |event, _, control_flow| {
-            let start_time = Instant::now();
             *control_flow = ControlFlow::Poll;
 
             match &event {
@@ -66,11 +68,6 @@ async fn run() {
                 } => {
                     size = (*s).into();
                 }
-                Event::RedrawRequested(_) => {
-                    if let Err(err) = game.render(size) {
-                        log::warn!("render failed: {}", err);
-                    }
-                }
                 Event::UserEvent(_event) => {
                     //log::info!("User event: {:?}", event);
                 }
@@ -80,6 +77,11 @@ async fn run() {
                         if input.state == ElementState::Pressed {
                             match input.virtual_keycode {
                                 Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
+                                /*Some(VirtualKeyCode::F11) => {
+                                    flame::end("frame");
+                                    flame::clear();
+                                    flame::start("frame");
+                                },*/
                                 Some(VirtualKeyCode::Key0) => world::unload_world(&mut game).unwrap(),
                                 Some(VirtualKeyCode::Key1) => {
                                     rt.block_on(world::load_world(&test1_url, &mut game)).unwrap()
@@ -93,7 +95,7 @@ async fn run() {
                                 Some(VirtualKeyCode::Key4) => {
                                     rt.block_on(world::load_world(&test4_url, &mut game)).unwrap()
                                 }
-                                Some(VirtualKeyCode::G) => game.gc_all(),
+                                Some(VirtualKeyCode::G) => game.gc(),
                                 _ => {}
                             }
                         }
@@ -102,24 +104,44 @@ async fn run() {
                         *control_flow = ControlFlow::Exit;
                     }
                     _ => {
-                        //game.render();
+                        //game.update();
                     }
                 },
                 _ => {}
             }
 
-            match control_flow {
-                ControlFlow::Exit => world::unload_world(&mut game).unwrap(),
-                _ => {
-                    let elapsed_time = Instant::now().duration_since(start_time).as_millis() as i64;
-                    let wait_millis = ((1000 / TARGET_FPS) as i64) - elapsed_time;
-                    if wait_millis > 0 {
-                        let new_inst = start_time + std::time::Duration::from_millis(wait_millis as u64);
-                        *control_flow = ControlFlow::WaitUntil(new_inst);
-                    } else {
-                        *control_flow = ControlFlow::Poll;
-                    }
+            if is_closing {
+                log::trace!("close events: {:?}", event);
+                return;
+            }
+
+            if control_flow == &ControlFlow::Exit {
+                //flame::end("frame");
+                //use std::fs::File;
+                //flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
+                world::unload_world(&mut game).unwrap();
+                is_closing = true;
+                return;
+            }
+
+            let now = Instant::now();
+            let elapsed_time = now.duration_since(prev_render_time).as_millis() as i64;
+            let wait_millis = ((1000 / TARGET_FPS) as i64) - elapsed_time;
+            if wait_millis > 0 {
+                // we have some time left from rendering
+                //log::trace!("wait untils next render: {}", wait_millis);
+                let new_inst = prev_render_time + std::time::Duration::from_millis(wait_millis as u64);
+                *control_flow = ControlFlow::WaitUntil(new_inst);
+            } else {
+                // no time left
+                //log::trace!("elapsed time since last render: {} ({})", elapsed_time, 1000./(elapsed_time as f64));
+                if let Err(err) = game.update(size) {
+                    log::warn!("render failed: {:?}", err);
                 }
+                //flame::end("frame");
+                //flame::start("frame");
+                *control_flow = ControlFlow::Poll;
+                prev_render_time = now;
             }
         })
     })
@@ -130,6 +152,7 @@ async fn run() {
 fn main() {
     let _ = env_logger::builder()
         .filter_level(log::LevelFilter::Info)
+        .filter_module("shine_native", log::LevelFilter::Trace)
         .filter_module("shine_ecs", log::LevelFilter::Trace)
         .filter_module("shine_game", log::LevelFilter::Trace)
         .filter_module("shine_input", log::LevelFilter::Info)

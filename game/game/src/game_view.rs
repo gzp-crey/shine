@@ -1,7 +1,8 @@
 use crate::assets::AssetIO;
 use crate::input::{self, InputSystem};
-use crate::render::{self, Context, Frame, Surface};
+use crate::render::{self, Context, RenderSystem, Surface};
 use crate::{Config, GameError, ScheduleSet};
+use shine_ecs::core::store::{Data, DataLoader, Store};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
     world::World,
@@ -18,57 +19,54 @@ pub struct GameView {
 
 impl GameView {
     pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameView, GameError> {
-        let mut resources = Resources::default();
-        let world = World::new();
         let assetio = Arc::new(
             AssetIO::new(config.virtual_schemes.clone())
                 .map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?,
         );
-
-        render::add_render_system(&config, assetio.clone(), wgpu_instance, &surface, &mut resources).await?;
-
-        let schedules = {
-            let mut schedules = ScheduleSet::new();
-
-            schedules.insert(
-                "prepare_update",
-                Schedule::builder()
-                    .add_system(render::systems::update_shaders())
-                    .add_system(render::systems::update_textures())
-                    .add_system(render::systems::update_pipelines())
-                    .add_system(render::systems::update_models())
-                    .add_system(input::systems::advance_input_states())
-                    .flush()
-                    .build(),
-            )?;
-
-            schedules.insert(
-                "gc_stores",
-                Schedule::builder()
-                    .add_system(render::systems::gc_models())
-                    .add_system(render::systems::gc_pipelines())
-                    .add_system(render::systems::gc_textures())
-                    .add_system(render::systems::gc_shaders())
-                    .flush()
-                    .build(),
-            )?;
-
-            schedules
-        };
+        let context = Context::new(wgpu_instance, &surface, &config).await?;
 
         let mut view = GameView {
             assetio,
             surface,
-            resources,
-            world,
-            schedules,
+            resources: Resources::default(),
+            world: World::new(),
+            schedules: ScheduleSet::new(),
         };
 
+        view.add_render_system(context)?;
         view.add_input_system()?;
+
+        view.schedules.insert(
+            "prepare_update",
+            Schedule::builder()
+                .add_system(render::systems::update_shaders())
+                .add_system(render::systems::update_textures())
+                .add_system(render::systems::update_pipelines())
+                .add_system(render::systems::update_models())
+                .add_system(input::systems::advance_input_states())
+                .flush()
+                .build(),
+        )?;
+
+        view.schedules.insert(
+            "gc",
+            Schedule::builder()
+                .add_system(render::systems::gc_models())
+                .add_system(render::systems::gc_pipelines())
+                .add_system(render::systems::gc_textures())
+                .add_system(render::systems::gc_shaders())
+                .flush()
+                .build(),
+        )?;
+
         Ok(view)
     }
 
-    pub fn init_world() {}
+    pub fn register_store<D: Data, L: DataLoader<D>>(&mut self, loader: L, store_page_size: usize) {
+        let (store, loader) = Store::<D>::new_with_loader(store_page_size, loader);
+        self.resources.insert(store);
+        loader.start();
+    }
 
     pub fn run_logic(&mut self, logic: &str) {
         let world = &mut self.world;
@@ -76,32 +74,14 @@ impl GameView {
         self.schedules.execute(logic, world, resources);
     }
 
-    fn start_frame(&mut self, size: (u32, u32)) -> Result<(), String> {
-        let surface = &mut self.surface;
-        surface.set_size(size);
-        let mut context = self.resources.get_mut::<Context>().unwrap();
-        let mut frame = self.resources.get_mut::<Frame>().unwrap();
-        frame.start(context.create_frame(surface)?);
-        Ok(())
-    }
-
-    fn end_frame(&mut self) -> Result<(), String> {
-        let context = self.resources.get_mut::<Context>().unwrap();
-        let mut frame = self.resources.get_mut::<Frame>().unwrap();
-        frame.end(context.queue());
-        Ok(())
-    }
-
-    pub fn render(&mut self, size: (u32, u32)) -> Result<(), String> {
+    pub fn update(&mut self, size: (u32, u32)) -> Result<(), GameError> {
         self.run_logic("prepare_update");
         self.run_logic("update");
-
-        self.start_frame(size)?;
-        self.run_logic("render");
-        self.end_frame()
+        self.render(size)?;
+        Ok(())
     }
 
-    pub fn gc_all(&mut self) {
-        self.run_logic("gc_stores");
+    pub fn gc(&mut self) {
+        self.run_logic("gc");
     }
 }

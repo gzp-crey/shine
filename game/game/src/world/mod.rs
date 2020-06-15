@@ -20,7 +20,7 @@ pub fn unload_world(game: &mut GameView) -> Result<(), GameError> {
     test2::unregister_test_scene(game)?;
     test3::unregister_test_scene(game)?;
     test4::unregister_test_scene(game)?;
-    game.gc_all();
+    game.gc();
     Ok(())
 }
 

@@ -148,10 +148,15 @@ fn update_camera() -> Box<dyn Schedulable> {
             let dx = fps.x(&input);
             let dy = fps.y(&input);
             let dz = fps.z(&input);
-            log::trace!("move({},{},{})", dx,dy,dz);
-            camera.move_forward(dz*0.01);
-            camera.move_side(dx*0.01);
-            camera.move_up(dy*0.01);
+            let dr = fps.roll(&input);
+            let dp = fps.pitch(&input);
+            let dw = fps.yaw(&input);
+            camera.move_forward(dz * 0.01);
+            camera.move_side(dx * 0.01);
+            camera.move_up(dy * 0.01);
+            camera.roll(dr * 0.01);
+            camera.pitch(dp * 0.01);
+            camera.yaw(dw * 0.01);
         })
 }
 
