@@ -136,7 +136,7 @@ async fn run() {
                 // no time left
                 //log::trace!("elapsed time since last render: {} ({})", elapsed_time, 1000./(elapsed_time as f64));
                 if let Err(err) = game.update(size) {
-                    log::warn!("render failed: {:?}", err);
+                    log::warn!("Failed to render: {:?}", err);
                 }
                 //flame::end("frame");
                 //flame::start("frame");

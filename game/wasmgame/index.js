@@ -15,7 +15,7 @@ else {
             async m => {
                 game = new m.WebGame;
                 console.log(game);
-                gameView = await game.create_render('gameCanvas', JSON.stringify(config));
+                gameView = await game.create_view('gameCanvas', JSON.stringify(config));
                 console.log(gameView);
             })
         .catch(

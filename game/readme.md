@@ -6,6 +6,8 @@
 
 #### ecc based world
 
+* [ ] world trait to start/stop world
+
 * [ ] Create a most simple wolrd
 
 * [ ] Parent/child poisioning (?)
@@ -28,7 +30,7 @@
 
 ### WASM sample
 
-* [ ] fix compilation
+* [x] fix compilation
 
 * [ ] update and render loop
 

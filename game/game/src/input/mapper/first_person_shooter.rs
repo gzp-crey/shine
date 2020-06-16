@@ -128,10 +128,10 @@ impl GameInput for FirstPersonShooter {
     }
 
     fn update_state<'e>(&self, event: InputEvent<'e>, input_state: &mut InputState) {
-        use winit::event::ElementState;
-        use InputEvent::*;
         match event {
-            Winit(input) => {
+            #[cfg(feature = "native")]
+            InputEvent::Winit(input) => {
+                use winit::event::ElementState;
                 match (input.scancode, input.state) {
                     //W
                     (17, ElementState::Pressed) => input_state.set_input(self.move_pos_z, InputValue::D0, false),

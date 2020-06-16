@@ -1,7 +1,6 @@
-use crate::inputmapper::{WebInputEvent, WebInputMapper};
 use crate::webwindow::WebWindow;
 use js_sys;
-use shine_game::{render::Surface, wgpu, Config, GameRender};
+use shine_game::{render::{Surface, RenderSystem}, wgpu, Config, GameView};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -10,17 +9,16 @@ use web_sys::{HtmlCanvasElement, WebGlRenderingContext};
 
 struct Inner {
     window: WebWindow,
-    render: GameRender,
-    input_mapper: WebInputMapper,
+    render: GameView,
 }
 
 #[wasm_bindgen]
-pub struct WebGameRender {
+pub struct WebGameView {
     inner: Rc<RefCell<Inner>>,
 }
 
-impl WebGameRender {
-    pub async fn new(element: &str, id: u32, cfg: &str) -> Result<WebGameRender, JsValue> {
+impl WebGameView {
+    pub async fn new(element: &str, id: u32, cfg: &str) -> Result<WebGameView, JsValue> {
         let config = Config::from_str(cfg).map_err(|err| js_sys::Error::new(&format!("{:?}", err)))?;
         let window = WebWindow::from_element_by_id(element, id)?;
         //window.attach_mouse_down_handler()?;
@@ -28,17 +26,16 @@ impl WebGameRender {
         let wgpu_instance = wgpu::Instance::new();
         let surface = unsafe { wgpu_instance.create_surface(&window) };
         let size: (u32, u32) = window.inner_size().into();
-        let render = GameRender::new(config, wgpu_instance, Surface::new(surface, size))
+        let render = GameView::new(config, wgpu_instance, Surface::new(surface, size))
             .await
             .map_err(|err| js_sys::Error::new(&format!("{:?}", err)))?;
 
         let inner = Rc::new(RefCell::new(Inner {
             window,
             render,
-            input_mapper: WebInputMapper::new(),
         }));
 
-        Ok(WebGameRender { inner })
+        Ok(WebGameView { inner })
     }
 
     /*fn attach_mouse_down_handler(&mut self) -> Result<(), JsValue> {
@@ -72,14 +69,12 @@ impl WebGameRender {
 }
 
 #[wasm_bindgen]
-impl WebGameRender {
+impl WebGameView {
     pub fn render(&self) {
         let inner = &mut *self.inner.borrow_mut();
         let size = inner.window.inner_size();
-        inner.render.render(size);
-    }
-
-    pub fn update(&self) {
-        self.inner.borrow_mut().render.update();
+        if let Err(err) =inner.render.render(size) {
+            log::warn!("Failed to render: {:?}", err);
+        }
     }
 }

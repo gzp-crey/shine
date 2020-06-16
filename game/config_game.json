@@ -4,9 +4,15 @@
     "_asset_base" : "http://assets.shine.com:9100/assets/",
     "_asset_base" : "blobs://sashine.blob.core.windows.net/assets/",
 
-    "virtual_schemes": {
+    "virtual_schemes_": {
         "pipeline" : "file://./cooked_assets/",
         "world" : "file://./cooked_assets/",
         "hash": "file://./cooked_assets/"
+    },
+
+    "virtual_schemes": {
+        "pipeline" : "http://assets.shine.com:9100/assets/",
+        "world" : "http://assets.shine.com:9100/assets/",
+        "hash": "http://assets.shine.com:9100/assets/"
     }
 }

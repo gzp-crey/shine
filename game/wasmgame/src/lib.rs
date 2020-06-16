@@ -7,11 +7,10 @@ use wasm_bindgen_futures::future_to_promise;
 use wasm_bindgen_macro::wasm_bindgen;
 use wasm_logger;
 
-mod inputmapper;
-mod webgamerender;
+mod web_game_view;
 mod webwindow;
 
-use webgamerender::WebGameRender;
+use web_game_view::WebGameView;
 
 #[wasm_bindgen]
 pub struct WebGame {
@@ -28,10 +27,10 @@ impl WebGame {
         WebGame { canvas_id: 0 }
     }
 
-    pub fn create_render(&mut self, element: String, config: String) -> Promise {
+    pub fn create_view(&mut self, element: String, config: String) -> Promise {
         self.canvas_id += 1;
         let id = self.canvas_id;
         log::info!("creating render: {}:{}", element, id);
-        future_to_promise(async move { WebGameRender::new(&element, id, &config).await.map(JsValue::from) })
+        future_to_promise(async move { WebGameView::new(&element, id, &config).await.map(JsValue::from) })
     }
 }

@@ -89,16 +89,19 @@ impl PipelineUniformLayout {
                         dimension: wgpu::TextureViewDimension::D2,
                         component_type: wgpu::TextureComponentType::Float,
                     },
+                    ..Default::default()
                 },
                 Uniform::Sampler(_) => wgpu::BindGroupLayoutEntry {
                     binding: uniform.location(),
                     visibility: *stages,
                     ty: wgpu::BindingType::Sampler { comparison: false },
+                    ..Default::default()
                 },
                 Uniform::UniformBuffer(_) => wgpu::BindGroupLayoutEntry {
                     binding: uniform.location(),
                     visibility: *stages,
                     ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                    ..Default::default()
                 },
             });
         }
