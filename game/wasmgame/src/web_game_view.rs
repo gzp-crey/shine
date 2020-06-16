@@ -1,6 +1,9 @@
 use crate::webwindow::WebWindow;
 use js_sys;
-use shine_game::{render::{Surface, RenderSystem}, wgpu, Config, GameView};
+use shine_game::{
+    render::{RenderSystem, Surface},
+    wgpu, Config, GameView,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -30,10 +33,7 @@ impl WebGameView {
             .await
             .map_err(|err| js_sys::Error::new(&format!("{:?}", err)))?;
 
-        let inner = Rc::new(RefCell::new(Inner {
-            window,
-            render,
-        }));
+        let inner = Rc::new(RefCell::new(Inner { window, render }));
 
         Ok(WebGameView { inner })
     }
@@ -73,7 +73,7 @@ impl WebGameView {
     pub fn render(&self) {
         let inner = &mut *self.inner.borrow_mut();
         let size = inner.window.inner_size();
-        if let Err(err) =inner.render.render(size) {
+        if let Err(err) = inner.render.render(size) {
             log::warn!("Failed to render: {:?}", err);
         }
     }

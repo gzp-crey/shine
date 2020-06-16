@@ -1,6 +1,6 @@
 #![feature(async_closure)]
 
-use shine_game::{assets::Url, input::InputSystem, render::Surface, wgpu, world, Config, GameView};
+use shine_game::{assets::Url, input::InputSystem, render::Surface, world::{WorldSystem, WorldData}, wgpu, Config, GameError, GameView};
 use std::time::{Duration, Instant};
 use tokio::runtime::{Handle as RuntimeHandle, Runtime};
 use winit::{
@@ -26,6 +26,17 @@ async fn logic(event_loop_proxy: EventLoopProxy<CustomEvent>) {
             break;
         }
     }
+}
+
+fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url) -> Result<(), GameError> {
+    let world_data = rt.block_on(WorldData::from_url(&game.assetio, url))?;
+    match world_data {
+        WorldData::Test1(test) => game.load_world(test)?,
+        WorldData::Test2(test) => game.load_world(test)?,
+        WorldData::Test3(test) => game.load_world(test)?,
+        WorldData::Test4(test) => game.load_world(test)?,
+    }
+    Ok(())
 }
 
 async fn run() {
@@ -82,20 +93,12 @@ async fn run() {
                                     flame::clear();
                                     flame::start("frame");
                                 },*/
-                                Some(VirtualKeyCode::Key0) => world::unload_world(&mut game).unwrap(),
-                                Some(VirtualKeyCode::Key1) => {
-                                    rt.block_on(world::load_world(&test1_url, &mut game)).unwrap()
-                                }
-                                Some(VirtualKeyCode::Key2) => {
-                                    rt.block_on(world::load_world(&test2_url, &mut game)).unwrap()
-                                }
-                                Some(VirtualKeyCode::Key3) => {
-                                    rt.block_on(world::load_world(&test3_url, &mut game)).unwrap()
-                                }
-                                Some(VirtualKeyCode::Key4) => {
-                                    rt.block_on(world::load_world(&test4_url, &mut game)).unwrap()
-                                }
-                                Some(VirtualKeyCode::G) => game.gc(),
+                                Some(VirtualKeyCode::Key0) => game.unload_world().unwrap(),
+                                Some(VirtualKeyCode::Key1) => load_world(&rt, &mut game, &test1_url).unwrap(),
+                                Some(VirtualKeyCode::Key2) => load_world(&rt, &mut game, &test2_url).unwrap(),
+                                Some(VirtualKeyCode::Key3) => load_world(&rt, &mut game, &test3_url).unwrap(),
+                                Some(VirtualKeyCode::Key4) => load_world(&rt, &mut game, &test4_url).unwrap(),
+                                Some(VirtualKeyCode::F9) => game.gc(),
                                 _ => {}
                             }
                         }
@@ -119,7 +122,8 @@ async fn run() {
                 //flame::end("frame");
                 //use std::fs::File;
                 //flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
-                world::unload_world(&mut game).unwrap();
+                game.unload_world().unwrap();
+                game.gc();
                 is_closing = true;
                 return;
             }

@@ -6,12 +6,14 @@ use crate::render::{
     Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
     TextureStoreRead,
 };
+use crate::world::{GameWorld, GameWorldBuilder};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use std::any::Any;
 
 const VERTICES: &[Pos3fTex2f] = &[
     Pos3fTex2f {
@@ -38,12 +40,58 @@ const VERTICES: &[Pos3fTex2f] = &[
 
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
+/// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Test3 {
     pub pipeline: String,
     pub texture: String,
 }
 
+impl GameWorldBuilder for Test3 {
+    type World = TestWorld;
+
+    fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
+        log::info!("Adding test3 scene to the world");
+
+        game.resources.insert(TestScene::new(self));
+
+        game.schedules.insert(
+            "render",
+            Schedule::builder()
+                .add_system(prepare_render())
+                .flush()
+                .add_system(render())
+                .flush()
+                .build(),
+        )?;
+
+        Ok(TestWorld)
+    }
+}
+
+/// Manage the lifecycle of the test
+pub struct TestWorld;
+
+impl GameWorld for TestWorld {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
+        log::info!("Removing test3 scene from the world");
+
+        game.schedules.remove("render");
+        let _ = game.resources.remove::<TestScene>();
+
+        Ok(())
+    }
+}
+
+/// Resources for the test
 struct TestScene {
     pipeline: PipelineId,
     texture: TextureId,
@@ -162,31 +210,4 @@ fn render() -> Box<dyn Schedulable> {
 
             frame.add_command(encoder.finish());
         })
-}
-
-pub fn register_test_scene(test: Test3, game: &mut GameView) -> Result<(), GameError> {
-    log::info!("Adding test3 scene to the world");
-
-    game.resources.insert(TestScene::new(test));
-
-    game.schedules.insert(
-        "render",
-        Schedule::builder()
-            .add_system(prepare_render())
-            .flush()
-            .add_system(render())
-            .flush()
-            .build(),
-    )?;
-
-    Ok(())
-}
-
-pub fn unregister_test_scene(game: &mut GameView) -> Result<(), GameError> {
-    log::info!("Removing test3 scene from the world");
-
-    game.schedules.remove("render");
-    let _ = game.resources.remove::<TestScene>();
-
-    Ok(())
 }

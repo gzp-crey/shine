@@ -9,12 +9,14 @@ use crate::render::{
     Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
     TextureStoreRead,
 };
+use crate::world::{GameWorld, GameWorldBuilder};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use std::any::Any;
 
 const VERTICES: &[Pos3fTex2f] = &[
     Pos3fTex2f {
@@ -41,12 +43,72 @@ const VERTICES: &[Pos3fTex2f] = &[
 
 const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
+/// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Test4 {
     pub pipeline: String,
     pub texture: String,
 }
 
+impl GameWorldBuilder for Test4 {
+    type World = TestWorld;
+
+    fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
+        log::info!("Adding test4 scene to the world");
+
+        game.set_input(FirstPersonShooter::new())?;
+        game.resources.insert(TestScene::new(self));
+        game.resources.insert(FirstPerson::new());
+        game.resources.insert(Projection::new());
+
+        game.schedules.insert(
+            "update",
+            Schedule::builder()
+                .add_system(update_camera())
+                .add_system(bake_camera::<FirstPerson>())
+                .flush()
+                .build(),
+        )?;
+
+        game.schedules.insert(
+            "render",
+            Schedule::builder()
+                .add_system(prepare_render())
+                .add_system(render())
+                .flush()
+                .build(),
+        )?;
+
+        Ok(TestWorld)
+    }
+}
+
+/// Manage the lifecycle of the test
+pub struct TestWorld;
+
+impl GameWorld for TestWorld {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
+        log::info!("Removing test4 scene from the world");
+
+        game.schedules.remove("render");
+        game.schedules.remove("update");
+        let _ = game.resources.remove::<TestScene>();
+        let _ = game.resources.remove::<FirstPerson>();
+        let _ = game.resources.remove::<Projection>();
+
+        Ok(())
+    }
+}
+
+/// Resources for the test
 struct TestScene {
     pipeline: PipelineId,
     texture: TextureId,
@@ -228,45 +290,4 @@ fn render() -> Box<dyn Schedulable> {
 
             frame.add_command(encoder.finish());
         })
-}
-
-pub fn register_test_scene(test: Test4, game: &mut GameView) -> Result<(), GameError> {
-    log::info!("Adding test4 scene to the world");
-
-    game.set_input(FirstPersonShooter::new())?;
-    game.resources.insert(TestScene::new(test));
-    game.resources.insert(FirstPerson::new());
-    game.resources.insert(Projection::new());
-
-    game.schedules.insert(
-        "update",
-        Schedule::builder()
-            .add_system(update_camera())
-            .add_system(bake_camera::<FirstPerson>())
-            .flush()
-            .build(),
-    )?;
-
-    game.schedules.insert(
-        "render",
-        Schedule::builder()
-            .add_system(prepare_render())
-            .add_system(render())
-            .flush()
-            .build(),
-    )?;
-
-    Ok(())
-}
-
-pub fn unregister_test_scene(game: &mut GameView) -> Result<(), GameError> {
-    log::info!("Removing test4 scene from the world");
-
-    game.schedules.remove("render");
-    game.schedules.remove("update");
-    let _ = game.resources.remove::<TestScene>();
-    let _ = game.resources.remove::<FirstPerson>();
-    let _ = game.resources.remove::<Projection>();
-
-    Ok(())
 }

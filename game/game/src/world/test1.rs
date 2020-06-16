@@ -1,17 +1,58 @@
 use crate::assets::vertex;
 use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
+use crate::world::{GameWorld, GameWorldBuilder};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use std::any::Any;
 
+/// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Test1 {
     pub pipeline: String,
 }
 
+impl GameWorldBuilder for Test1 {
+    type World = TestWorld;
+
+    fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
+        log::info!("Adding test1 scene to the world");
+
+        game.resources.insert(TestScene::new(self));
+
+        let render = Schedule::builder().add_system(render_test()).flush().build();
+        game.schedules.insert("render", render)?;
+
+        Ok(TestWorld)
+    }
+}
+
+/// Manage the lifecycle of the test
+pub struct TestWorld;
+
+impl GameWorld for TestWorld {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
+        log::info!("Removing test1 scene from the world");
+
+        game.schedules.remove("render");
+        let _ = game.resources.remove::<TestScene>();
+
+        Ok(())
+    }
+}
+
+/// Resources for the test
 struct TestScene {
     pipeline: PipelineId,
 }
@@ -75,24 +116,4 @@ fn render_test() -> Box<dyn Schedulable> {
 
             frame.add_command(encoder.finish());
         })
-}
-
-pub fn register_test_scene(test: Test1, game: &mut GameView) -> Result<(), GameError> {
-    log::info!("Adding test1 scene to the world");
-
-    game.resources.insert(TestScene::new(test));
-
-    let render = Schedule::builder().add_system(render_test()).flush().build();
-    game.schedules.insert("render", render)?;
-
-    Ok(())
-}
-
-pub fn unregister_test_scene(game: &mut GameView) -> Result<(), GameError> {
-    log::info!("Removing test1 scene from the world");
-
-    game.schedules.remove("render");
-    let _ = game.resources.remove::<TestScene>();
-
-    Ok(())
 }
