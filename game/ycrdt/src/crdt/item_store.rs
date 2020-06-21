@@ -1,6 +1,6 @@
 use crate::crdt::{ClientId, ItemList};
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 pub struct ItemStore<C> {
     clients: HashMap<ClientId, ItemList>,

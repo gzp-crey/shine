@@ -1,19 +1,19 @@
-use crate::crdt::ItemStore;
+use crate::crdt::{ItemId, ItemStore};
 
-pub struct YArray/*<'d>*/ {
+pub struct YArray<C> {
     store: ItemStore<C>,
     start: Option<ItemId>,
 }
 
-impl YArray<C> {
-    pub fn new() -> YArray {
+impl<C> YArray<C> {
+    pub fn new() -> YArray<C> {
         YArray {
-            start: ItemStore::new(),
-            start: None
+            store: ItemStore::new(),
+            start: None,
         }
     }
 
-    pub fn add(&mut self, at: usize, value: C) {
+    pub fn insert(&mut self, at: usize, value: C) {
         unimplemented!()
     }
 

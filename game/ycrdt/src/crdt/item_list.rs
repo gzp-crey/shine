@@ -1,6 +1,6 @@
 use crate::crdt::Id;
 
-struct ItemId(usize);
+pub struct ItemId(usize);
 
 impl From<usize> for ItemId {
     fn from(c: usize) -> ItemId {
