@@ -22,6 +22,51 @@
             "group": "build"
         },
         {
+            "label": "build ycrdt",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "-p",
+                "shine-ycrdt"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "clear": true,
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "test ycrdt",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "test",
+                "-p",
+                "shine-ycrdt",
+            ],
+            "options": {
+                "env": {
+                    "RUST_BACKTRACE" : "1"
+                }
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "clear": true,
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        },
+        {
             "label": "build native",
             "type": "shell",
             "command": "cargo",

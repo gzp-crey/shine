@@ -8,7 +8,7 @@ use wasm_bindgen_macro::wasm_bindgen;
 use wasm_logger;
 
 mod web_game_view;
-mod webwindow;
+mod web_window;
 
 use web_game_view::WebGameView;
 

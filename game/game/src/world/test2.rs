@@ -93,11 +93,12 @@ impl TestScene {
 
     fn prepare(&mut self, device: &wgpu::Device) {
         self.buffers.get_or_insert_with(|| {
-            (
-                device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
-                device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
-                INDICES.len() as u32,
-            )
+            log::trace!("creating buffers");
+            let v = device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX);
+            log::trace!("creating buffers2");
+            let i = device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX);
+            log::trace!("creating buffers3");
+            (v, i, INDICES.len() as u32)
         });
     }
 

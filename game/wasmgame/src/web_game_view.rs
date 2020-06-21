@@ -1,18 +1,41 @@
-use crate::webwindow::WebWindow;
+use crate::web_window::WebWindow;
 use js_sys;
+use js_sys::Promise;
 use shine_game::{
+    assets::Url,
     render::{RenderSystem, Surface},
-    wgpu, Config, GameView,
+    wgpu,
+    world::WorldSystem,
+    Config, GameError, GameView,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen_futures::future_to_promise;
 use wasm_bindgen_macro::wasm_bindgen;
-use web_sys::{HtmlCanvasElement, WebGlRenderingContext};
 
 struct Inner {
     window: WebWindow,
-    render: GameView,
+    game_view: GameView,
+}
+
+impl Inner {
+    async fn load_world(&mut self, url: String) -> Result<JsValue, JsValue> {
+        use shine_game::world::WorldData;
+        let url =
+            Url::parse(&url).map_err(|err| js_sys::Error::new(&format!("Failed to parse world url: {:?}", err)))?;
+        let world_data = WorldData::from_url(&self.game_view.assetio, &url)
+            .await
+            .map_err(|err| js_sys::Error::new(&format!("Failed to download world: {:?}", err)))?;
+        match world_data {
+            WorldData::Test1(test) => self.game_view.load_world(test),
+            WorldData::Test2(test) => self.game_view.load_world(test),
+            WorldData::Test3(test) => self.game_view.load_world(test),
+            WorldData::Test4(test) => self.game_view.load_world(test),
+        }
+        .map_err(|err| js_sys::Error::new(&format!("Failed to parse world: {:?}", err)))?;
+        Ok(JsValue::UNDEFINED)
+    }
 }
 
 #[wasm_bindgen]
@@ -29,11 +52,11 @@ impl WebGameView {
         let wgpu_instance = wgpu::Instance::new();
         let surface = unsafe { wgpu_instance.create_surface(&window) };
         let size: (u32, u32) = window.inner_size().into();
-        let render = GameView::new(config, wgpu_instance, Surface::new(surface, size))
+        let game_view = GameView::new(config, wgpu_instance, Surface::new(surface, size))
             .await
             .map_err(|err| js_sys::Error::new(&format!("{:?}", err)))?;
 
-        let inner = Rc::new(RefCell::new(Inner { window, render }));
+        let inner = Rc::new(RefCell::new(Inner { window, game_view }));
 
         Ok(WebGameView { inner })
     }
@@ -73,8 +96,16 @@ impl WebGameView {
     pub fn render(&self) {
         let inner = &mut *self.inner.borrow_mut();
         let size = inner.window.inner_size();
-        if let Err(err) = inner.render.render(size) {
+        if let Err(err) = inner.game_view.refresh(size) {
             log::warn!("Failed to render: {:?}", err);
         }
+    }
+
+    pub fn load_world(&self, url: String) -> Promise {
+        let inner = self.inner.clone();
+        future_to_promise(async move {
+            let inner = &mut *inner.borrow_mut();
+            inner.load_world(url).await
+        })
     }
 }

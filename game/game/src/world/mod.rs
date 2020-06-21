@@ -8,8 +8,7 @@ pub mod test2;
 pub mod test3;
 pub mod test4;
 
-use crate::assets::AssetIO;
-use crate::assets::Url;
+use crate::assets::{AssetError, AssetIO, Url};
 use crate::GameError;
 use serde::{Deserialize, Serialize};
 
@@ -22,13 +21,10 @@ pub enum WorldData {
 }
 
 impl WorldData {
-    pub async fn from_url(assetio: &AssetIO, url: &Url) -> Result<WorldData, GameError> {
-        let world = assetio
-            .download_binary(url)
-            .await
-            .map_err(|err| GameError::Setup(format!("Failed to download world: {:?}", err)))?;
+    pub async fn from_url(assetio: &AssetIO, url: &Url) -> Result<WorldData, AssetError> {
+        let world = assetio.download_binary(url).await?;
         let world = bincode::deserialize::<WorldData>(&world)
-            .map_err(|err| GameError::Setup(format!("Failed to parse world: {:?}", err)))?;
+            .map_err(|err| AssetError::ContentLoad(format!("Binary stream error: {}", err)))?;
         Ok(world)
     }
 }

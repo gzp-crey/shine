@@ -2,6 +2,7 @@
 members = [
     "input",
     "ecs",
+	"ycrdt",
     "game",
     "wasmgame",
     "nativegame",
