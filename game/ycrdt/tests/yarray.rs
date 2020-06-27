@@ -1,4 +1,4 @@
-use shine_ycrdt::{YContext, ClientId, YArrayDoc};
+use shine_ycrdt::{ClientId, YArrayDoc, YContext};
 
 mod utils;
 
@@ -15,7 +15,7 @@ fn test_delete_insert() {
     //let _ = array0.remove(0, 0);
     //assert!(array0.delete(1, 1).is_err());
 
-    array0.insert(0, "A");    
+    array0.insert(0, "A");
     //log::info!("Does not throw when deleting zero elements with valid position 1");
     //array0.delete(1, 0);
     //compare(users)

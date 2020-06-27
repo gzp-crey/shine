@@ -18,8 +18,7 @@ impl Context {
                     power_preference: wgpu::PowerPreference::Default,
                     compatible_surface: Some(surface.surface()),
                 },
-                wgpu::UnsafeExtensions::disallow(),
-                wgpu::BackendBit::PRIMARY,
+                wgpu::UnsafeFeatures::disallow(),
             )
             .await
             .ok_or_else(|| GameError::Render("Adapter not found".to_owned()))?;
@@ -29,7 +28,7 @@ impl Context {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    extensions: wgpu::Extensions::empty(),
+                    features: wgpu::Features::empty(),
                     limits: wgpu::Limits::default(),
                     shader_validation: config.enable_validation,
                 },

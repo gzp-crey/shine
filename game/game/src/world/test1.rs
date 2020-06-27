@@ -97,13 +97,9 @@ fn render_test() -> Box<dyn Schedulable> {
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: frame.texture_view(),
                         resolve_target: None,
-                        load_op: wgpu::LoadOp::Clear,
-                        store_op: wgpu::StoreOp::Store,
-                        clear_color: wgpu::Color {
-                            r: 0.0,
-                            g: 0.8,
-                            b: 0.0,
-                            a: 1.0,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                            store: true,
                         },
                     }],
                     depth_stencil_attachment: None,

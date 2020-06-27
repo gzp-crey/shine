@@ -80,29 +80,29 @@ impl PipelineUniformLayout {
     pub fn create_bind_group_layout_entries(&self) -> Result<Vec<wgpu::BindGroupLayoutEntry>, AssetError> {
         let mut descriptor = Vec::new();
         for (uniform, stages) in self.0.iter() {
-            descriptor.push(match uniform.1 {
-                Uniform::Texture(_) => wgpu::BindGroupLayoutEntry {
-                    binding: uniform.location(),
-                    visibility: *stages,
-                    ty: wgpu::BindingType::SampledTexture {
+            descriptor.push(match &uniform.1 {
+                Uniform::Texture(_) => wgpu::BindGroupLayoutEntry::new(
+                    uniform.location(),
+                    *stages,
+                    wgpu::BindingType::SampledTexture {
                         multisampled: false,
                         dimension: wgpu::TextureViewDimension::D2,
                         component_type: wgpu::TextureComponentType::Float,
                     },
-                    ..Default::default()
-                },
-                Uniform::Sampler(_) => wgpu::BindGroupLayoutEntry {
-                    binding: uniform.location(),
-                    visibility: *stages,
-                    ty: wgpu::BindingType::Sampler { comparison: false },
-                    ..Default::default()
-                },
-                Uniform::UniformBuffer(_) => wgpu::BindGroupLayoutEntry {
-                    binding: uniform.location(),
-                    visibility: *stages,
-                    ty: wgpu::BindingType::UniformBuffer { dynamic: false },
-                    ..Default::default()
-                },
+                ),
+                Uniform::Sampler(_) => wgpu::BindGroupLayoutEntry::new(
+                    uniform.location(),
+                    *stages,
+                    wgpu::BindingType::Sampler { comparison: false },
+                ),
+                Uniform::UniformBuffer(sem) => wgpu::BindGroupLayoutEntry::new(
+                    uniform.location(),
+                    *stages,
+                    wgpu::BindingType::UniformBuffer {
+                        dynamic: false,
+                        min_binding_size: wgpu::BufferSize::new(sem.size() as u64),
+                    },
+                ),
             });
         }
         Ok(descriptor)

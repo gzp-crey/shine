@@ -47,7 +47,9 @@ async fn run(assets: Vec<AssetId>) -> Result<(), CookingError> {
     log::info!("Roots to cook: {:?}", roots);
 
     for asset_id in &roots {
+        log::info!("Cooking started for {:?}", asset_id);
         let _cooked_dependency = cook(&context, &config.asset_source_base, &asset_id).await?;
+        log::info!("Cooking completed for {:?}", asset_id);
     }
 
     Ok(())

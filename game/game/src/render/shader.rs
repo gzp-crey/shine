@@ -3,7 +3,7 @@ use crate::render::Context;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
 };
-use std::io::{self, Cursor};
+use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -137,7 +137,7 @@ impl Shader {
 
             (Shader::Pending(listeners), Ok((ty, spirv))) => {
                 listeners.notify_all();
-                let shader = context.device().create_shader_module(&spirv);
+                let shader = context.device().create_shader_module(wgpu::util::make_spirv(&spirv));
                 log::debug!("Shader[{:?}] compilation completed", load_context);
                 Shader::Compiled(ty, shader)
             }
@@ -163,7 +163,7 @@ impl FromKey for Shader {
 }
 
 pub type ShaderLoadRequest = String;
-pub type ShaderLoadResponse = Result<(ShaderType, Vec<u32>), ShaderLoadError>;
+pub type ShaderLoadResponse = Result<(ShaderType, Vec<u8>), ShaderLoadError>;
 
 pub struct ShaderLoader {
     assetio: Arc<AssetIO>,
@@ -182,15 +182,11 @@ impl ShaderLoader {
         if cancellation_token.is_canceled() {
             return Err(ShaderLoadError::Canceled);
         }
-
         let url = Url::parse(&source_id)?;
         let ty = ShaderType::from_str(url.extension())?;
-
         log::debug!("[{}] Loading shader...", url.as_str());
         let data = self.assetio.download_binary(&url).await?;
-        let spirv = wgpu::read_spirv(Cursor::new(&data[..]))?;
-
-        Ok((ty, spirv))
+        Ok((ty, data))
     }
 
     async fn try_load_from_url(

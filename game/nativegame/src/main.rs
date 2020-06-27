@@ -55,7 +55,7 @@ async fn run() {
             builder.build(&event_loop).unwrap()
         };
 
-        let wgpu_instance = wgpu::Instance::new();
+        let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
         let surface = unsafe { wgpu_instance.create_surface(&window) };
         let mut size: (u32, u32) = window.inner_size().into();
 

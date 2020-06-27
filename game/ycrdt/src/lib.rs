@@ -1,5 +1,5 @@
 mod crdt;
-pub use crdt::{ClientId};
+pub use crdt::ClientId;
 
 mod ycontext;
 pub use ycontext::*;

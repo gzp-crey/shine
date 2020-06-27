@@ -1,6 +1,6 @@
 use crate::{cook_pipeline, cook_texture, AssetId, AssetNaming, Context, CookingError, Dependency};
 use shine_game::assets::Url;
-use shine_game::world::World;
+use shine_game::world::WorldData;
 
 async fn find_world_etag(context: &Context, world_url: &Url) -> Result<String, CookingError> {
     Ok(context.source_io.download_etag(&world_url).await?)
@@ -19,7 +19,7 @@ pub async fn cook_world(context: &Context, asset_base: &Url, world_id: &AssetId)
 
     log::debug!("[{}] Downloading...", world_url.as_str());
     let data = context.source_io.download_binary(&world_url).await?;
-    let mut world = serde_json::from_slice::<World>(&data)?;
+    let mut world = serde_json::from_slice::<WorldData>(&data)?;
     log::trace!("[{}] World:\n{:#?}", world_url.as_str(), world);
 
     let mut dependnecies = Vec::new();
@@ -27,19 +27,19 @@ pub async fn cook_world(context: &Context, asset_base: &Url, world_id: &AssetId)
 
     log::debug!("[{}] Cooking world content...", world_url.as_str());
     match world {
-        World::Test1(ref mut test) => {
+        WorldData::Test1(ref mut test) => {
             let pipeline_id = AssetId::new(&test.pipeline)?.to_absolute_id(asset_base, &world_base)?;
             let pipeline_dependency = cook_pipeline::cook_pipeline(context, asset_base, &pipeline_id).await?;
             test.pipeline = pipeline_dependency.url().as_str().to_owned();
             dependnecies.push(pipeline_dependency);
         }
-        World::Test2(ref mut test) => {
+        WorldData::Test2(ref mut test) => {
             let pipeline_id = AssetId::new(&test.pipeline)?.to_absolute_id(asset_base, &world_base)?;
             let pipeline_dependency = cook_pipeline::cook_pipeline(context, asset_base, &pipeline_id).await?;
             test.pipeline = pipeline_dependency.url().as_str().to_owned();
             dependnecies.push(pipeline_dependency);
         }
-        World::Test3(ref mut test) => {
+        WorldData::Test3(ref mut test) => {
             let pipeline_id = AssetId::new(&test.pipeline)?.to_absolute_id(asset_base, &world_base)?;
             let pipeline_dependency = cook_pipeline::cook_pipeline(context, asset_base, &pipeline_id).await?;
             test.pipeline = pipeline_dependency.url().as_str().to_owned();
@@ -50,7 +50,7 @@ pub async fn cook_world(context: &Context, asset_base: &Url, world_id: &AssetId)
             test.texture = texture_dependency.url().as_str().to_owned();
             dependnecies.push(texture_dependency);
         }
-        World::Test4(ref mut test) => {
+        WorldData::Test4(ref mut test) => {
             let pipeline_id = AssetId::new(&test.pipeline)?.to_absolute_id(asset_base, &world_base)?;
             let pipeline_dependency = cook_pipeline::cook_pipeline(context, asset_base, &pipeline_id).await?;
             test.pipeline = pipeline_dependency.url().as_str().to_owned();
