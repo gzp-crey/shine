@@ -1,6 +1,6 @@
 use crate::{AssetNaming, Context, CookingError, Dependency};
 use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
-use shine_game::assets::{AssetError, AssetId, TextureDescriptor, TextureImage, ImageEncoding, Url};
+use shine_game::assets::{AssetError, AssetId, ImageEncoding, TextureDescriptor, TextureImage, Url};
 use shine_game::wgpu;
 use tokio::task;
 
@@ -129,13 +129,17 @@ pub async fn cook_texture(
     );
 
     log::debug!("[{}] Uploading...", texture_url.as_str());
-    let cooked_texture = bincode::serialize(&TextureImage { data: image, image: descriptor.image, sampler: descriptor.sampler })?;
+    let cooked_texture = bincode::serialize(&TextureImage {
+        data: image,
+        image: descriptor.image,
+        sampler: descriptor.sampler,
+    })?;
     Ok(context
         .target_db
         .upload_cooked_binary(
             texture_id.clone(),
             texture_url.set_extension("tex")?,
-            AssetNaming::Hard,
+            AssetNaming::Hard("texture".to_owned()),
             &cooked_texture,
             source_hash,
             Vec::new(),

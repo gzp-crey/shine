@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 mod config;
+mod cook_frame_graph;
 mod cook_gltf;
 mod cook_pipeline;
 mod cook_shader;
@@ -25,6 +26,7 @@ async fn cook(context: &Context, asset_base: &Url, asset_id: &AssetId) -> Result
     let cooked_dependency = match asset_id.extension() {
         "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, &asset_base, &asset_id).await?,
         "pl" => cook_pipeline::cook_pipeline(&context, &asset_base, &asset_id).await?,
+        "fgr" => cook_frame_graph::cook_frame_graph(&context, &asset_base, &asset_id).await?,
         "glb" | "gltf" => cook_gltf::cook_gltf(&context, &asset_base, &asset_id).await?,
         "jpg" | "png" => cook_texture::cook_texture(&context, &asset_base, &asset_id).await?,
         "wrld" => cook_world::cook_world(&context, &asset_base, &asset_id).await?,
@@ -66,11 +68,11 @@ fn main() {
     let mut rt = Runtime::new().unwrap();
 
     let assets = [
-        "test_worlds/test3/hello.pl",
-        "test_worlds/test1/test.wrld",
+        "test_worlds/test5/hello.fgr",
+        /*"test_worlds/test1/test.wrld",
         "test_worlds/test2/test.wrld",
         "test_worlds/test3/test.wrld",
-        "test_worlds/test4/test.wrld",
+        "test_worlds/test4/test.wrld",*/
     ]
     .iter()
     .map(|x| AssetId::new(x).unwrap())

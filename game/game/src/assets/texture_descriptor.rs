@@ -70,6 +70,14 @@ impl ImageDescriptor {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RenderTargetDescriptor {
+    pub format: wgpu::TextureFormat,
+    pub size_scale: (f32, f32),
+}
+
+impl RenderTargetDescriptor {}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SamplerDescriptor {
     pub address_mode_u: wgpu::AddressMode,
     pub address_mode_v: wgpu::AddressMode,

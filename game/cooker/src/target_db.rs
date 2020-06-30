@@ -8,7 +8,7 @@ use sqlx::{
 use std::sync::Arc;
 
 pub enum AssetNaming {
-    Hard,
+    Hard(String),
     SoftScheme(String),
 }
 
@@ -219,10 +219,10 @@ impl TargetDB {
         content: &[u8],
     ) -> Result<Dependency, AssetError> {
         let target_dependency = match naming {
-            AssetNaming::Hard => {
+            AssetNaming::Hard(scheme) => {
                 let hashed_path = content.hashed_path();
                 let target_id = format!("{}.{}", hashed_path, asset_url.extension());
-                let url = Url::parse(&format!("hash://{}", target_id))?;
+                let url = Url::parse(&format!("hash_{}://{}", scheme, target_id))?;
                 Dependency::hard(asset_id, url)
             }
             AssetNaming::SoftScheme(scheme) => {

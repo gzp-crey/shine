@@ -63,7 +63,7 @@ pub async fn cook_pipeline(
         .upload_cooked_binary(
             pipeline_id.clone(),
             pipeline_url,
-            AssetNaming::SoftScheme("pipeline".to_owned()),
+            AssetNaming::Hard("pipeline".to_owned()),
             &cooked_pipeline,
             source_hash,
             dependencies,

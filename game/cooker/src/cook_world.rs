@@ -1,5 +1,5 @@
-use crate::{cook_pipeline, cook_texture, AssetId, AssetNaming, Context, CookingError, Dependency};
-use shine_game::assets::Url;
+use crate::{cook_pipeline, cook_texture, AssetNaming, Context, CookingError, Dependency};
+use shine_game::assets::{AssetId, Url};
 use shine_game::world::WorldData;
 
 async fn find_world_etag(context: &Context, world_url: &Url) -> Result<String, CookingError> {
@@ -24,8 +24,8 @@ pub async fn cook_world(context: &Context, asset_base: &Url, world_id: &AssetId)
 
     let mut dependnecies = Vec::new();
     let world_base = world_url.to_folder()?;
-
     log::debug!("[{}] Cooking world content...", world_url.as_str());
+
     match world {
         WorldData::Test1(ref mut test) => {
             let pipeline_id = AssetId::new(&test.pipeline)?.to_absolute_id(asset_base, &world_base)?;

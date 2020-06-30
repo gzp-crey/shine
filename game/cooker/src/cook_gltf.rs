@@ -65,7 +65,7 @@ pub async fn cook_gltf(context: &Context, asset_base: &Url, gltf_id: &AssetId) -
         .upload_cooked_binary(
             gltf_id.clone(),
             gltf_url.set_extension("glb")?,
-            AssetNaming::Hard,
+            AssetNaming::Hard("gltf".to_owned()),
             &cooked_gltf,
             source_hash,
             dependencies,

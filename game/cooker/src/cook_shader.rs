@@ -45,7 +45,7 @@ pub async fn cook_shader(context: &Context, asset_base: &Url, shader_id: &AssetI
         .upload_cooked_binary(
             shader_id.clone(),
             shader_url.set_extension(&format!("{}_spv", ext))?,
-            AssetNaming::Hard,
+            AssetNaming::Hard("shader".to_owned()),
             compiled_artifact.as_binary_u8(),
             source_hash,
             Vec::new(),
