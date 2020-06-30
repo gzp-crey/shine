@@ -38,9 +38,7 @@ image = "0.23"
 nalgebra = "0.21"
 
 # render
-wgpu-types = { git = "https://github.com/gfx-rs/wgpu", rev = "3b6e128877d74f8310967e377c5193fd4105ee13", features = ["trace", "replay"] }
-wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master" }
-#wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master", features = ["trace", "replay"] }
+wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master", features = ["trace", "replay"] }
 bytemuck = "1.2"
 gltf = "0.15"
 
