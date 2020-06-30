@@ -5,10 +5,14 @@ use serde::{Deserialize, Serialize};
 /// The encoding for the texture image
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum TextureImageEncoding {
-    Png,
-    /*Dxt1,
-    Dxt3,
-    Dxt5,*/
+    /// Image data is encoded as a png
+    Png,    
+
+    // /// Image data is encoded as a jpeg
+    // Jpg,
+
+    /// No initial data
+    None,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -34,7 +38,7 @@ impl TextureDescriptor {
         TextureDescriptor {
             encoding: TextureImageEncoding::Png,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            size: (0, 0),
+            size: (0,0),
 
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -113,7 +117,10 @@ impl TextureImage {
         }
     }
 
-    pub fn to_texture_buffer(&self, device: &wgpu::Device) -> Result<(TextureBuffer, wgpu::CommandBuffer), AssetError> {
+    pub fn to_texture_buffer(
+        &self,
+        device: &wgpu::Device,
+    ) -> Result<(TextureBuffer, Option<wgpu::CommandBuffer>), AssetError> {
         let (width, height) = self.descriptor.size;
 
         let size = wgpu::Extent3d {
@@ -132,7 +139,7 @@ impl TextureImage {
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
         });
 
-        let init_cmd_buffer = {
+        let init_cmd_buffer = if !self.image.is_empty() {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             let buffer = device.create_buffer_with_data(&self.image, wgpu::BufferUsage::COPY_SRC);
             let texture_data_layout = self.descriptor.get_texture_data_layout();
@@ -148,7 +155,9 @@ impl TextureImage {
                 },
                 size,
             );
-            encoder.finish()
+            Some(encoder.finish())
+        } else {
+            None
         };
 
         let view = texture.create_default_view();

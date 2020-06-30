@@ -65,7 +65,7 @@ impl Texture {
                 listeners.notify_all();
                 match texture_image.to_texture_buffer(context.device()) {
                     Ok((texture_buffer, init_command)) => {
-                        context.queue().submit(Some(init_command));
+                        context.queue().submit(init_command);
                         log::debug!("Texture[{:?}] compilation completed", load_context);
                         Texture::Compiled(texture_buffer)
                     }

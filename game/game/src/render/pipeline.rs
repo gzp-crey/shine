@@ -193,6 +193,7 @@ impl Pipeline {
 pub struct PipelineKey {
     pub name: String,
     pub vertex_type: VertexTypeId,
+    //pub render_target: RenderTargetId,
 }
 
 impl PipelineKey {

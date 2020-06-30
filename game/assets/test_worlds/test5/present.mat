@@ -1,0 +1,6 @@
+[
+	"0" : {
+		"color_attachement": "FRAME",
+		pipeline: "present.pl"
+	}
+]

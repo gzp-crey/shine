@@ -1,0 +1,24 @@
+{
+	"textures" : [
+		"frame_color" : {
+		},
+		
+		"frame_depth" : {
+		}
+	]
+	
+	"graph": {
+		"hello" : {
+			in: [],
+			out: ["frame_color"],
+		}
+	
+		"present" : {
+			in: [
+				"color" : "frame_color.tex"
+				"depth" : "frame_depth.tex"
+			],
+			out : [ "FRAME" ]
+		}
+	]
+}
