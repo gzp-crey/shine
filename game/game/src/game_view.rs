@@ -77,7 +77,7 @@ impl GameView {
     pub fn refresh(&mut self, size: (u32, u32)) -> Result<(), GameError> {
         self.run_logic("prepare_update");
         self.run_logic("update");
-        log::trace!("render size: {:?}", size);
+        //log::trace!("render size: {:?}", size);
         self.render(size)?;
         Ok(())
     }

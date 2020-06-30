@@ -8,7 +8,6 @@ use std::path::Path;
 pub struct Config {
     pub asset_source_base: Url,
     pub source_virtual_schemes: HashMap<String, Url>,
-    pub cache_db_connection: String,
 
     pub target_db_connection: String,
     pub target_virtual_schemes: HashMap<String, Url>,

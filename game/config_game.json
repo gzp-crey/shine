@@ -14,5 +14,7 @@
         "pipeline" : "http://assets.shine.com:9100/assets/",
         "world" : "http://assets.shine.com:9100/assets/",
         "hash": "http://assets.shine.com:9100/assets/"
-    }
+    },
+
+    "enable_validation": true
 }

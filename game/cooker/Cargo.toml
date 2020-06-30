@@ -15,7 +15,7 @@ tokio = {version = "0.2", features = ["time", "blocking", "rt-threaded", "rt-uti
 
 sqlx = { version = "0.3", default-features = false, features = [ "runtime-tokio", "macros", "sqlite", "postgres", "tls" ] }
 
-image = "0.23"
+image = {version = "0.23", features = ["jpeg"] }
 shaderc = {version = "0.6", features = ["build-from-source"] }
 gltf = "0.15"
 gltf-json = "0.15"

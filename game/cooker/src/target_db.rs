@@ -57,10 +57,12 @@ pub struct TargetDB {
 
 impl TargetDB {
     pub async fn new(config: &Config) -> Result<TargetDB, CookingError> {
+        log::info!("Connecting to db...");
         let pool = PgPool::new(&config.target_db_connection).await?;
         let io = Arc::new(AssetIO::new(config.target_virtual_schemes.clone())?);
         let db = TargetDB { pool, io };
         db.init().await?;
+        log::info!("Db done.");
         Ok(db)
     }
 

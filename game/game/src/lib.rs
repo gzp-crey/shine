@@ -1,5 +1,4 @@
 #![feature(async_closure)]
-#![feature(str_strip)]
 
 pub mod assets;
 pub mod components;

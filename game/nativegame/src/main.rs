@@ -41,6 +41,7 @@ fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url) -> Result<(), 
         WorldData::Test3(test) => game.load_world(test)?,
         WorldData::Test4(test) => game.load_world(test)?,
     }
+    game.gc();
     Ok(())
 }
 

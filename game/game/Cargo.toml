@@ -33,8 +33,8 @@ base64 = "0.12"
 ring = "0.16"
 data-encoding = "2.2"
 itertools = "0.9"
-image = "0.23"
 
+image = {version = "0.23", features = ["jpeg"] }
 nalgebra = "0.21"
 
 # render

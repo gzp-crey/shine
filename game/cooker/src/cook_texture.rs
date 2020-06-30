@@ -1,6 +1,6 @@
 use crate::{AssetNaming, Context, CookingError, Dependency};
 use image::{dxt, imageops::FilterType, DynamicImage, GenericImageView, ImageError, ImageOutputFormat};
-use shine_game::assets::{AssetError, AssetId, TextureDescriptor, TextureImage, TextureImageEncoding, Url};
+use shine_game::assets::{AssetError, AssetId, TextureDescriptor, TextureImage, ImageEncoding, Url};
 use shine_game::wgpu;
 use tokio::task;
 
@@ -83,20 +83,20 @@ pub async fn cook_texture(
         image.color()
     );
 
-    if descriptor.size != (0, 0) {
-        let (w, h) = descriptor.size;
+    if descriptor.image.size != (0, 0) {
+        let (w, h) = descriptor.image.size;
         log::debug!("[{}] Resizing texture to ({},{})...", texture_url.as_str(), w, h);
         image = task::spawn_blocking(move || image.resize_exact(w, h, FilterType::CatmullRom)).await?;
     } else {
-        descriptor.size = image.dimensions();
+        descriptor.image.size = image.dimensions();
     }
 
     log::debug!(
         "[{}] Converting color space for texture format {:?}...",
         texture_url.as_str(),
-        descriptor.format
+        descriptor.image.format
     );
-    let format = descriptor.format;
+    let format = descriptor.image.format;
     image = task::spawn_blocking(move || match format {
         wgpu::TextureFormat::Rgba8UnormSrgb => Ok(DynamicImage::ImageRgba8(image.into_rgba())),
         wgpu::TextureFormat::Rgba8Unorm => Ok(DynamicImage::ImageRgba8(image.into_rgba())),
@@ -108,11 +108,16 @@ pub async fn cook_texture(
     log::trace!("[{}] Texture descriptor:\n{:#?}", texture_url.as_str(), descriptor);
 
     log::debug!("[{}] Compressing texture...", texture_url.as_str());
-    let encoding = descriptor.encoding;
+    let encoding = descriptor.image.encoding;
     let image = task::spawn_blocking(move || match encoding {
-        TextureImageEncoding::Png => {
+        ImageEncoding::Png => {
             let mut image_data = Vec::new();
             image.write_to(&mut image_data, ImageOutputFormat::Png)?;
+            Ok::<_, CookingError>(image_data)
+        }
+        ImageEncoding::Jpeg => {
+            let mut image_data = Vec::new();
+            image.write_to(&mut image_data, ImageOutputFormat::Jpeg(80))?;
             Ok::<_, CookingError>(image_data)
         }
     })
@@ -124,7 +129,7 @@ pub async fn cook_texture(
     );
 
     log::debug!("[{}] Uploading...", texture_url.as_str());
-    let cooked_texture = bincode::serialize(&TextureImage { descriptor, image })?;
+    let cooked_texture = bincode::serialize(&TextureImage { data: image, image: descriptor.image, sampler: descriptor.sampler })?;
     Ok(context
         .target_db
         .upload_cooked_binary(
