@@ -32,7 +32,7 @@ impl Context {
                     limits: wgpu::Limits::default(),
                     shader_validation: config.enable_validation,
                 },
-                None,
+                config.wgpu_trace.as_ref().map(std::path::Path::new),
             )
             .await
             .map_err(|err| GameError::Render(format!("Failed to create device: {:?}", err)))?;

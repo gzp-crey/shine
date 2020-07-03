@@ -1,7 +1,7 @@
 {
     "primitive_topology": "TriangleList",
     "vertex_stage": {
-        "shader": "./hello.vs",
+        "shader": "./present.vs",
         "attributes": [
             [0, "Position","Float3"],
             [1, {"TexCoord":0},"Float2"]
@@ -14,11 +14,11 @@
         ]
     },
     "fragment_stage": {
-        "shader": "./hello.fs",
+        "shader": "./present.fs",
 		"uniforms": [
             [
-                [2, {"Texture":{"Static" : "frame_color.tex"}}],
-                [3, {"Sampler":{"Static" : "frame_color.tex"}}]
+                [2, {"Texture": {"RenderTarget":"frame_color"}}],
+                [3, {"Sampler": {"RenderTarget":"frame_color"}}]
             ],
             []
         ]

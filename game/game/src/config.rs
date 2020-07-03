@@ -9,6 +9,7 @@ pub struct Config {
     pub virtual_schemes: HashMap<String, Url>,
     pub swap_chain_format: wgpu::TextureFormat,
     pub enable_validation: bool,
+    pub wgpu_trace: Option<String>,
 }
 
 impl Config {

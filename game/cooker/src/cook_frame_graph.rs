@@ -1,5 +1,5 @@
 use crate::{cook_pipeline, cook_texture, AssetNaming, Context, CookingError, Dependency};
-use shine_game::assets::{AssetId, FrameGraphDescriptor, Url, PassMethod};
+use shine_game::assets::{AssetId, FrameGraphDescriptor, PassMethod, Url};
 
 async fn find_frame_graph_etag(context: &Context, frame_graph_url: &Url) -> Result<String, CookingError> {
     Ok(context.source_io.download_etag(&frame_graph_url).await?)

@@ -76,9 +76,7 @@ impl Texture {
                 }
             }
 
-            (Texture::Compiled(_), _) => unreachable!(),
-            (Texture::Error, _) => unreachable!(),
-            (Texture::None, _) => unreachable!(),
+            _ => unreachable!(),
         };
         None
     }

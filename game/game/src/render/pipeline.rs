@@ -1,8 +1,8 @@
 use crate::assets::{
-    AssetError, AssetIO, IntoVertexTypeId, PipelineBuffer, PipelineDescriptor, Url, UrlError, VertexBufferLayout,
-    VertexTypeId,
+    AssetError, AssetIO, IntoVertexTypeId, PipelineBuffer, PipelineDescriptor, ShaderType, Url, UrlError,
+    VertexBufferLayout, VertexTypeId,
 };
-use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead, ShaderType};
+use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead};
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, GeneralId, Index, LoadContext, LoadListeners, ReadGuard,
     Store,
@@ -37,20 +37,20 @@ impl From<bincode::Error> for PipelineLoadError {
 }
 
 /// Pipeline dependencies required for compilation
-pub struct Dependecy {
+pub struct PartialPipeline {
     descriptor: Box<PipelineDescriptor>,
     vertex_layouts: Vec<VertexBufferLayout>,
     vertex_shader: ShaderDependency,
     fragment_shader: ShaderDependency,
 }
 
-impl Dependecy {
+impl PartialPipeline {
     fn from_descriptor(
         load_context: &LoadContext<'_, Pipeline>,
         descriptor: Box<PipelineDescriptor>,
         vertex_layouts: Vec<VertexBufferLayout>,
         shaders: &mut ShaderStoreRead<'_>,
-    ) -> Dependecy {
+    ) -> PartialPipeline {
         let vertex_shader = ShaderDependency::new(
             shaders,
             &descriptor.vertex_stage.shader,
@@ -66,7 +66,7 @@ impl Dependecy {
             Ok(PipelineLoadData::ShaderReady(ShaderType::Fragment)),
         );
 
-        Dependecy {
+        PartialPipeline {
             descriptor,
             vertex_layouts,
             vertex_shader,
@@ -76,11 +76,11 @@ impl Dependecy {
 
     fn with_updated_shader_dependency(self, shader_type: ShaderType, shaders: &mut ShaderStoreRead<'_>) -> Self {
         match shader_type {
-            ShaderType::Vertex => Dependecy {
+            ShaderType::Vertex => PartialPipeline {
                 vertex_shader: self.vertex_shader.update(shaders),
                 ..self
             },
-            ShaderType::Fragment => Dependecy {
+            ShaderType::Fragment => PartialPipeline {
                 fragment_shader: self.fragment_shader.update(shaders),
                 ..self
             },
@@ -112,13 +112,15 @@ impl Dependecy {
 
             (ShaderDependency::Completed(vs), ShaderDependency::Completed(fs)) => {
                 listeners.notify_all();
-                let vs = shaders.at(&vs).shadere_module().unwrap();
-                let fs = shaders.at(&fs).shadere_module().unwrap();
-                match self.descriptor.compile(
+                match self.descriptor.to_pipeline_buffer(
                     context.device(),
                     context.swap_chain_format(),
                     &self.vertex_layouts,
-                    (vs, fs),
+                    |stage| match stage {
+                        ShaderType::Vertex => Ok(shaders.at(&vs).shadere_module().unwrap()),
+                        ShaderType::Fragment => Ok(shaders.at(&fs).shadere_module().unwrap()),
+                        _ => unreachable!(),
+                    },
                 ) {
                     Ok(pipeline) => {
                         log::debug!("Pipeline[{:?}] compilation completed", load_context);
@@ -136,7 +138,7 @@ impl Dependecy {
 
 pub enum Pipeline {
     Pending(LoadListeners),
-    WaitingDependency(Dependecy, LoadListeners),
+    WaitingDependency(PartialPipeline, LoadListeners),
     Compiled(PipelineBuffer),
     Error,
     None,
@@ -166,23 +168,19 @@ impl Pipeline {
             }
 
             (Pipeline::Pending(listeners), Ok(PipelineLoadData::Descriptor(descriptor, vertex_layouts))) => {
-                let dependency = Dependecy::from_descriptor(&load_context, descriptor, vertex_layouts, shaders);
-                dependency.into_pipeline(&load_context, context, shaders, listeners)
+                let pipeline = PartialPipeline::from_descriptor(&load_context, descriptor, vertex_layouts, shaders);
+                pipeline.into_pipeline(&load_context, context, shaders, listeners)
             }
 
-            (Pipeline::WaitingDependency(dependency, listeners), Ok(PipelineLoadData::ShaderReady(shader_type))) => {
-                dependency
+            (Pipeline::WaitingDependency(pipeline, listeners), Ok(PipelineLoadData::ShaderReady(shader_type))) => {
+                pipeline
                     .with_updated_shader_dependency(shader_type, shaders)
                     .into_pipeline(&load_context, context, shaders, listeners)
             }
 
             (Pipeline::Error, Ok(PipelineLoadData::ShaderReady(_))) => Pipeline::Error,
 
-            (Pipeline::WaitingDependency(_, _), _) => unreachable!(),
-            (Pipeline::Pending(_), _) => unreachable!(),
-            (Pipeline::Compiled(_), _) => unreachable!(),
-            (Pipeline::Error, _) => unreachable!(),
-            (Pipeline::None, _) => unreachable!(),
+            _ => unreachable!(),
         };
 
         None

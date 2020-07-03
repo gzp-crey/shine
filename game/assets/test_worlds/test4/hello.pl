@@ -17,8 +17,8 @@
         "shader": "./hello.fs",
 		"uniforms": [
             [
-                [2, {"Texture":"Diffuse"}],
-                [3, {"Sampler":"Diffuse"}]
+                [1, {"Texture":"Diffuse"}],
+                [2, {"Sampler":"Diffuse"}]
             ],
             []
         ]

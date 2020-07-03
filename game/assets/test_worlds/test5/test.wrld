@@ -1,6 +1,5 @@
 {
 	"Test5":{
-		"pipeline": "hello.pl",
-		"texture": "../test3/checker.png"
+		"graph": "hello.fgr"
 	}
 }

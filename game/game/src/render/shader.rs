@@ -1,4 +1,4 @@
-use crate::assets::{AssetError, AssetIO, Url, UrlError};
+use crate::assets::{AssetError, AssetIO, ShaderType, Url, UrlError};
 use crate::render::Context;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
@@ -7,27 +7,6 @@ use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
-
-/// Supported shader types
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ShaderType {
-    Vertex,
-    Fragment,
-    Compute,
-}
-
-impl FromStr for ShaderType {
-    type Err = AssetError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "fs_spv" => Ok(ShaderType::Fragment),
-            "vs_spv" => Ok(ShaderType::Vertex),
-            "cs_spv" => Ok(ShaderType::Compute),
-            _ => Err(AssetError::UnsupportedFormat(s.to_owned())),
-        }
-    }
-}
 
 /// Helper to manage the state of a shader dependency
 pub enum ShaderDependency {
@@ -142,9 +121,7 @@ impl Shader {
                 Shader::Compiled(ty, shader)
             }
 
-            (Shader::Compiled(_, _), _) => unreachable!(),
-            (Shader::Error, _) => unreachable!(),
-            (Shader::None, _) => unreachable!(),
+            _ => unreachable!(),
         };
         None
     }

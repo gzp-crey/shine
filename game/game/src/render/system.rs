@@ -1,4 +1,4 @@
-use crate::render::{Context, Frame, ModelLoader, PipelineLoader, ShaderLoader, TextureLoader};
+use crate::render::{Context, Frame, ModelLoader, PipelineLoader, ShaderLoader, TextureLoader, FrameGraphLoader};
 use crate::{GameError, GameView};
 
 pub trait RenderSystem {
@@ -35,6 +35,7 @@ impl RenderSystem for GameView {
         self.register_store(PipelineLoader::new(self.assetio.clone()), 16);
         self.register_store(ModelLoader::new(self.assetio.clone()), 16);
         self.register_store(TextureLoader::new(self.assetio.clone()), 16);
+        self.register_store(FrameGraphLoader::new(self.assetio.clone()), 16);
 
         Ok(())
     }

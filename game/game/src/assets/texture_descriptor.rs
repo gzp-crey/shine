@@ -12,6 +12,7 @@ pub enum ImageEncoding {
     Jpeg,
 }
 
+/// Texture data descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageDescriptor {
     pub encoding: ImageEncoding,
@@ -69,6 +70,7 @@ impl ImageDescriptor {
     }
 }
 
+/// Render target descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderTargetDescriptor {
     pub format: wgpu::TextureFormat,
@@ -77,6 +79,7 @@ pub struct RenderTargetDescriptor {
 
 impl RenderTargetDescriptor {}
 
+/// Sampler descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SamplerDescriptor {
     pub address_mode_u: wgpu::AddressMode,
@@ -125,6 +128,7 @@ impl SamplerDescriptor {
     }
 }
 
+/// Texture and sampler descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TextureDescriptor {
     pub image: ImageDescriptor,
@@ -140,12 +144,7 @@ impl TextureDescriptor {
     }
 }
 
-pub struct TextureBuffer {
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
-}
-
+/// Deserialized texture
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TextureImage {
     pub data: Vec<u8>,
@@ -219,4 +218,11 @@ impl TextureImage {
 
         Ok((TextureBuffer { texture, view, sampler }, init_cmd_buffer))
     }
+}
+
+/// Compiled texture and sampler
+pub struct TextureBuffer {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
 }

@@ -1,13 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::mem;
 
+/// Semantic of the texture used in a shader
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum TextureSemantic {
     Diffuse,
     Normal,
+    RenderTarget(String),
     Custom(String),
 }
 
+/// Semantic of the uniform used in a shader
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum UniformSemantic {
     ViewProj,
@@ -23,6 +26,7 @@ impl UniformSemantic {
     }
 }
 
+/// Shader parameters and uniforms
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum Uniform {
     Sampler(TextureSemantic),

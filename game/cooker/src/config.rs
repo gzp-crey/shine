@@ -9,7 +9,7 @@ pub struct Config {
     pub asset_source_base: Url,
     pub source_virtual_schemes: HashMap<String, Url>,
 
-    pub target_db_connection: String,
+    pub target_db_connection: Option<String>,
     pub target_virtual_schemes: HashMap<String, Url>,
 }
 

@@ -2,12 +2,34 @@ use crate::assets::{AssetError, Uniform, VertexBufferLayout, VertexSemantic};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 
 pub const UNIFORM_GROUP_COUNT: u32 = 2;
 pub const GLOBAL_UNIFORMS: u32 = 0;
 pub const LOCAL_UNIFORMS: u32 = 1;
 
-/// A vertex attribute requirement of the pipeline
+/// Supported shader types
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ShaderType {
+    Vertex,
+    Fragment,
+    Compute,
+}
+
+impl FromStr for ShaderType {
+    type Err = AssetError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "fs_spv" => Ok(ShaderType::Fragment),
+            "vs_spv" => Ok(ShaderType::Vertex),
+            "cs_spv" => Ok(ShaderType::Compute),
+            _ => Err(AssetError::UnsupportedFormat(s.to_owned())),
+        }
+    }
+}
+
+/// Vertex attribute requirement of the pipeline
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipelineAttribute(u32, VertexSemantic, wgpu::VertexFormat);
 
@@ -29,7 +51,7 @@ impl PipelineAttribute {
     }
 }
 
-/// A uniform requirement of the pipeline
+/// Uniform requirement of the pipeline
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct PipelineUniform(u32, Uniform);
 
@@ -47,12 +69,12 @@ impl PipelineUniform {
     }
 }
 
-/// Combined uniform requirements of the pipeline
+/// List of uniform requirements of the pipeline for each share stage
 #[derive(Debug)]
 pub struct PipelineUniformLayout(Vec<(PipelineUniform, wgpu::ShaderStage)>);
 
 impl PipelineUniformLayout {
-    pub fn from_stages(layouts: &[(&[PipelineUniform], wgpu::ShaderStage)]) -> Result<Self, AssetError> {
+    pub fn merge_from_stages(layouts: &[(&[PipelineUniform], wgpu::ShaderStage)]) -> Result<Self, AssetError> {
         let mut merged: HashMap<u32, (PipelineUniform, wgpu::ShaderStage)> = Default::default();
         for (layout, stage) in layouts.iter() {
             for uniform in layout.iter() {
@@ -136,7 +158,7 @@ pub struct VertexStage {
 }
 
 impl VertexStage {
-    fn check_format(&self, target: wgpu::VertexFormat, source: wgpu::VertexFormat) -> Result<(), AssetError> {
+    fn check_vertex_format(&self, target: wgpu::VertexFormat, source: wgpu::VertexFormat) -> Result<(), AssetError> {
         if target != source {
             Err(AssetError::Content(format!(
                 "Vertex attribute format missmacth, target:{:?}, source:{:?}",
@@ -153,7 +175,7 @@ impl VertexStage {
         for layout in vertex_layouts {
             for va in &layout.attributes {
                 if let Some(pa) = self.attributes.iter().find(|pa| pa.semantic() == va.semantic()) {
-                    self.check_format(pa.format(), va.format())?;
+                    self.check_vertex_format(pa.format(), va.format())?;
                     if !semantics.insert(pa.semantic().clone()) {
                         return Err(AssetError::Content(format!(
                             "{:?} attribute defined multiple times",
@@ -189,7 +211,7 @@ impl VertexStage {
             let mut attributes = Vec::new();
             for va in &layout.attributes {
                 if let Some(pa) = self.attributes.iter().find(|pa| pa.semantic() == va.semantic()) {
-                    self.check_format(pa.format(), va.format())?;
+                    self.check_vertex_format(pa.format(), va.format())?;
 
                     attributes.push(wgpu::VertexAttributeDescriptor {
                         offset: va.offset(),
@@ -215,6 +237,105 @@ pub struct FragmentStage {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Blending {
     Replace,
+}
+
+/// Deserialized pipeline data
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct PipelineDescriptor {
+    pub primitive_topology: wgpu::PrimitiveTopology,
+    pub vertex_stage: VertexStage,
+    pub fragment_stage: FragmentStage,
+    pub color_stage: Blending,
+    //depth_stencile_stage:
+}
+
+impl PipelineDescriptor {
+    pub fn get_uniform_layout(&self, group: u32) -> Result<PipelineUniformLayout, AssetError> {
+        let group = group as usize;
+        PipelineUniformLayout::merge_from_stages(&[
+            (&self.vertex_stage.uniforms[group], wgpu::ShaderStage::VERTEX),
+            (&self.fragment_stage.uniforms[group], wgpu::ShaderStage::FRAGMENT),
+        ])
+    }
+
+    pub fn to_pipeline_buffer<'a, F>(
+        &self,
+        device: &wgpu::Device,
+        color_state_format: wgpu::TextureFormat,
+        vertex_layouts: &Vec<VertexBufferLayout>,
+        mut get_shader: F,
+    ) -> Result<PipelineBuffer, AssetError>
+    where
+        F: FnMut(ShaderType) -> Result<&'a wgpu::ShaderModule, AssetError>,
+    {
+        let vertex_buffers = self.vertex_stage.create_attribute_descriptors(&vertex_layouts)?;
+        let vertex_buffers: Vec<_> = vertex_buffers
+            .iter()
+            .map(|(stride, attributes)| wgpu::VertexBufferDescriptor {
+                stride: *stride,
+                step_mode: wgpu::InputStepMode::Vertex,
+                attributes: &attributes,
+            })
+            .collect();
+        let vertex_state = wgpu::VertexStateDescriptor {
+            index_format: wgpu::IndexFormat::Uint16,
+            vertex_buffers: &vertex_buffers,
+        };
+        log::trace!("Vertex state: {:#?}", vertex_state);
+
+        let mut uniforms = [None, None];
+        for i in 0..UNIFORM_GROUP_COUNT {
+            let layout = self.get_uniform_layout(i)?;
+            log::trace!("Bind group({}) layout {:#?}", i, layout);
+            uniforms[i as usize] = layout.create_bind_group_layout(device)?;
+        }
+
+        let pipeline_layout = {
+            let mut bind_group_layouts = Vec::new();
+            for i in 0..UNIFORM_GROUP_COUNT {
+                if let Some((ref bind_group_layout, _)) = uniforms[i as usize] {
+                    bind_group_layouts.push(bind_group_layout);
+                }
+            }
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                bind_group_layouts: &bind_group_layouts,
+            })
+        };
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: &pipeline_layout,
+            primitive_topology: self.primitive_topology,
+
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: get_shader(ShaderType::Vertex)?,
+                entry_point: "main",
+            },
+
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: get_shader(ShaderType::Fragment)?,
+                entry_point: "main",
+            }),
+
+            rasterization_state: None,
+
+            color_states: &[wgpu::ColorStateDescriptor {
+                format: color_state_format,
+                color_blend: wgpu::BlendDescriptor::REPLACE,
+                alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                write_mask: wgpu::ColorWrite::ALL,
+            }],
+
+            depth_stencil_state: None,
+
+            vertex_state,
+
+            sample_count: 1,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
+        Ok(PipelineBuffer { pipeline, uniforms })
+    }
 }
 
 /// Compiled pipeline with related binding information
@@ -294,104 +415,6 @@ impl PipelineBuffer {
         };
         b.bind_pipeline();
         b
-    }
-}
-
-/// Deserialized pipeline data
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct PipelineDescriptor {
-    pub primitive_topology: wgpu::PrimitiveTopology,
-    pub vertex_stage: VertexStage,
-    pub fragment_stage: FragmentStage,
-    pub color_stage: Blending,
-    //depth_stencile_stage:
-}
-
-impl PipelineDescriptor {
-    pub fn get_uniform_layout(&self, group: u32) -> Result<PipelineUniformLayout, AssetError> {
-        PipelineUniformLayout::from_stages(&[
-            (&self.vertex_stage.uniforms[group as usize], wgpu::ShaderStage::VERTEX),
-            (
-                &self.fragment_stage.uniforms[group as usize],
-                wgpu::ShaderStage::FRAGMENT,
-            ),
-        ])
-    }
-
-    pub fn compile(
-        &self,
-        device: &wgpu::Device,
-        color_state_format: wgpu::TextureFormat,
-        vertex_layouts: &Vec<VertexBufferLayout>,
-        (vs, fs): (&wgpu::ShaderModule, &wgpu::ShaderModule),
-    ) -> Result<PipelineBuffer, AssetError> {
-        let vertex_buffers = self.vertex_stage.create_attribute_descriptors(&vertex_layouts)?;
-        let vertex_buffers: Vec<_> = vertex_buffers
-            .iter()
-            .map(|(stride, attributes)| wgpu::VertexBufferDescriptor {
-                stride: *stride,
-                step_mode: wgpu::InputStepMode::Vertex,
-                attributes: &attributes,
-            })
-            .collect();
-        let vertex_state = wgpu::VertexStateDescriptor {
-            index_format: wgpu::IndexFormat::Uint16,
-            vertex_buffers: &vertex_buffers,
-        };
-        log::trace!("Vertex state: {:#?}", vertex_state);
-
-        let mut uniforms = [None, None];
-        for i in 0..UNIFORM_GROUP_COUNT {
-            let layout = self.get_uniform_layout(i)?;
-            log::trace!("Bind group({}) layout {:#?}", i, layout);
-            uniforms[i as usize] = layout.create_bind_group_layout(device)?;
-        }
-
-        let pipeline_layout = {
-            let mut bind_group_layouts = Vec::new();
-            for i in 0..UNIFORM_GROUP_COUNT {
-                if let Some((ref bind_group_layout, _)) = uniforms[i as usize] {
-                    bind_group_layouts.push(bind_group_layout);
-                }
-            }
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                bind_group_layouts: &bind_group_layouts,
-            })
-        };
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
-            primitive_topology: self.primitive_topology,
-
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: vs,
-                entry_point: "main",
-            },
-
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: fs,
-                entry_point: "main",
-            }),
-
-            rasterization_state: None,
-
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: color_state_format,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-
-            depth_stencil_state: None,
-
-            vertex_state,
-
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
-        });
-
-        Ok(PipelineBuffer { pipeline, uniforms })
     }
 }
 
