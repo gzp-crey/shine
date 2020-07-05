@@ -10,17 +10,134 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 use std::{fmt, ptr};
 
-/// Data stored in the Store
-pub trait Data: 'static {
+/// Trait for the data stored in a Store
+pub trait Data : Sized {
     type Key: Clone + Send + Eq + Hash + fmt::Debug;
+    type Loader: Loader<Self>;
+}
+
+/// Trait to construct Data from key
+pub trait FromKey: Data {    
+    fn from_key(key: &Self::Key) -> Self
+    where
+        Self: Sized;
+}
+
+/// Trait to load data by key
+pub trait Load: Data {
     type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
 }
 
-pub trait FromKey: Data {
-    fn from_key(key: &Self::Key) -> (Self, Option<<Self as Data>::LoadRequest>)
+/// Trait to load data by key
+pub trait OnLoad<'a>: FromKey {
+    type UpdateContext: 'a + Clone;
+
+    fn load(
+        &mut self,
+        //load_context: LoadContext<'_, Self>,
+        //update_context: Self::UpdateContext,
+    ) -> Option<<Self as Load>::LoadRequest>
     where
         Self: Sized;
+
+    fn update(
+        &mut self,
+        //load_context: LoadContext<'_, Self>,
+        //update_context: Self::UpdateContext,
+        load_response: <Self as Load>::LoadResponse,
+    ) -> Option<<Self as Load>::LoadRequest>
+    where
+        Self: Sized;
+}
+
+/// Trait for multi-pass data loading
+pub trait Loader<D:Data> {
+    type LoadRequest: 'static + Send;
+    type LoadResponse: 'static + Send;
+    type SharedChannel: SharedChannel<D>;
+    type ExclusiveChannel: ExclusiveChannel<D>;
+}
+
+pub trait SharedChannel<D:Data> {}
+pub trait ExclusiveChannel<D:Data> {}
+
+/// Store without loading capability
+pub struct NoLoad<D:Data> {ph: std::marker::PhantomData<D>}
+
+impl<D> Loader<D> for NoLoad<D> {
+    type LoadRequest = ();
+    type LoadResponse = ();
+    type SharedChannel = NoLoadSharedChannel;
+    type ExclusiveChannel = ExclusiveSharedChannel;
+}
+
+pub type NoLoadSharedChannel = ();
+impl<D:Data> SharedChannel<D> for NoLoadSharedChannel {} 
+
+pub type ExclusiveSharedChannel = ();
+impl<D:Data> ExclusiveChannel<D> for ExclusiveSharedChannel {} 
+
+
+/// Store with async channel based loading
+pub struct UnboundLoad<D> 
+where 
+    D: for <'a> OnLoad<'a>
+{
+    ph: std::marker::PhantomData<D>
+}
+
+impl<D> Loader<D> for UnboundLoad<D> 
+where 
+    D: for <'a> OnLoad<'a>
+{
+    type LoadRequest = <D as Load>::LoadRequest;
+    type LoadResponse = <D as Load>::LoadResponse;
+    type RequestChannel = UnboundSharedChannel<D>;
+    type ExclusiveChannel = UnboundExclusiveChannel<D>;
+}
+
+pub struct UnboundSharedChannel<D> 
+where 
+    D: for <'a> OnLoad<'a>
+{
+    load_request_sender: UnboundedSender<(<D as Load>::LoadRequest, CancellationToken<D>)>,
+    //load_response_sender: UnboundedSender<(<D as Load>::LoadResponse, CancellationToken<D>)>,
+    //load_respons_receiver: UnboundedReceiver<(<D as Load>::LoadResponse, CancellationToken<D>)>,
+}
+
+impl<D> SharedChannel<D> for UnboundSharedChannel<D> 
+where 
+    D: for <'a> OnLoad<'a>
+{
+} 
+
+pub struct UnboundExclusiveChannel<D> 
+where 
+    D: for <'a> OnLoad<'a>
+{
+    load_request_sender: UnboundedSender<(<D as Load>::LoadRequest, CancellationToken<D>)>,
+    //load_response_sender: UnboundedSender<(<D as Load>::LoadResponse, CancellationToken<D>)>,
+}
+
+impl<D> ExclusiveChannel<D> for UnboundExclusiveChannel<D>  
+where 
+    D: for <'a> OnLoad<'a>
+{    
+} 
+
+
+pub struct S1 {}
+
+impl Data for S1 {    
+    type Key = String;
+}
+
+impl FromKey for S1 {    
+    fn from_key(key: &Self::Key) -> Self
+    {
+        unimplemented!()
+    }
 }
 
 enum Key<D: Data> {
@@ -195,9 +312,7 @@ impl<D: Data> Entry<D> {
 /// used from multiple threads at the same time.
 struct SharedData<D: Data> {
     entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
-    load_request_sender: UnboundedSender<(D::LoadRequest, CancellationToken<D>)>,
-    load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
-    load_respons_receiver: UnboundedReceiver<(D::LoadResponse, CancellationToken<D>)>,
+    channel: <<D as Data>::Loader as Loader<D>>::SharedChannel,
 }
 
 impl<D: Data> SharedData<D> {
@@ -213,8 +328,8 @@ struct ExclusiveData<D: Data> {
     arena: Arena<Entry<D>>,
     entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
     unnamed_id: usize,
-    load_request_sender: UnboundedSender<(D::LoadRequest, CancellationToken<D>)>,
-    //load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
+    channel: <<D as Data>::Loader as Loader<D>>::ExclusiveChannel,
+    
 }
 
 impl<D: Data> ExclusiveData<D> {
@@ -659,6 +774,55 @@ impl<'a, D: Data> WriteGuard<'a, D> {
     /// Move all new (pending) entries into the shared container
     pub fn finalize_requests(&mut self) {
         self.shared.entries.extend(&mut self.locked_exclusive.entries.drain());
+    }
+
+    pub fn update<'u>(&mut self, update_context: <D as OnLoad<'u>>::UpdateContext)
+    where
+        D: OnLoad<'u>,
+    {
+        while let Ok(Some((response, cancellation_token))) = self.shared.load_respons_receiver.try_next() {
+            if cancellation_token.is_canceled() {
+                continue;
+            }
+
+            #[cfg(debug_assertions)]
+            {
+                let stored = {
+                    let shared = &self.shared;
+                    let exclusive = &self.locked_exclusive;
+                    let k = &cancellation_token.2;
+                    exclusive
+                        .entries
+                        .get(k)
+                        .or_else(|| shared.entries.get(k))
+                        .map(|(_, p)| *p)
+                        .unwrap_or(ptr::null_mut())
+                };
+                debug_assert!(
+                    stored == cancellation_token.1,
+                    "Borrow checker error, entry was altered while token is still valid"
+                );
+            }
+
+            let entry = unsafe { &mut *cancellation_token.1 };
+            if let Some(request) = entry.value.update(
+                LoadContext {
+                    key: &cancellation_token.2,
+                    load_response_sender: &self.shared.load_response_sender,
+                    cancellation_token: &cancellation_token,
+                },
+                update_context.clone(),
+                response,
+            ) {
+                if let Err(err) = self
+                    .shared
+                    .load_request_sender
+                    .unbounded_send((request, cancellation_token))
+                {
+                    log::error!("Failed send load task: {:?}", err);
+                }
+            }
+        }
     }
 
     pub fn update<'u, U: DataUpdater<'u, D>>(&mut self, updater: &mut U) {

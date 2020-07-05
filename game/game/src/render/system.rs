@@ -1,4 +1,4 @@
-use crate::render::{Context, Frame, ModelLoader, PipelineLoader, ShaderLoader, TextureLoader, FrameGraphLoader};
+use crate::render::{Context, Frame, FrameGraphLoader, ModelLoader, PipelineLoader, ShaderLoader, TextureLoader};
 use crate::{GameError, GameView};
 
 pub trait RenderSystem {

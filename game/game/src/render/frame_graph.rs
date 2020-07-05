@@ -1,6 +1,4 @@
-use crate::assets::{
-    AssetError, AssetIO, FrameGraphBuffer, FrameGraphDescriptor, Url, UrlError,
-};
+use crate::assets::{AssetError, AssetIO, FrameGraphBuffer, FrameGraphDescriptor, Url, UrlError};
 use crate::render::{Context, PipelineStore, PipelineStoreRead};
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, GeneralId, Index, LoadContext, LoadListeners, ReadGuard,
@@ -46,9 +44,7 @@ impl PartialFrameGraph {
         descriptor: Box<FrameGraphDescriptor>,
         pipelines: &mut PipelineStoreRead<'_>,
     ) -> PartialFrameGraph {
-        PartialFrameGraph {
-            descriptor,
-        }
+        PartialFrameGraph { descriptor }
     }
 
     fn into_frame_graph(
@@ -98,11 +94,14 @@ impl FrameGraph {
                 frame_graph.into_frame_graph(&load_context, context, pipelines, listeners)
             }
 
-            (FrameGraph::WaitingDependency(frame_graph, listeners), Ok(FrameGraphLoadData::PipelineReady(pipeline_id))) => {
+            (
+                FrameGraph::WaitingDependency(frame_graph, listeners),
+                Ok(FrameGraphLoadData::PipelineReady(pipeline_id)),
+            ) => {
                 unimplemented!()
                 /*pipeline
-                    .with_updated_shader_dependency(pipeline_id, pipelines)
-                    .into_frame_graph(&load_context, context, pipelines, listeners)*/
+                .with_updated_shader_dependency(pipeline_id, pipelines)
+                .into_frame_graph(&load_context, context, pipelines, listeners)*/
             }
 
             (FrameGraph::Error, Ok(FrameGraphLoadData::PipelineReady(_))) => FrameGraph::Error,
@@ -114,7 +113,7 @@ impl FrameGraph {
     }
 }
 
-pub type FrameGraphKey  = String;
+pub type FrameGraphKey = String;
 
 impl Data for FrameGraph {
     type Key = FrameGraphKey;

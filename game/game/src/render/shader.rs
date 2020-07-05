@@ -2,6 +2,7 @@ use crate::assets::{AssetError, AssetIO, ShaderType, Url, UrlError};
 use crate::render::Context;
 use shine_ecs::core::store::{
     CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
+    Update,
 };
 use std::io;
 use std::pin::Pin;
@@ -60,7 +61,69 @@ impl ShaderDependency {
     }
 }
 
-/// Error during shader loading
+pub enum Shader {
+    Pending(LoadListeners),
+    Compiled(ShaderType, wgpu::ShaderModule),
+    Error,
+    None,
+}
+
+impl Shader {
+    pub fn shadere_module(&self) -> Option<&wgpu::ShaderModule> {
+        if let Shader::Compiled(_, ref sh) = self {
+            Some(sh)
+        } else {
+            None
+        }
+    }
+}
+
+impl Data for Shader {
+    type Key = String;
+    type LoadRequest = ShaderLoadRequest;
+    type LoadResponse = ShaderLoadResponse;
+}
+
+impl FromKey for Shader {
+    fn from_key(key: &String) -> (Self, Option<String>) {
+        (Shader::Pending(LoadListeners::new()), Some(key.to_owned()))
+    }
+}
+
+impl<'a> Update<'a> for Shader {
+    type UpdateContext = &'a Context;
+
+    fn update(
+        &mut self,
+        load_context: LoadContext<'_, Shader>,
+        update_context: Self::UpdateContext,
+        load_response: ShaderLoadResponse,
+    ) -> Option<ShaderLoadRequest> {
+        let context = update_context;
+        *self = match (std::mem::replace(self, Shader::None), load_response) {
+            (Shader::Pending(listeners), Err(err)) => {
+                listeners.notify_all();
+                log::warn!("Shader[{:?}] compilation failed: {:?}", load_context, err);
+                Shader::Error
+            }
+
+            (Shader::Pending(listeners), Ok((ty, spirv))) => {
+                listeners.notify_all();
+                let shader = context.device().create_shader_module(wgpu::util::make_spirv(&spirv));
+                log::debug!("Shader[{:?}] compilation completed", load_context);
+                Shader::Compiled(ty, shader)
+            }
+
+            _ => unreachable!(),
+        };
+        None
+    }
+}
+
+pub type ShaderLoadRequest = String;
+pub type ShaderLoadResponse = Result<(ShaderType, Vec<u8>), ShaderLoadError>;
+
+/// Error during shader load
 #[derive(Debug)]
 pub enum ShaderLoadError {
     Asset(AssetError),
@@ -84,63 +147,6 @@ impl From<io::Error> for ShaderLoadError {
         ShaderLoadError::Asset(AssetError::ContentLoad(format!("{:?}", err)))
     }
 }
-
-pub enum Shader {
-    Pending(LoadListeners),
-    Compiled(ShaderType, wgpu::ShaderModule),
-    Error,
-    None,
-}
-
-impl Shader {
-    pub fn shadere_module(&self) -> Option<&wgpu::ShaderModule> {
-        if let Shader::Compiled(_, ref sh) = self {
-            Some(sh)
-        } else {
-            None
-        }
-    }
-
-    fn on_update(
-        &mut self,
-        load_context: LoadContext<'_, Shader>,
-        context: &Context,
-        load_response: ShaderLoadResponse,
-    ) -> Option<String> {
-        *self = match (std::mem::replace(self, Shader::None), load_response) {
-            (Shader::Pending(listeners), Err(err)) => {
-                listeners.notify_all();
-                log::warn!("Shader[{:?}] compilation failed: {:?}", load_context, err);
-                Shader::Error
-            }
-
-            (Shader::Pending(listeners), Ok((ty, spirv))) => {
-                listeners.notify_all();
-                let shader = context.device().create_shader_module(wgpu::util::make_spirv(&spirv));
-                log::debug!("Shader[{:?}] compilation completed", load_context);
-                Shader::Compiled(ty, shader)
-            }
-
-            _ => unreachable!(),
-        };
-        None
-    }
-}
-
-impl Data for Shader {
-    type Key = String;
-    type LoadRequest = ShaderLoadRequest;
-    type LoadResponse = ShaderLoadResponse;
-}
-
-impl FromKey for Shader {
-    fn from_key(key: &String) -> (Self, Option<String>) {
-        (Shader::Pending(LoadListeners::new()), Some(key.to_owned()))
-    }
-}
-
-pub type ShaderLoadRequest = String;
-pub type ShaderLoadResponse = Result<(ShaderType, Vec<u8>), ShaderLoadError>;
 
 pub struct ShaderLoader {
     assetio: Arc<AssetIO>,
@@ -188,17 +194,6 @@ impl DataLoader<Shader> for ShaderLoader {
     }
 }
 
-impl<'a> DataUpdater<'a, Shader> for (&Context,) {
-    fn update<'u>(
-        &mut self,
-        load_context: LoadContext<'u, Shader>,
-        data: &mut Shader,
-        load_response: ShaderLoadResponse,
-    ) -> Option<ShaderLoadRequest> {
-        data.on_update(load_context, self.0, load_response)
-    }
-}
-
 pub type ShaderStore = Store<Shader>;
 pub type ShaderStoreRead<'a> = ReadGuard<'a, Shader>;
 pub type ShaderIndex = Index<Shader>;
@@ -214,8 +209,7 @@ pub mod systems {
             .build(move |_, _, (context, shaders), _| {
                 //log::info!("shader");
                 let mut shaders = shaders.write();
-                let context: &Context = &*context;
-                shaders.update(&mut (context,));
+                shaders.update2(&*context);
                 shaders.finalize_requests();
             })
     }

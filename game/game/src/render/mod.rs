@@ -21,11 +21,10 @@ pub use self::frame_graph::{
 mod model;
 pub use self::model::{Model, ModelIndex, ModelLoader, ModelStore, ModelStoreRead};
 
-
 pub mod systems {
+    pub use super::frame_graph::systems::*;
     pub use super::model::systems::*;
     pub use super::pipeline::systems::*;
     pub use super::shader::systems::*;
     pub use super::texture::systems::*;
-    pub use super::frame_graph::systems::*;
 }
