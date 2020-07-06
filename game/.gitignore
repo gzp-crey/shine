@@ -1,3 +1,4 @@
 cooked_assets
 target
 secret.*
+wgpu_trace

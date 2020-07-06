@@ -8,136 +8,40 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
-use std::{fmt, ptr};
+use std::{error::Error as StdError, fmt, ptr};
 
 /// Trait for the data stored in a Store
-pub trait Data : Sized {
+pub trait Data: Sized {
     type Key: Clone + Send + Eq + Hash + fmt::Debug;
-    type Loader: Loader<Self>;
 }
 
-/// Trait to construct Data from key
-pub trait FromKey: Data {    
+/// Trait to construct data from a key
+pub trait FromKey: Data {
     fn from_key(key: &Self::Key) -> Self
     where
         Self: Sized;
 }
 
-/// Trait to load data by key
-pub trait Load: Data {
+/// Trait to load data from
+pub trait OnLoad<'l>: Data {
     type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
-}
 
-/// Trait to load data by key
-pub trait OnLoad<'a>: FromKey {
-    type UpdateContext: 'a + Clone;
+    type LoadContext: 'l + Clone;
+    type UpdateContext: 'l + Clone;
 
-    fn load(
-        &mut self,
-        //load_context: LoadContext<'_, Self>,
-        //update_context: Self::UpdateContext,
-    ) -> Option<<Self as Load>::LoadRequest>
+    fn start_load(&self, token: CancellationToken<Self>, load_context: Self::LoadContext) -> Option<Self::LoadRequest>
     where
         Self: Sized;
 
-    fn update(
+    fn on_loaded(
         &mut self,
-        //load_context: LoadContext<'_, Self>,
-        //update_context: Self::UpdateContext,
-        load_response: <Self as Load>::LoadResponse,
-    ) -> Option<<Self as Load>::LoadRequest>
+        token: CancellationToken<Self>,
+        update_context: Self::UpdateContext,
+        load_response: Self::LoadResponse,
+    ) -> Option<Self::LoadRequest>
     where
         Self: Sized;
-}
-
-/// Trait for multi-pass data loading
-pub trait Loader<D:Data> {
-    type LoadRequest: 'static + Send;
-    type LoadResponse: 'static + Send;
-    type SharedChannel: SharedChannel<D>;
-    type ExclusiveChannel: ExclusiveChannel<D>;
-}
-
-pub trait SharedChannel<D:Data> {}
-pub trait ExclusiveChannel<D:Data> {}
-
-/// Store without loading capability
-pub struct NoLoad<D:Data> {ph: std::marker::PhantomData<D>}
-
-impl<D> Loader<D> for NoLoad<D> {
-    type LoadRequest = ();
-    type LoadResponse = ();
-    type SharedChannel = NoLoadSharedChannel;
-    type ExclusiveChannel = ExclusiveSharedChannel;
-}
-
-pub type NoLoadSharedChannel = ();
-impl<D:Data> SharedChannel<D> for NoLoadSharedChannel {} 
-
-pub type ExclusiveSharedChannel = ();
-impl<D:Data> ExclusiveChannel<D> for ExclusiveSharedChannel {} 
-
-
-/// Store with async channel based loading
-pub struct UnboundLoad<D> 
-where 
-    D: for <'a> OnLoad<'a>
-{
-    ph: std::marker::PhantomData<D>
-}
-
-impl<D> Loader<D> for UnboundLoad<D> 
-where 
-    D: for <'a> OnLoad<'a>
-{
-    type LoadRequest = <D as Load>::LoadRequest;
-    type LoadResponse = <D as Load>::LoadResponse;
-    type RequestChannel = UnboundSharedChannel<D>;
-    type ExclusiveChannel = UnboundExclusiveChannel<D>;
-}
-
-pub struct UnboundSharedChannel<D> 
-where 
-    D: for <'a> OnLoad<'a>
-{
-    load_request_sender: UnboundedSender<(<D as Load>::LoadRequest, CancellationToken<D>)>,
-    //load_response_sender: UnboundedSender<(<D as Load>::LoadResponse, CancellationToken<D>)>,
-    //load_respons_receiver: UnboundedReceiver<(<D as Load>::LoadResponse, CancellationToken<D>)>,
-}
-
-impl<D> SharedChannel<D> for UnboundSharedChannel<D> 
-where 
-    D: for <'a> OnLoad<'a>
-{
-} 
-
-pub struct UnboundExclusiveChannel<D> 
-where 
-    D: for <'a> OnLoad<'a>
-{
-    load_request_sender: UnboundedSender<(<D as Load>::LoadRequest, CancellationToken<D>)>,
-    //load_response_sender: UnboundedSender<(<D as Load>::LoadResponse, CancellationToken<D>)>,
-}
-
-impl<D> ExclusiveChannel<D> for UnboundExclusiveChannel<D>  
-where 
-    D: for <'a> OnLoad<'a>
-{    
-} 
-
-
-pub struct S1 {}
-
-impl Data for S1 {    
-    type Key = String;
-}
-
-impl FromKey for S1 {    
-    fn from_key(key: &Self::Key) -> Self
-    {
-        unimplemented!()
-    }
 }
 
 enum Key<D: Data> {
@@ -246,54 +150,6 @@ impl<D: Data> Drop for Index<D> {
     }
 }
 
-/// Generalized id that can store a key or an index. On first
-/// get (get_mut) operation the id is turned into index.
-pub enum GeneralId<D: FromKey> {
-    Name(D::Key),
-    Index(Index<D>),
-}
-
-impl<D: FromKey> GeneralId<D> {
-    pub fn from_key(key: <D as Data>::Key) -> Self {
-        GeneralId::Name(key)
-    }
-
-    pub fn get<'a, 's>(&'a mut self, store: &'a mut ReadGuard<'s, D>) -> &'a D {
-        if let GeneralId::Name(name) = self {
-            let idx = store.get_or_add_blocking(name);
-            *self = GeneralId::Index(idx);
-        }
-
-        if let GeneralId::Index(idx) = self {
-            store.at(idx)
-        } else {
-            unreachable!()
-        }
-    }
-
-    pub fn get_mut<'a>(&'a mut self, store: &'a mut WriteGuard<'a, D>) -> &'a mut D {
-        if let GeneralId::Name(name) = self {
-            let idx = store.get_or_add(name);
-            *self = GeneralId::Index(idx);
-        }
-
-        if let GeneralId::Index(idx) = self {
-            store.at_mut(idx)
-        } else {
-            unreachable!()
-        }
-    }
-}
-
-impl<D: FromKey> Clone for GeneralId<D> {
-    fn clone(&self) -> GeneralId<D> {
-        match self {
-            GeneralId::Index(idx) => GeneralId::Index(idx.clone()),
-            GeneralId::Name(name) => GeneralId::Name(name.clone()),
-        }
-    }
-}
-
 /// An entry in the store.
 struct Entry<D: Data> {
     ref_count: AtomicUsize,
@@ -307,69 +163,7 @@ impl<D: Data> Entry<D> {
     }
 }
 
-/// Shared data that may have multiple readers (or a single writer)
-/// The ready to be used resources are stored here those can be
-/// used from multiple threads at the same time.
-struct SharedData<D: Data> {
-    entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
-    channel: <<D as Data>::Loader as Loader<D>>::SharedChannel,
-}
-
-impl<D: Data> SharedData<D> {
-    fn get(&self, k: &Key<D>) -> Option<Index<D>> {
-        self.entries.get(k).map(|(_, ptr)| unsafe { Index::from_ptr(*ptr) })
-    }
-}
-
-/// Shared data those requires exclusive access always.
-/// The pending, new resourceas and memory managment related objects are stored here
-/// those require explicit log for access.
-struct ExclusiveData<D: Data> {
-    arena: Arena<Entry<D>>,
-    entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
-    unnamed_id: usize,
-    channel: <<D as Data>::Loader as Loader<D>>::ExclusiveChannel,
-    
-}
-
-impl<D: Data> ExclusiveData<D> {
-    fn get(&self, k: &Key<D>) -> Option<Index<D>> {
-        self.entries.get(k).map(|(_, ptr)| unsafe { Index::from_ptr(*ptr) })
-    }
-
-    /// Adds a new item to the store
-    fn get_or_add<B: FnOnce(&Key<D>) -> (D, Option<D::LoadRequest>)>(&mut self, k: Key<D>, builder: B) -> Index<D> {
-        let mut load_request = None;
-        let entries = &mut self.entries;
-        let arena = &mut self.arena;
-
-        let (_, entry_ptr) = entries.entry(k.clone()).or_insert_with(|| {
-            let (value, load) = builder(&k);
-            let entry = Entry {
-                ref_count: AtomicUsize::new(0),
-                load_token: Arc::new(()),
-                value,
-            };
-            let (id, entry) = arena.allocate(entry);
-            if let Some(load) = load {
-                load_request = Some((load, Arc::downgrade(&entry.load_token)))
-            }
-            (id, entry as *mut _)
-        });
-
-        let idx = unsafe { Index::from_ptr(*entry_ptr) };
-        if let Some((load, load_token)) = load_request {
-            log::debug!("Request loading for [{:?}]", k);
-            let cancellation_token = CancellationToken(load_token, *entry_ptr, k.clone());
-            if let Err(err) = self.load_request_sender.unbounded_send((load, cancellation_token)) {
-                log::error!("Failed to send load task for [{:?}]: {:?}", k, err);
-            }
-        }
-        idx
-    }
-}
-
-/// A token to test for the cancelation of loading operation.
+/// A token to test the cancelation of loading operations.
 pub struct CancellationToken<D: Data>(Weak<()>, *mut Entry<D>, Key<D>);
 
 unsafe impl<D: Data> Send for CancellationToken<D> {}
@@ -387,6 +181,82 @@ impl<D: Data> Clone for CancellationToken<D> {
     }
 }
 
+/// Shared data with multiple reador or single writer access.
+/// This is the main data storage tho ensure no resources are altered during use.
+struct SharedData<D: Data> {
+    entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
+}
+
+impl<D: Data> SharedData<D> {
+    fn get(&self, k: &Key<D>) -> Option<Index<D>> {
+        self.entries.get(k).map(|(_, ptr)| unsafe { Index::from_ptr(*ptr) })
+    }
+}
+
+/// Shared data with exclusive access always.
+/// This is a transient area for the newly created resources.
+struct ExclusiveData<D: Data> {
+    arena: Arena<Entry<D>>,
+    entries: HashMap<Key<D>, (usize, *mut Entry<D>)>,
+    unnamed_id: usize,
+}
+
+impl<D: Data> ExclusiveData<D> {
+    fn get(&self, k: &Key<D>) -> Option<Index<D>> {
+        self.entries.get(k).map(|(_, ptr)| unsafe { Index::from_ptr(*ptr) })
+    }
+
+    /// Get or create a new item.
+    fn get_or_create<B, L>(&mut self, k: Key<D>, build: B, post_build: L) -> Index<D>
+    where
+        B: FnOnce(&Key<D>) -> D,
+        L: FnOnce(&Key<D>, &mut Entry<D>),
+    {
+        let entries = &mut self.entries;
+        let arena = &mut self.arena;
+
+        let (_, entry_ptr) = entries.entry(k.clone()).or_insert_with(|| {
+            let value = build(&k);
+            let entry = Entry {
+                ref_count: AtomicUsize::new(0),
+                load_token: Arc::new(()),
+                value,
+            };
+            let (id, entry) = arena.allocate(entry);
+            post_build(&k, &mut entry);
+            (id, entry as *mut _)
+        });
+
+        unsafe { Index::from_ptr(*entry_ptr) }
+    }
+
+    /// Get or load a new item
+    fn get_or_add<'l, B: FnOnce(&Key<D>) -> D>(&mut self, k: Key<D>, builder: B) -> Index<D>
+    where
+        D: OnLoad<'l>,
+    {
+        self.get_or_create(k, builder, |_, _| {})
+    }
+
+    /// Get or load a new item
+    fn get_or_load<'l, B: FnOnce(&Key<D>) -> D>(
+        &mut self,
+        k: Key<D>,
+        load_context: <D as OnLoad<'l>>::LoadContext,
+        builder: B,
+    ) -> Index<D>
+    where
+        D: OnLoad<'l>,
+    {
+        self.get_or_create(k, builder, |k, entry| {
+            log::debug!("Request loading for [{:?}]", k);
+            let cancellation_token = CancellationToken(Arc::downgrade(&entry.load_token), entry as *mut _, k.clone());
+            entry.value.start_load(cancellation_token, load_context);
+        })
+    }
+}
+
+/*
 /// A context for load opration to handle notification.
 pub struct LoadContext<'a, D: Data> {
     key: &'a Key<D>,
@@ -407,9 +277,9 @@ impl<'a, D: Data> fmt::Debug for LoadContext<'a, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.key)
     }
-}
+}*/
 
-pub trait DataUpdater<'a, D: Data> {
+/*pub trait DataUpdater<'a, D: Data> {
     fn update<'u>(
         &mut self,
         load_context: LoadContext<'u, D>,
@@ -502,7 +372,7 @@ impl<D: Data> StoreLoader<D> {
         });
     }
 }
-
+*/
 /// Thread safe resource store.
 /// While the store is locked for reading, no resource can be updated, but new one can be aquired:
 /// - 1st the shared data is searched for an existing item (non-blocking)
@@ -523,35 +393,16 @@ unsafe impl<D: Data> Sync for Store<D> {}
 impl<D: Data> Store<D> {
     /// Create a new store without the loading pipeline.
     pub fn new(page_size: usize) -> Store<D> {
-        Store::new_with_loader(page_size, NoDataLoader).0
-    }
-
-    /// Creates a new store and the async load handler.
-    pub fn new_with_loader<L: DataLoader<D>>(page_size: usize, data_loader: L) -> (Store<D>, StoreLoader<D>) {
-        let (load_request_sender, load_request_receiver) = mpsc::unbounded();
-        let (load_response_sender, load_respons_receiver) = mpsc::unbounded();
-        (
-            Store {
-                shared: RwLock::new(SharedData {
-                    entries: HashMap::new(),
-                    load_request_sender: load_request_sender.clone(),
-                    load_response_sender: load_response_sender.clone(),
-                    load_respons_receiver,
-                }),
-                exclusive: Mutex::new(ExclusiveData {
-                    arena: Arena::new(page_size),
-                    entries: HashMap::new(),
-                    unnamed_id: 0,
-                    load_request_sender,
-                    //load_response_sender: load_response_sender.clone(),
-                }),
-            },
-            StoreLoader {
-                load_request_receiver,
-                load_response_sender,
-                data_loader: Box::new(data_loader),
-            },
-        )
+        Store {
+            shared: RwLock::new(SharedData {
+                entries: HashMap::new(),
+            }),
+            exclusive: Mutex::new(ExclusiveData {
+                arena: Arena::new(page_size),
+                entries: HashMap::new(),
+                unnamed_id: 0,
+            }),
+        }
     }
 
     /// Aquire read lock.
@@ -625,23 +476,9 @@ pub struct ReadGuard<'a, D: Data> {
 
 impl<'a, D: Data> ReadGuard<'a, D> {
     /// Try to get the index of a resource by the key.
-    /// If the global container is not accessible (ex. update is in progress),
-    /// a null index is returned.
+    /// This operation may block if item is not found in the shared store and the transient container is
+    /// in use. (ex. A new item is constructed.)
     pub fn try_get(&self, k: &D::Key) -> Option<Index<D>> {
-        let shared = &self.shared;
-        let exclusive = &self.exclusive;
-
-        let k = Key::Named(k.clone());
-        shared.get(&k).or_else(|| {
-            if let Ok(exclusive) = exclusive.try_lock() {
-                exclusive.get(&k)
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn try_get_blocking(&self, k: &D::Key) -> Option<Index<D>> {
         let shared = &self.shared;
         let exclusive = &self.exclusive;
 
@@ -652,7 +489,22 @@ impl<'a, D: Data> ReadGuard<'a, D> {
         })
     }
 
-    pub fn get_or_add_blocking(&mut self, k: &D::Key) -> Index<D>
+    /// Add a new item to the store.
+    /// This operation may block if the transient container is in use. (ex. A new item is constructed.)
+    pub fn add(&mut self, data: D) -> Index<D> {
+        let mut exclusive = self.exclusive.lock().unwrap();
+
+        exclusive.unnamed_id += 1;
+        let k = Key::Unnamed(exclusive.unnamed_id);
+        exclusive.get_or_add(k, move |k| match &k {
+            Key::Unnamed(_) => data,
+            _ => unreachable!(),
+        })
+    }
+
+    /// Try to get an item or create it from the key if not found.
+    /// This operation may block but it ensures, an item is created (and stored) exactly once.
+    pub fn get_or_add(&mut self, k: &D::Key) -> Index<D>
     where
         D: FromKey,
     {
@@ -669,33 +521,39 @@ impl<'a, D: Data> ReadGuard<'a, D> {
         })
     }
 
-    pub fn add_blocking(&mut self, data: D) -> Index<D> {
-        let mut exclusive = self.exclusive.lock().unwrap();
-
-        exclusive.unnamed_id += 1;
-        let k = Key::Unnamed(exclusive.unnamed_id);
-        exclusive.get_or_add(k, move |k| match &k {
-            Key::Unnamed(_) => (data, None),
-            _ => unreachable!(),
-        })
-    }
-
-    pub fn add_blocking_with_load(&mut self, data: D, load: D::LoadRequest) -> Index<D> {
-        let mut exclusive = self.exclusive.lock().unwrap();
-
-        exclusive.unnamed_id += 1;
-        let k = Key::Unnamed(exclusive.unnamed_id);
-        exclusive.get_or_add(k, move |k| match &k {
-            Key::Unnamed(_) => (data, Some(load)),
-            _ => unreachable!(),
-        })
-    }
-
-    pub fn add_default_blocking(&mut self) -> Index<D>
+    /// Add a new item to the store and trigger loading with the given context
+    /// This operation may block if the transient container is in use. (ex. A new item is constructed.)
+    pub fn load<'l>(&mut self, data: D, load_context: <D as OnLoad<'l>>::LoadContext) -> Index<D>
     where
-        D: Default,
+        D: OnLoad<'l>,
     {
-        self.add_blocking(<D as Default>::default())
+        let mut exclusive = self.exclusive.lock().unwrap();
+
+        exclusive.unnamed_id += 1;
+        let k = Key::Unnamed(exclusive.unnamed_id);
+        exclusive.get_or_load(k, load_context, move |k| match &k {
+            Key::Unnamed(_) => data,
+            _ => unreachable!(),
+        })
+    }
+
+    /// Try to get an item or create it from the key and trigger loading if not found.
+    /// This operation may block but it ensures, an item is created (and stored) exactly once.
+    pub fn get_or_load<'l>(&mut self, k: &D::Key, load_context: <D as OnLoad<'l>>::LoadContext) -> Index<D>
+    where
+        D: OnLoad<'l>,
+    {
+        let shared = &mut self.shared;
+        let exclusive = &mut self.exclusive;
+
+        let k = Key::Named(k.clone());
+        shared.get(&k).unwrap_or_else(|| {
+            let mut exclusive = exclusive.lock().unwrap();
+            exclusive.get_or_load(k, load_context, |k| match &k {
+                Key::Named(ref k) => <D as FromKey>::from_key(k),
+                _ => unreachable!(),
+            })
+        })
     }
 
     pub fn at<'i: 'a>(&self, index: &'i Index<D>) -> &D {
@@ -713,6 +571,8 @@ pub struct WriteGuard<'a, D: Data> {
 }
 
 impl<'a, D: Data> WriteGuard<'a, D> {
+    /// Try to get the index of a resource by the key.
+    /// This operation never blocks as WriteGueard has an exclusive access to the Store
     pub fn try_get(&self, k: &D::Key) -> Option<Index<D>> {
         let shared = &self.shared;
         let exclusive = &self.locked_exclusive;
@@ -721,6 +581,21 @@ impl<'a, D: Data> WriteGuard<'a, D> {
         exclusive.get(&k).or_else(|| shared.get(&k))
     }
 
+    /// Add a new item to the store.
+    /// This operation never blocks as WriteGueard has an exclusive access to the Store
+    pub fn add(&mut self, data: D) -> Index<D> {
+        let exclusive = &mut self.locked_exclusive;
+
+        exclusive.unnamed_id += 1;
+        let k = Key::Unnamed(exclusive.unnamed_id);
+        exclusive.get_or_add(k, move |k| match &k {
+            Key::Unnamed(_) => data,
+            _ => unreachable!(),
+        })
+    }
+
+    /// Try to get an item or create it from the key if not found.
+    /// This operation never blocks as WriteGueard has an exclusive access to the Store
     pub fn get_or_add(&mut self, k: &D::Key) -> Index<D>
     where
         D: FromKey,
@@ -737,33 +612,38 @@ impl<'a, D: Data> WriteGuard<'a, D> {
         })
     }
 
-    pub fn add(&mut self, data: D) -> Index<D> {
-        let exclusive = &mut self.locked_exclusive;
-
-        exclusive.unnamed_id += 1;
-        let k = Key::Unnamed(exclusive.unnamed_id);
-        exclusive.get_or_add(k, move |k| match &k {
-            Key::Unnamed(_) => (data, None),
-            _ => unreachable!(),
-        })
-    }
-
-    pub fn add_with_load(&mut self, data: D, load: D::LoadRequest) -> Index<D> {
-        let exclusive = &mut self.locked_exclusive;
-
-        exclusive.unnamed_id += 1;
-        let k = Key::Unnamed(exclusive.unnamed_id);
-        exclusive.get_or_add(k, move |k| match &k {
-            Key::Unnamed(_) => (data, Some(load)),
-            _ => unreachable!(),
-        })
-    }
-
-    pub fn add_default(&mut self) -> Index<D>
+    /// Add a new item to the store and trigger loading with the given context
+    /// This operation never blocks as WriteGueard has an exclusive access to the Store
+    pub fn load<'l>(&mut self, data: D, load_context: <D as OnLoad<'l>>::LoadContext) -> Index<D>
     where
-        D: Default,
+        D: OnLoad<'l>,
     {
-        self.add(<D as Default>::default())
+        let exclusive = &mut self.locked_exclusive;
+
+        exclusive.unnamed_id += 1;
+        let k = Key::Unnamed(exclusive.unnamed_id);
+        exclusive.get_or_load(k, load_context, move |k| match &k {
+            Key::Unnamed(_) => data,
+            _ => unreachable!(),
+        })
+    }
+
+    /// Try to get an item or create it from the key and trigger loading if not found.
+    /// This operation never blocks as WriteGueard has an exclusive access to the Store
+    pub fn get_or_load<'l>(&mut self, k: &D::Key, load_context: <D as OnLoad<'l>>::LoadContext) -> Index<D>
+    where
+        D: OnLoad<'l>,
+    {
+        let shared = &mut self.shared;
+        let exclusive = &mut self.locked_exclusive;
+
+        let k = Key::Named(k.clone());
+        shared.get(&k).unwrap_or_else(|| {
+            exclusive.get_or_load(k, load_context, |k| match &k {
+                Key::Named(ref k) => <D as FromKey>::from_key(k),
+                _ => unreachable!(),
+            })
+        })
     }
 
     /// Returns if the store is empty.
@@ -776,9 +656,9 @@ impl<'a, D: Data> WriteGuard<'a, D> {
         self.shared.entries.extend(&mut self.locked_exclusive.entries.drain());
     }
 
-    pub fn update<'u>(&mut self, update_context: <D as OnLoad<'u>>::UpdateContext)
+    /*pub fn update<'l>(&mut self, update_context: <D as OnLoad<'l>>::UpdateContext)
     where
-        D: OnLoad<'u>,
+        D: OnLoad<'l>,
     {
         while let Ok(Some((response, cancellation_token))) = self.shared.load_respons_receiver.try_next() {
             if cancellation_token.is_canceled() {
@@ -806,12 +686,12 @@ impl<'a, D: Data> WriteGuard<'a, D> {
 
             let entry = unsafe { &mut *cancellation_token.1 };
             if let Some(request) = entry.value.update(
-                LoadContext {
+                /*LoadContext {
                     key: &cancellation_token.2,
                     load_response_sender: &self.shared.load_response_sender,
                     cancellation_token: &cancellation_token,
                 },
-                update_context.clone(),
+                update_context.clone(),*/
                 response,
             ) {
                 if let Err(err) = self
@@ -823,53 +703,7 @@ impl<'a, D: Data> WriteGuard<'a, D> {
                 }
             }
         }
-    }
-
-    pub fn update<'u, U: DataUpdater<'u, D>>(&mut self, updater: &mut U) {
-        while let Ok(Some((response, cancellation_token))) = self.shared.load_respons_receiver.try_next() {
-            if cancellation_token.is_canceled() {
-                continue;
-            }
-
-            #[cfg(debug_assertions)]
-            {
-                let stored = {
-                    let shared = &self.shared;
-                    let exclusive = &self.locked_exclusive;
-                    let k = &cancellation_token.2;
-                    exclusive
-                        .entries
-                        .get(k)
-                        .or_else(|| shared.entries.get(k))
-                        .map(|(_, p)| *p)
-                        .unwrap_or(ptr::null_mut())
-                };
-                debug_assert!(
-                    stored == cancellation_token.1,
-                    "Borrow checker error, entry was altered while token is still valid"
-                );
-            }
-
-            let entry = unsafe { &mut *cancellation_token.1 };
-            if let Some(request) = updater.update(
-                LoadContext {
-                    key: &cancellation_token.2,
-                    load_response_sender: &self.shared.load_response_sender,
-                    cancellation_token: &cancellation_token,
-                },
-                &mut entry.value,
-                response,
-            ) {
-                if let Err(err) = self
-                    .shared
-                    .load_request_sender
-                    .unbounded_send((request, cancellation_token))
-                {
-                    log::error!("Failed send load task: {:?}", err);
-                }
-            }
-        }
-    }
+    }*/
 
     fn drain_unused_filtered_impl<F: FnMut(&mut D) -> bool>(
         arena: &mut Arena<Entry<D>>,
@@ -918,7 +752,7 @@ impl<'a, D: Data> WriteGuard<'a, D> {
         unsafe { &mut index.entry_mut().value }
     }
 }
-
+/*
 /// Type eraser trait to notify listeners.
 trait Listeners {
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -926,20 +760,20 @@ trait Listeners {
 }
 
 /// Listener of a specific type.
-struct TypedListeners<D: Data> {
-    load_response_sender: UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
-    listeners: Vec<(D::LoadResponse, CancellationToken<D>)>,
+struct TypedListeners<D: Load> {
+    load_response_sender: UnboundedSender<(<D as Load>::LoadResponse, CancellationToken<D>)>,
+    listeners: Vec<(<D as Load>::LoadResponse, CancellationToken<D>)>,
 }
 
-impl<D: Data> TypedListeners<D> {
-    fn add(&mut self, request: D::LoadResponse, cancellation_token: CancellationToken<D>) {
+impl<D: Load> TypedListeners<D> {
+    fn add(&mut self, request: <D as Load>::LoadResponse, cancellation_token: CancellationToken<D>) {
         if !cancellation_token.is_canceled() {
             self.listeners.push((request, cancellation_token));
         }
     }
 }
 
-impl<D: Data> Listeners for TypedListeners<D> {
+impl<D: Load> Listeners for TypedListeners<D> {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
@@ -970,8 +804,8 @@ impl LoadListeners {
         }
     }
 
-    pub fn add<'a, D: Data>(&self, load_context: &LoadContext<'a, D>, request: D::LoadResponse) {
-        if load_context.cancellation_token.is_canceled() {
+    pub fn add<'a, D: Load>(&self /*, load_context: &LoadContext<'a, D>*/, request: <D as Load>::LoadResponse) {
+        /* if load_context.cancellation_token.is_canceled() {
             return;
         }
 
@@ -986,7 +820,8 @@ impl LoadListeners {
 
         let listener = Any::downcast_mut::<TypedListeners<D>>(listener.as_any_mut()).unwrap();
         log::debug!("Add dependency listener: [{:?}]", load_context.cancellation_token.2);
-        listener.add(request, load_context.cancellation_token.clone());
+        listener.add(request, load_context.cancellation_token.clone());*/
+        unimplemented!()
     }
 
     pub fn notify_all(&self) {
@@ -1004,3 +839,4 @@ impl Default for LoadListeners {
         LoadListeners::new()
     }
 }
+*/
