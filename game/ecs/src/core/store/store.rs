@@ -17,11 +17,13 @@ pub trait FromKey: Data {
         Self: Sized;
 }
 
-/// Trait to load data from
-pub trait OnLoad<'l>: Data {
-    //type LoadRequest: 'static + Send;
+pub trait Load: Data {
+    type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
+}
 
+/// Trait to load data from
+pub trait OnLoad<'l>: Load {
     type LoadContext: 'l;
     type UpdateContext: 'l;
 
@@ -656,7 +658,7 @@ impl<'a, D: Data> WriteGuard<'a, D> {
         &mut self,
         update_context: <D as OnLoad<'l>>::UpdateContext,
         load_token: LoadToken<D>,
-        response: <D as OnLoad<'l>>::LoadResponse,
+        response: <D as Load>::LoadResponse,
     ) where
         D: OnLoad<'l>,
     {
