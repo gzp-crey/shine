@@ -1,14 +1,9 @@
 use crate::core::arena::Arena;
-use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use futures::sink::SinkExt;
-use futures::stream::StreamExt;
-use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
-use std::{error::Error as StdError, fmt, ptr};
+use std::{fmt, ptr};
 
 /// Trait for the data stored in a Store
 pub trait Data: Sized {
@@ -24,22 +19,17 @@ pub trait FromKey: Data {
 
 /// Trait to load data from
 pub trait OnLoad<'l>: Data {
-    type LoadRequest: 'static + Send;
+    //type LoadRequest: 'static + Send;
     type LoadResponse: 'static + Send;
 
-    type LoadContext: 'l + Clone;
-    type UpdateContext: 'l + Clone;
+    type LoadContext: 'l;
+    type UpdateContext: 'l;
 
-    fn start_load(&self, token: CancellationToken<Self>, load_context: Self::LoadContext) -> Option<Self::LoadRequest>
+    fn start_load(&self, load_context: Self::LoadContext, load_token: LoadToken<Self>)
     where
         Self: Sized;
 
-    fn on_loaded(
-        &mut self,
-        token: CancellationToken<Self>,
-        update_context: Self::UpdateContext,
-        load_response: Self::LoadResponse,
-    ) -> Option<Self::LoadRequest>
+    fn on_loaded(&mut self, update_context: Self::UpdateContext, load_response: Self::LoadResponse)
     where
         Self: Sized;
 }
@@ -164,20 +154,20 @@ impl<D: Data> Entry<D> {
 }
 
 /// A token to test the cancelation of loading operations.
-pub struct CancellationToken<D: Data>(Weak<()>, *mut Entry<D>, Key<D>);
+pub struct LoadToken<D: Data>(Weak<()>, *mut Entry<D>, Key<D>);
 
-unsafe impl<D: Data> Send for CancellationToken<D> {}
-unsafe impl<D: Data> Sync for CancellationToken<D> {}
+unsafe impl<D: Data> Send for LoadToken<D> {}
+unsafe impl<D: Data> Sync for LoadToken<D> {}
 
-impl<D: Data> CancellationToken<D> {
+impl<D: Data> LoadToken<D> {
     pub fn is_canceled(&self) -> bool {
         self.0.upgrade().is_none()
     }
 }
 
-impl<D: Data> Clone for CancellationToken<D> {
+impl<D: Data> Clone for LoadToken<D> {
     fn clone(&self) -> Self {
-        CancellationToken(self.0.clone(), self.1, self.2.clone())
+        LoadToken(self.0.clone(), self.1, self.2.clone())
     }
 }
 
@@ -222,7 +212,7 @@ impl<D: Data> ExclusiveData<D> {
                 load_token: Arc::new(()),
                 value,
             };
-            let (id, entry) = arena.allocate(entry);
+            let (id, mut entry) = arena.allocate(entry);
             post_build(&k, &mut entry);
             (id, entry as *mut _)
         });
@@ -231,9 +221,9 @@ impl<D: Data> ExclusiveData<D> {
     }
 
     /// Get or load a new item
-    fn get_or_add<'l, B: FnOnce(&Key<D>) -> D>(&mut self, k: Key<D>, builder: B) -> Index<D>
+    fn get_or_add<B: FnOnce(&Key<D>) -> D>(&mut self, k: Key<D>, builder: B) -> Index<D>
     where
-        D: OnLoad<'l>,
+        D: FromKey,
     {
         self.get_or_create(k, builder, |_, _| {})
     }
@@ -250,8 +240,8 @@ impl<D: Data> ExclusiveData<D> {
     {
         self.get_or_create(k, builder, |k, entry| {
             log::debug!("Request loading for [{:?}]", k);
-            let cancellation_token = CancellationToken(Arc::downgrade(&entry.load_token), entry as *mut _, k.clone());
-            entry.value.start_load(cancellation_token, load_context);
+            let load_token = LoadToken(Arc::downgrade(&entry.load_token), entry as *mut _, k.clone());
+            entry.value.start_load(load_context, load_token);
         })
     }
 }
@@ -261,7 +251,7 @@ impl<D: Data> ExclusiveData<D> {
 pub struct LoadContext<'a, D: Data> {
     key: &'a Key<D>,
     load_response_sender: &'a UnboundedSender<(D::LoadResponse, CancellationToken<D>)>,
-    cancellation_token: &'a CancellationToken<D>,
+    load_token: &'a CancellationToken<D>,
 }
 
 impl<'a, D: Data> LoadContext<'a, D> {
@@ -292,7 +282,7 @@ pub trait DataLoader<D: Data>: 'static + Send + Sync {
     fn load<'a>(
         &'a mut self,
         request: D::LoadRequest,
-        cancellation_token: CancellationToken<D>,
+        load_token: CancellationToken<D>,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>>;
 }
 
@@ -302,7 +292,7 @@ impl<D: Data> DataLoader<D> for NoDataLoader {
     fn load<'a>(
         &'a mut self,
         _request: D::LoadRequest,
-        _cancellation_token: CancellationToken<D>,
+        _load_token: CancellationToken<D>,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>> {
         Box::pin(futures::future::ready(None))
     }
@@ -318,26 +308,26 @@ unsafe impl<D: Data> Send for StoreLoader<D> {}
 
 impl<D: Data> StoreLoader<D> {
     async fn handle_one(&mut self) -> bool {
-        let (data, cancellation_token) = match self.load_request_receiver.next().await {
-            Some((data, cancellation_token)) => (data, cancellation_token),
+        let (data, load_token) = match self.load_request_receiver.next().await {
+            Some((data, load_token)) => (data, load_token),
             None => {
                 log::info!("Loader requests failed {:?}", TypeId::of::<D>());
                 return false;
             }
         };
 
-        if cancellation_token.is_canceled() {
+        if load_token.is_canceled() {
             return true;
         }
-        let output = match self.data_loader.load(data, cancellation_token.clone()).await {
+        let output = match self.data_loader.load(data, load_token.clone()).await {
             Some(output) => output,
             None => return true,
         };
-        if cancellation_token.is_canceled() {
+        if load_token.is_canceled() {
             return true;
         }
 
-        match self.load_response_sender.send((output, cancellation_token)).await {
+        match self.load_response_sender.send((output, load_token)).await {
             Ok(_) => true,
             Err(err) => {
                 log::info!("Loader response failed {:?}: {:?}", TypeId::of::<D>(), err);
@@ -491,7 +481,10 @@ impl<'a, D: Data> ReadGuard<'a, D> {
 
     /// Add a new item to the store.
     /// This operation may block if the transient container is in use. (ex. A new item is constructed.)
-    pub fn add(&mut self, data: D) -> Index<D> {
+    pub fn add(&mut self, data: D) -> Index<D>
+    where
+        D: FromKey,
+    {
         let mut exclusive = self.exclusive.lock().unwrap();
 
         exclusive.unnamed_id += 1;
@@ -541,7 +534,7 @@ impl<'a, D: Data> ReadGuard<'a, D> {
     /// This operation may block but it ensures, an item is created (and stored) exactly once.
     pub fn get_or_load<'l>(&mut self, k: &D::Key, load_context: <D as OnLoad<'l>>::LoadContext) -> Index<D>
     where
-        D: OnLoad<'l>,
+        D: FromKey + OnLoad<'l>,
     {
         let shared = &mut self.shared;
         let exclusive = &mut self.exclusive;
@@ -583,7 +576,10 @@ impl<'a, D: Data> WriteGuard<'a, D> {
 
     /// Add a new item to the store.
     /// This operation never blocks as WriteGueard has an exclusive access to the Store
-    pub fn add(&mut self, data: D) -> Index<D> {
+    pub fn add(&mut self, data: D) -> Index<D>
+    where
+        D: FromKey,
+    {
         let exclusive = &mut self.locked_exclusive;
 
         exclusive.unnamed_id += 1;
@@ -632,7 +628,7 @@ impl<'a, D: Data> WriteGuard<'a, D> {
     /// This operation never blocks as WriteGueard has an exclusive access to the Store
     pub fn get_or_load<'l>(&mut self, k: &D::Key, load_context: <D as OnLoad<'l>>::LoadContext) -> Index<D>
     where
-        D: OnLoad<'l>,
+        D: FromKey + OnLoad<'l>,
     {
         let shared = &mut self.shared;
         let exclusive = &mut self.locked_exclusive;
@@ -656,54 +652,40 @@ impl<'a, D: Data> WriteGuard<'a, D> {
         self.shared.entries.extend(&mut self.locked_exclusive.entries.drain());
     }
 
-    /*pub fn update<'l>(&mut self, update_context: <D as OnLoad<'l>>::UpdateContext)
-    where
+    pub fn update<'l>(
+        &mut self,
+        update_context: <D as OnLoad<'l>>::UpdateContext,
+        load_token: LoadToken<D>,
+        response: <D as OnLoad<'l>>::LoadResponse,
+    ) where
         D: OnLoad<'l>,
     {
-        while let Ok(Some((response, cancellation_token))) = self.shared.load_respons_receiver.try_next() {
-            if cancellation_token.is_canceled() {
-                continue;
-            }
-
-            #[cfg(debug_assertions)]
-            {
-                let stored = {
-                    let shared = &self.shared;
-                    let exclusive = &self.locked_exclusive;
-                    let k = &cancellation_token.2;
-                    exclusive
-                        .entries
-                        .get(k)
-                        .or_else(|| shared.entries.get(k))
-                        .map(|(_, p)| *p)
-                        .unwrap_or(ptr::null_mut())
-                };
-                debug_assert!(
-                    stored == cancellation_token.1,
-                    "Borrow checker error, entry was altered while token is still valid"
-                );
-            }
-
-            let entry = unsafe { &mut *cancellation_token.1 };
-            if let Some(request) = entry.value.update(
-                /*LoadContext {
-                    key: &cancellation_token.2,
-                    load_response_sender: &self.shared.load_response_sender,
-                    cancellation_token: &cancellation_token,
-                },
-                update_context.clone(),*/
-                response,
-            ) {
-                if let Err(err) = self
-                    .shared
-                    .load_request_sender
-                    .unbounded_send((request, cancellation_token))
-                {
-                    log::error!("Failed send load task: {:?}", err);
-                }
-            }
+        if load_token.is_canceled() {
+            return;
         }
-    }*/
+
+        #[cfg(debug_assertions)]
+        {
+            let stored = {
+                let shared = &self.shared;
+                let exclusive = &self.locked_exclusive;
+                let k = &load_token.2;
+                exclusive
+                    .entries
+                    .get(k)
+                    .or_else(|| shared.entries.get(k))
+                    .map(|(_, p)| *p)
+                    .unwrap_or(ptr::null_mut())
+            };
+            debug_assert!(
+                stored == load_token.1,
+                "Internal error, entry was altered while token is still valid"
+            );
+        }
+
+        let entry = unsafe { &mut *load_token.1 };
+        entry.value.on_loaded(update_context, response);
+    }
 
     fn drain_unused_filtered_impl<F: FnMut(&mut D) -> bool>(
         arena: &mut Arena<Entry<D>>,
