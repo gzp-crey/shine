@@ -219,13 +219,13 @@
             "group": "build"
         },
         {
-            "label": "test ecs",
+            "label": "test ecs - native",
             "type": "shell",
             "command": "cargo",
             "args": [
-                "test",                
-                "-p",
-                "shine-ecs",
+                "test",
+                "--features",
+                "native",
                 "--",
                 //"--nocapture",
                 "--test-threads=1"
@@ -233,7 +233,8 @@
             "options": {
                 "env": {
                     "RUST_BACKTRACE" : "1"
-                }
+                },
+                "cwd": "${workspaceFolder}/ecs"
             },
             "presentation": {
                 "echo": true,

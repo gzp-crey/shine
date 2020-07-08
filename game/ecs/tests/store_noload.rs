@@ -1,4 +1,4 @@
-use shine_ecs::core::store::{Data, FromKey, Store};
+use shine_ecs::core::store::{self, Data, FromKey, Store};
 use std::sync::Arc;
 use std::{fmt, mem, thread};
 
@@ -44,7 +44,7 @@ impl Drop for TestData {
 fn simple_single_threaded() {
     utils::init_logger();
 
-    let store = Store::<TestData>::new(2);
+    let store = store::no_load::<TestData>(2);
     let r0;
     let r1;
 
@@ -139,7 +139,7 @@ fn simple_multi_threaded() {
     utils::init_logger();
     utils::single_threaded_test();
 
-    let store = Store::<TestData>::new(2);
+    let store = store::no_load::<TestData>(2);
     let store = Arc::new(store);
 
     const ITER: u32 = 10;
@@ -243,7 +243,7 @@ fn check_lock() {
     panic::set_hook(Box::new(|_info| { /*println!("panic: {:?}", _info);*/ }));
 
     {
-        let store = Store::<TestData>::new(2);
+        let store = store::no_load::<TestData>(2);
         assert!(panic::catch_unwind(|| {
             let w = store.try_read().unwrap();
             let r = store.try_read().unwrap();
@@ -255,7 +255,7 @@ fn check_lock() {
     }
 
     {
-        let store = Store::<TestData>::new(2);
+        let store = store::no_load::<TestData>(2);
         assert!(panic::catch_unwind(|| {
             let w = store.try_write().unwrap();
             let r = store.try_read().unwrap();
@@ -267,7 +267,7 @@ fn check_lock() {
     }
 
     {
-        let store = Store::<TestData>::new(2);
+        let store = store::no_load::<TestData>(2);
         assert!(panic::catch_unwind(|| {
             let r = store.try_read().unwrap();
             let w = store.try_write().unwrap();
@@ -279,7 +279,7 @@ fn check_lock() {
     }
 
     {
-        let store = Store::<TestData>::new(2);
+        let store = store::no_load::<TestData>(2);
         assert!(panic::catch_unwind(|| {
             let w1 = store.try_write().unwrap();
             let w2 = store.try_write().unwrap();
