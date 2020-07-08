@@ -7,7 +7,7 @@ pub fn no_load<D: Data>(page_size: usize) -> Store<D, ()> {
     Store::new(page_size)
 }
 
-pub fn async_load<D>(page_size: usize) -> Store<D, AsyncLoadContext<D>>
+pub fn async_load<D, W: AsyncLoader<D>>(page_size: usize, loader: W) -> Store<D, AsyncLoadContext<D>>
 where
     D: Load<LoadContext = AsyncLoadContext<D>> + for<'l> OnLoad<'l>,
 {
@@ -25,6 +25,7 @@ where
     let load_worker = AsyncLoadWorker {
         request_receiver,
         response_sender,
+        loader: Box::new(loader),
     };
     load_worker.start();
 

@@ -3,6 +3,7 @@ use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use std::any::{Any, TypeId};
+use std::pin::Pin;
 
 pub struct AsyncLoadContext<D>
 where
@@ -25,13 +26,24 @@ where
     }
 }
 
+pub trait AsyncLoader<D>: 'static + Send + Sync 
+where
+    D: for<'l> OnLoad<'l>,
+{
+    fn load<'a>(
+        &'a mut self,
+        load_token: LoadToken<D>,
+        request: D::LoadRequest,
+    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>>;
+}
+
 pub struct AsyncLoadWorker<D>
 where
     D: for<'l> OnLoad<'l>,
 {
     pub(crate) request_receiver: UnboundedReceiver<(LoadToken<D>, <D as Load>::LoadRequest)>,
     pub(crate) response_sender: UnboundedSender<(LoadToken<D>, <D as Load>::LoadResponse)>,
-    //data_loader: Box<dyn DataLoader<D>>,
+    pub(crate) loader: Box<dyn AsyncLoader<D>>,
 }
 
 //unsafe impl<D: Data> Send for AsyncLoadWorker<D> {}
@@ -52,22 +64,21 @@ where
         if load_token.is_canceled() {
             return true;
         }
-        /*let output = match self.data_loader.load(data, load_token.clone()).await {
+        let output = match self.loader.load(load_token.clone(), data).await {
             Some(output) => output,
             None => return true,
-        };*/
+        };
         if load_token.is_canceled() {
             return true;
         }
 
-        /* match self.response_sender.send((load_token, output)).await {
+         match self.response_sender.send((load_token, output)).await {
             Ok(_) => true,
             Err(err) => {
                 log::info!("Loader response failed {:?}: {:?}", TypeId::of::<D>(), err);
                 false
             }
-        }*/
-        true
+        }
     }
 
     async fn run(&mut self) {

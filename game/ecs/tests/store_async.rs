@@ -1,6 +1,7 @@
-use shine_ecs::core::store::{self, AsyncLoadContext, Data, FromKey, Load, LoadToken, OnLoad, Store};
+use shine_ecs::core::store::{self, AsyncLoadContext, Data, FromKey, Load, LoadToken, OnLoad, Store, AsyncLoader};
 use std::sync::Arc;
 use std::{fmt, mem, thread};
+use std::pin::Pin;
 
 mod utils;
 
@@ -49,9 +50,24 @@ impl<'l> OnLoad<'l> for TestData {
     }
 }
 
+struct TestDataLoader;
+
+impl AsyncLoader<TestData> for TestDataLoader {
+    fn load<'a>(
+        &'a mut self,
+        load_token: LoadToken<TestData>,
+        request: String,
+    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<String>>>>
+    {
+        move async || {
+            Some(format!("loaded - {}", request))
+        }
+    }
+}
+
 #[tokio::test(threaded_scheduler)]
 async fn simple() {
     utils::init_logger();
     
-    let store = store::async_load::<TestData>(2);
+    let store = store::async_load::<TestData, TestDataLoader>(2, TestDataLoader);
 }
