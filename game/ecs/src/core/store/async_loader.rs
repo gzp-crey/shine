@@ -1,29 +1,41 @@
-use crate::core::store::{Data, Load, LoadToken, OnLoad};
+use crate::core::store::{Data, Loader, LoadToken, OnLoad};
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use std::any::{Any, TypeId};
 use std::pin::Pin;
 
-pub struct AsyncLoadContext<D>
+pub struct AsyncLoadContext<R,Q, D>
 where
-    D: for<'l> OnLoad<'l> + Load<LoadContext = Self>,
+    D: for<'l> OnLoad<'l, LoadContext = Self>,
 {
-    pub(crate) request_sender: UnboundedSender<(LoadToken<D>, <D as Load>::LoadRequest)>,
-    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, <D as Load>::LoadResponse)>,
-    pub(crate) response_receiver: UnboundedReceiver<(LoadToken<D>, <D as Load>::LoadResponse)>,
+    pub(crate) request_sender: UnboundedSender<(LoadToken<D>, R)>,
+    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, Q)>,
+    pub(crate) response_receiver: UnboundedReceiver<(LoadToken<D>, Q)>,
 }
 
-impl<D> AsyncLoadContext<D>
+impl<R,Q,D> AsyncLoadContext<R,Q,D>
 where
-    D: for<'l> OnLoad<'l> + Load<LoadContext = Self>,
+    D: for<'l> OnLoad<'l, LoadContext = Self>,
 {
-    pub fn request(&mut self, load_token: LoadToken<D>, request: <D as Load>::LoadRequest) {
+    pub fn request(&mut self, load_token: LoadToken<D>, request: R) {
         log::debug!("Request loading for [{:?}]", load_token);
         if let Err(err) = self.request_sender.unbounded_send((load_token, request)) {
             log::warn!("Failed to send request {:?}: {:?}", TypeId::of::<D>(), err);
         }
     }
+
+    pub fn update(&mut self) {
+
+    }
+}
+
+impl<R,Q,D> Loader for AsyncLoadContext<R,Q,D>
+where
+    D: for<'l> OnLoad<'l, LoadContext = Self>,
+{
+    type LoadRequest = R;
+    type LoadResponse = Q;
 }
 
 pub trait AsyncLoader<D>: 'static + Send + Sync 
@@ -37,12 +49,12 @@ where
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>>;
 }
 
-pub struct AsyncLoadWorker<D>
+pub struct AsyncLoadWorker<R,Q,D>
 where
     D: for<'l> OnLoad<'l>,
 {
-    pub(crate) request_receiver: UnboundedReceiver<(LoadToken<D>, <D as Load>::LoadRequest)>,
-    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, <D as Load>::LoadResponse)>,
+    pub(crate) request_receiver: UnboundedReceiver<(LoadToken<D>, R)>,
+    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, Q)>,
     pub(crate) loader: Box<dyn AsyncLoader<D>>,
 }
 
@@ -114,7 +126,7 @@ where
     D: for<'l> OnLoad<'l>,
 {
     request_receiver: UnboundedReceiver<(<D as Load>::LoadRequest, LoadToken<D>)>,
-    response_sender: UnboundedSender<(<D as Load>::LoadResponse, LoadToken<D>)>,
+    response_sender: UnboundedSender<(Q, LoadToken<D>)>,
     //data_loader: Box<dyn DataLoader<D>>,
 }*/
 

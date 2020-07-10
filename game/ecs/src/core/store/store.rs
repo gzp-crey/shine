@@ -17,28 +17,28 @@ pub trait FromKey: Data {
         Self: Sized;
 }
 
-pub trait Load: Data {
-    type LoadRequest: 'static + Send;
-    type LoadResponse: 'static + Send;
-    type LoadContext;
+/// Trait to load data from
+pub trait OnLoad<'l>: Data {
+    type UpdateContext: 'l;
+    type LoadContext : Loader;
 
     fn on_load_request(&self, load_context: &mut Self::LoadContext, load_token: LoadToken<Self>)
     where
         Self: Sized;
-}
-
-/// Trait to load data from
-pub trait OnLoad<'l>: Load {
-    type UpdateContext: 'l;
 
     fn on_load_response(
         &mut self,
         load_context: &mut Self::LoadContext,
         update_context: Self::UpdateContext,
         load_token: LoadToken<Self>,
-        load_response: Self::LoadResponse,
+        load_response: <Self::LoadContext as Loader>::LoadResponse,
     ) where
         Self: Sized;
+}
+
+pub trait Loader {
+    type LoadRequest: 'static + Send;
+    type LoadResponse: 'static + Send;
 }
 
 enum EntityKey<D: Data> {
@@ -246,6 +246,44 @@ impl<D: Data, L> ExclusiveData<D, L> {
 
         unsafe { Index::from_ptr(*entry_ptr) }
     }
+
+    pub fn update<'l>(
+        &mut self,
+        update_context: <D as OnLoad<'l>>::UpdateContext,
+        load_token: LoadToken<D>,
+        response: <L as Loader>::LoadResponse,
+    ) where
+        D: OnLoad<'l, LoadContext = L>,
+        L: Loader,
+    {
+        /*if load_token.is_canceled() {
+            return;
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            let stored = {
+                let shared = &self.shared;
+                let exclusive = &self.locked_exclusive;
+                let k = &load_token.2;
+                exclusive
+                    .entries
+                    .get(k)
+                    .or_else(|| shared.entries.get(k))
+                    .map(|(_, p)| *p)
+                    .unwrap_or(ptr::null_mut())
+            };
+            debug_assert!(
+                stored == load_token.1,
+                "Internal error, entry was altered while token is still valid"
+            );
+        }
+
+        let entry = unsafe { &mut *load_token.1 };
+        entry
+            .value
+            .on_load_response(&mut self.locked_exclusive.load_context, update_context, load_token, response);*/
+    }
 }
 
 /// Thread safe resource store.
@@ -284,7 +322,7 @@ impl<D: Data> Store<D, ()> {
 
 impl<D, L> Store<D, L>
 where
-    D: Load<LoadContext = L> + for<'l> OnLoad<'l>,
+    D: for<'l> OnLoad<'l, LoadContext = L>,
 {
     /// Create a new store without the loading pipeline.
     pub(crate) fn new_with_load(page_size: usize, load_context: L) -> Store<D, L> {
@@ -420,7 +458,7 @@ impl<'a, D: Data, L> ReadGuard<'a, D, L> {
     /// This operation may block if the transient container is in use. (ex. A new item is constructed.)
     pub fn load(&mut self, data: D) -> Index<D>
     where
-        D: Load<LoadContext = L>,
+        D: for<'l> OnLoad<'l, LoadContext = L>,
     {
         let mut exclusive = self.exclusive.lock().unwrap();
 
@@ -437,7 +475,7 @@ impl<'a, D: Data, L> ReadGuard<'a, D, L> {
     /// This operation may block but it ensures, an item is created (and stored) exactly once.
     pub fn get_or_load(&mut self, k: &D::Key) -> Index<D>
     where
-        D: FromKey + Load<LoadContext = L>,
+        D: FromKey + for <'l> OnLoad<LoadContext = L>,
     {
         let shared = &mut self.shared;
         let exclusive = &mut self.exclusive;
@@ -510,7 +548,7 @@ impl<'a, D: Data, L> WriteGuard<'a, D, L> {
     /// This operation never blocks as WriteGueard has an exclusive access to the Store
     pub fn load(&mut self, data: D) -> Index<D>
     where
-        D: Load<LoadContext = L>,
+        D: for <'l> OnLoad<LoadContext = L>,
     {
         let exclusive = &mut self.locked_exclusive;
 
@@ -527,7 +565,7 @@ impl<'a, D: Data, L> WriteGuard<'a, D, L> {
     /// This operation never blocks as WriteGueard has an exclusive access to the Store
     pub fn get_or_load<'l>(&mut self, k: &D::Key) -> Index<D>
     where
-        D: FromKey + Load<LoadContext = L>,
+        D: FromKey + OnLoad<'l, LoadContext = L>,
     {
         let shared = &mut self.shared;
         let exclusive = &mut self.locked_exclusive;
@@ -550,43 +588,7 @@ impl<'a, D: Data, L> WriteGuard<'a, D, L> {
     /// Move all new (pending) entries into the shared container
     pub fn finalize_requests(&mut self) {
         self.shared.entries.extend(&mut self.locked_exclusive.entries.drain());
-    }
-
-    pub fn update<'l>(
-        &mut self,
-        update_context: <D as OnLoad<'l>>::UpdateContext,
-        load_token: LoadToken<D>,
-        response: <D as Load>::LoadResponse,
-    ) where
-        D: Load<LoadContext = L> + OnLoad<'l>,
-    {
-        if load_token.is_canceled() {
-            return;
-        }
-
-        #[cfg(debug_assertions)]
-        {
-            let stored = {
-                let shared = &self.shared;
-                let exclusive = &self.locked_exclusive;
-                let k = &load_token.2;
-                exclusive
-                    .entries
-                    .get(k)
-                    .or_else(|| shared.entries.get(k))
-                    .map(|(_, p)| *p)
-                    .unwrap_or(ptr::null_mut())
-            };
-            debug_assert!(
-                stored == load_token.1,
-                "Internal error, entry was altered while token is still valid"
-            );
-        }
-
-        let entry = unsafe { &mut *load_token.1 };
-        entry
-            .value
-            .on_load_response(&mut self.locked_exclusive.load_context, update_context, load_token, response);
+        //self.locked_exclusive
     }
 
     fn drain_unused_filtered_impl<F: FnMut(&mut D) -> bool>(

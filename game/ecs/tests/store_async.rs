@@ -59,9 +59,9 @@ impl AsyncLoader<TestData> for TestDataLoader {
         request: String,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<String>>>>
     {
-        move async || {
+        Box::pin(async move {
             Some(format!("loaded - {}", request))
-        }
+        })
     }
 }
 
@@ -70,4 +70,27 @@ async fn simple() {
     utils::init_logger();
     
     let store = store::async_load::<TestData, TestDataLoader>(2, TestDataLoader);
+
+    {
+        let id = {
+            let mut store = store.try_read().unwrap();
+            store.get_or_load(&"test".to_owned())
+        };
+
+        {
+            let mut store = store.try_write().unwrap();
+            store.finalize_requests();
+            store.update<'l>(
+                &mut self,
+                (),
+                load_token: LoadToken<D>,
+                response: <D as Load>::LoadResponse,
+            ) where
+        }
+    }
+
+    {
+        let mut store = store.try_write().unwrap();
+        store.drain_unused();
+    }
 }
