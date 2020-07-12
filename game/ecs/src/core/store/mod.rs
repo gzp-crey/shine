@@ -9,7 +9,7 @@ pub fn no_load<D: Data>(page_size: usize) -> Store<D, ()> {
 
 pub fn async_load<D, W: AsyncLoader<D>>(page_size: usize, loader: W) -> Store<D, AsyncLoadContext<D>>
 where
-    D: Load<LoadContext = AsyncLoadContext<D>> + for<'l> OnLoad<'l>,
+    D: OnLoad<LoadContext = AsyncLoadContext<D>>,
 {
     use futures::channel::mpsc;
 

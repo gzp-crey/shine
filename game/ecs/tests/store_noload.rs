@@ -1,4 +1,4 @@
-use shine_ecs::core::store::{self, Data, FromKey, Store};
+use shine_ecs::core::store::{self, Data, FromKey};
 use std::sync::Arc;
 use std::{fmt, mem, thread};
 
@@ -44,7 +44,7 @@ impl Drop for TestData {
 fn simple_single_threaded() {
     utils::init_logger();
 
-    let store = store::no_load::<TestData>(2);
+    let mut store = store::no_load::<TestData>(2);
     let r0;
     let r1;
 
@@ -67,10 +67,7 @@ fn simple_single_threaded() {
     }
 
     log::debug!("request process");
-    {
-        let mut store = store.try_write().unwrap();
-        store.finalize_requests();
-    }
+    store.finalize_requests();
 
     log::debug!("check 0,1, request 2");
     {
@@ -85,11 +82,8 @@ fn simple_single_threaded() {
     }
 
     log::debug!("drop 2");
-    {
-        let mut store = store.try_write().unwrap();
-        store.finalize_requests();
-        store.drain_unused();
-    }
+    store.finalize_requests();
+    store.drain_unused();
 
     {
         let store = store.try_read().unwrap();
@@ -107,11 +101,8 @@ fn simple_single_threaded() {
     }
 
     log::debug!("drop 1");
-    {
-        let mut store = store.try_write().unwrap();
-        store.finalize_requests();
-        store.drain_unused();
-    }
+    store.finalize_requests();
+    store.drain_unused();
 
     {
         let store = store.try_read().unwrap();
@@ -126,12 +117,8 @@ fn simple_single_threaded() {
     }
 
     log::debug!("drop 0");
-    {
-        let mut store = store.try_write().unwrap();
-        store.finalize_requests();
-        store.drain_unused();
-        assert!(store.is_empty());
-    }
+    store.finalize_requests();
+    store.drain_unused();
 }
 
 #[test]
@@ -139,12 +126,11 @@ fn simple_multi_threaded() {
     utils::init_logger();
     utils::single_threaded_test();
 
-    let store = store::no_load::<TestData>(2);
-    let store = Arc::new(store);
-
     const ITER: u32 = 10;
+    let store = store::no_load::<TestData>(2);
 
     // request from multiple threads
+    let store = Arc::new(store);
     {
         let mut tp = vec![];
         for i in 0..ITER {
@@ -173,13 +159,11 @@ fn simple_multi_threaded() {
     }
 
     log::info!("request process");
-    {
-        let mut store = store.try_write().unwrap();
-        store.finalize_requests();
-        // no drain
-    }
+    let mut store = Arc::try_unwrap(store).map_err(|_| ()).unwrap();
+    store.finalize_requests();
 
     // check after process
+    let store = Arc::new(store);
     {
         let mut tp = vec![];
         for i in 0..ITER {
@@ -203,14 +187,12 @@ fn simple_multi_threaded() {
     }
 
     log::info!("drain");
-    {
-        let mut store = store.try_write().unwrap();
-        store.finalize_requests();
-        store.drain_unused();
-        // no drain
-    }
+    let mut store = Arc::try_unwrap(store).map_err(|_| ()).unwrap();
+    store.finalize_requests();
+    store.drain_unused();
 
     // check after drain
+    let store = Arc::new(store);
     {
         let mut tp = vec![];
         for i in 0..ITER {

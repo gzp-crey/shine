@@ -1,7 +1,7 @@
-use shine_ecs::core::store::{self, AsyncLoadContext, Data, FromKey, Load, LoadToken, OnLoad, Store, AsyncLoader};
+use shine_ecs::core::store::{self, AsyncLoadContext, AsyncLoader, Data, FromKey, LoadToken, OnLoad, OnBake};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::{fmt, mem, thread};
-use std::pin::Pin;
 
 mod utils;
 
@@ -25,7 +25,16 @@ impl FromKey for TestData {
     }
 }
 
-impl Load for TestData {
+impl<'b> OnBake<'b> for TestData {
+    type BakeContext = ();
+    
+    fn on_bake(&mut self, _bake_context:&mut ()) -> bool {
+        self.0 += "baked";
+        true
+    }
+}
+
+impl OnLoad for TestData {
     type LoadRequest = String;
     type LoadResponse = String;
     type LoadContext = AsyncLoadContext<Self>;
@@ -33,15 +42,10 @@ impl Load for TestData {
     fn on_load_request(&self, load_context: &mut AsyncLoadContext<Self>, load_token: LoadToken<TestData>) {
         load_context.request(load_token, self.0.clone());
     }
-}
-
-impl<'l> OnLoad<'l> for TestData {
-    type UpdateContext = ();
 
     fn on_load_response(
         &mut self,
         load_context: &mut AsyncLoadContext<Self>,
-        _update_context: (),
         load_token: LoadToken<TestData>,
         load_response: String,
     ) {
@@ -57,40 +61,25 @@ impl AsyncLoader<TestData> for TestDataLoader {
         &'a mut self,
         load_token: LoadToken<TestData>,
         request: String,
-    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<String>>>>
-    {
-        Box::pin(async move {
-            Some(format!("loaded - {}", request))
-        })
+    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<String>>>> {
+        Box::pin(async move { Some(format!("loaded - {}", request)) })
     }
 }
 
 #[tokio::test(threaded_scheduler)]
 async fn simple() {
     utils::init_logger();
-    
-    let store = store::async_load::<TestData, TestDataLoader>(2, TestDataLoader);
+
+    let mut store = store::async_load(2, TestDataLoader);
 
     {
-        let id = {
+        let _id = {
             let mut store = store.try_read().unwrap();
             store.get_or_load(&"test".to_owned())
         };
 
-        {
-            let mut store = store.try_write().unwrap();
-            store.finalize_requests();
-            store.update<'l>(
-                &mut self,
-                (),
-                load_token: LoadToken<D>,
-                response: <D as Load>::LoadResponse,
-            ) where
-        }
+        store.finalize_requests_with_bake(());
     }
 
-    {
-        let mut store = store.try_write().unwrap();
-        store.drain_unused();
-    }
+    store.drain_unused();
 }

@@ -1,46 +1,43 @@
-use crate::core::store::{Data, Loader, LoadToken, OnLoad};
-use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use crate::core::store::{Data, LoadGuard, LoadHandler, LoadToken, OnLoad};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use std::any::{Any, TypeId};
 use std::pin::Pin;
 
-pub struct AsyncLoadContext<R,Q, D>
+pub struct AsyncLoadContext<D>
 where
-    D: for<'l> OnLoad<'l, LoadContext = Self>,
+    D: OnLoad<LoadContext = Self>,
 {
-    pub(crate) request_sender: UnboundedSender<(LoadToken<D>, R)>,
-    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, Q)>,
-    pub(crate) response_receiver: UnboundedReceiver<(LoadToken<D>, Q)>,
+    pub(crate) request_sender: UnboundedSender<(LoadToken<D>, D::LoadRequest)>,
+    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, D::LoadResponse)>,
+    pub(crate) response_receiver: UnboundedReceiver<(LoadToken<D>, D::LoadResponse)>,
 }
 
-impl<R,Q,D> AsyncLoadContext<R,Q,D>
+impl<D> AsyncLoadContext<D>
 where
-    D: for<'l> OnLoad<'l, LoadContext = Self>,
+    D: OnLoad<LoadContext = Self>,
 {
-    pub fn request(&mut self, load_token: LoadToken<D>, request: R) {
+    pub fn request(&mut self, load_token: LoadToken<D>, request: D::LoadRequest) {
         log::debug!("Request loading for [{:?}]", load_token);
         if let Err(err) = self.request_sender.unbounded_send((load_token, request)) {
             log::warn!("Failed to send request {:?}: {:?}", TypeId::of::<D>(), err);
         }
     }
+}
 
-    pub fn update(&mut self) {
-
+impl<D> LoadHandler<D> for AsyncLoadContext<D>
+where
+    D: OnLoad<LoadContext = Self>,
+{
+    fn load<'l>(&mut self, store: LoadGuard<'l, D>) {
+        unimplemented!()
     }
 }
 
-impl<R,Q,D> Loader for AsyncLoadContext<R,Q,D>
+pub trait AsyncLoader<D>: 'static + Send + Sync
 where
-    D: for<'l> OnLoad<'l, LoadContext = Self>,
-{
-    type LoadRequest = R;
-    type LoadResponse = Q;
-}
-
-pub trait AsyncLoader<D>: 'static + Send + Sync 
-where
-    D: for<'l> OnLoad<'l>,
+    D: OnLoad,
 {
     fn load<'a>(
         &'a mut self,
@@ -49,12 +46,12 @@ where
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>>;
 }
 
-pub struct AsyncLoadWorker<R,Q,D>
+pub struct AsyncLoadWorker<D>
 where
-    D: for<'l> OnLoad<'l>,
+    D: OnLoad,
 {
-    pub(crate) request_receiver: UnboundedReceiver<(LoadToken<D>, R)>,
-    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, Q)>,
+    pub(crate) request_receiver: UnboundedReceiver<(LoadToken<D>, D::LoadRequest)>,
+    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, D::LoadResponse)>,
     pub(crate) loader: Box<dyn AsyncLoader<D>>,
 }
 
@@ -62,7 +59,7 @@ where
 
 impl<D: Data> AsyncLoadWorker<D>
 where
-    D: for<'l> OnLoad<'l>,
+    D: OnLoad,
 {
     async fn handle_one(&mut self) -> bool {
         let (load_token, data) = match self.request_receiver.next().await {
@@ -84,7 +81,7 @@ where
             return true;
         }
 
-         match self.response_sender.send((load_token, output)).await {
+        match self.response_sender.send((load_token, output)).await {
             Ok(_) => true,
             Err(err) => {
                 log::info!("Loader response failed {:?}: {:?}", TypeId::of::<D>(), err);
