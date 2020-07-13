@@ -1,17 +1,25 @@
-use shine_ecs::core::store::{self, AsyncLoadContext, AsyncLoader, Data, FromKey, LoadToken, OnLoad, OnBake};
+use shine_ecs::core::store::{self, AsyncLoadHandler, AsyncLoader, Data, FromKey, LoadToken, OnLoad, OnLoading};
 use std::pin::Pin;
-use std::sync::Arc;
-use std::{fmt, mem, thread};
+use std::time::Duration;
 
 mod utils;
 
 /// Test resource data
-struct TestData(String);
+#[derive(Debug)]
+struct TestData {
+    text: String,
+    request_count: u32,
+    response_count: u32,
+}
 
 impl TestData {
-    fn new(s: String) -> TestData {
-        log::trace!("creating '{}'", s);
-        TestData(s)
+    fn new(text: String) -> TestData {
+        log::trace!("creating '{}'", text);
+        TestData {
+            text,
+            request_count: 0,
+            response_count: 0,
+        }
     }
 }
 
@@ -21,36 +29,39 @@ impl Data for TestData {
 
 impl FromKey for TestData {
     fn from_key(key: &String) -> TestData {
-        Self::new(format!("id: {}", key))
+        Self::new(format!("from_key({})", key))
     }
 }
 
-impl<'b> OnBake<'b> for TestData {
-    type BakeContext = ();
-    
-    fn on_bake(&mut self, _bake_context:&mut ()) -> bool {
-        self.0 += "baked";
-        true
-    }
+impl<'b> OnLoading<'b> for TestData {
+    type LoadingContext = ();
 }
 
 impl OnLoad for TestData {
     type LoadRequest = String;
     type LoadResponse = String;
-    type LoadContext = AsyncLoadContext<Self>;
+    type LoadHandler = AsyncLoadHandler<Self>;
 
-    fn on_load_request(&self, load_context: &mut AsyncLoadContext<Self>, load_token: LoadToken<TestData>) {
-        load_context.request(load_token, self.0.clone());
+    fn on_load_request(&mut self, load_handler: &mut AsyncLoadHandler<Self>, load_token: LoadToken<TestData>) {
+        log::debug!("on_load_request pre: {:?}", self);
+        self.request_count += 1;
+        load_handler.request(load_token, self.text.clone());
+        log::debug!("on_load_request post: {:?}", self);
     }
 
     fn on_load_response(
         &mut self,
-        load_context: &mut AsyncLoadContext<Self>,
+        load_handler: &mut AsyncLoadHandler<Self>,
+        _loading_context: &mut (),
         load_token: LoadToken<TestData>,
         load_response: String,
     ) {
-        self.0 = load_response;
-        load_context.request(load_token, self.0.clone());
+        log::debug!("on_load_response pre: {:?}, {:?}", self, load_response);
+        self.response_count += 1;
+        self.text = format!("on_load_response({}, {})", self.text, load_response);
+        self.request_count += 1;
+        load_handler.request(load_token, self.text.clone());
+        log::debug!("on_load_response post: {:?}", self);
     }
 }
 
@@ -59,10 +70,14 @@ struct TestDataLoader;
 impl AsyncLoader<TestData> for TestDataLoader {
     fn load<'a>(
         &'a mut self,
-        load_token: LoadToken<TestData>,
+        _load_token: LoadToken<TestData>,
         request: String,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<String>>>> {
-        Box::pin(async move { Some(format!("loaded - {}", request)) })
+        Box::pin(async move {
+            let response = format!("load({})", request);
+            log::debug!("async loading {} -> {}", request, response);
+            Some(response)
+        })
     }
 }
 
@@ -73,13 +88,25 @@ async fn simple() {
     let mut store = store::async_load(2, TestDataLoader);
 
     {
-        let _id = {
+        log::debug!("Creating item");
+        let id = {
             let mut store = store.try_read().unwrap();
             store.get_or_load(&"test".to_owned())
         };
 
-        store.finalize_requests_with_bake(());
+        for i in 0..3 {
+            tokio::time::delay_for(Duration::from_micros(100)).await;
+            log::debug!("Load {}", i);
+            store.load_and_finalize_requests(());
+
+            {
+                let store = store.try_read().unwrap();
+                let item = store.at(&id);
+                assert!(item.request_count >= item.response_count);
+            }
+        }
     }
 
+    log::debug!("Clearing store");
     store.drain_unused();
 }

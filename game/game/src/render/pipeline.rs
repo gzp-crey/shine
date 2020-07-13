@@ -1,17 +1,16 @@
 use crate::assets::{
     AssetError, AssetIO, IntoVertexTypeId, PipelineBuffer, PipelineDescriptor, ShaderType, Url, UrlError,
-    VertexBufferLayout, VertexTypeId,
+    VertexBufferLayout, VertexBufferLayouts, VertexTypeId,
 };
 use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead};
 use shine_ecs::core::store::{
-    CancellationToken, Data, DataLoader, FromKey, GeneralId, Index, LoadContext, LoadListeners, ReadGuard, Store,
-    Update,
+    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
 use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
 
-/// Unique key for the render pipeline.
+/// Unique key for a render pipeline.
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct PipelineKey {
     pub name: String,
@@ -36,11 +35,10 @@ impl fmt::Debug for PipelineKey {
 
 /// Render pipeline
 pub enum Pipeline {
-    Pending(LoadListeners),
-    WaitingDependency(PartialPipeline, LoadListeners),
+    Requested(Url, VertexTypeId/*, LoadListeners*/),
+    WaitingDependency(WaitingDependency/*, LoadListeners*/),
     Compiled(PipelineBuffer),
     Error,
-    None,
 }
 
 impl Pipeline {
@@ -55,18 +53,25 @@ impl Pipeline {
 
 impl Data for Pipeline {
     type Key = PipelineKey;
-    type LoadRequest = PipelineLoadRequest;
-    type LoadResponse = PipelineLoadResponse;
 }
 
 impl FromKey for Pipeline {
-    fn from_key(key: &PipelineKey) -> (Self, Option<PipelineLoadRequest>) {
-        (Pipeline::Pending(LoadListeners::new()), Some(key.to_owned()))
+    fn from_key(key: &PipelineKey) -> Self {
+        let vertex_layouts = pipeline_key.vertex_type.to_layout();
+        match Url::parse(&key) {
+            Ok(url) => Pipeline::Requested(url, vertex_layouts /*, LoadListener::new()*/),
+            Err(err) => {
+                log::warn!("Invalid pipeline url ({}): {:?}", key, err);
+                Pipeline::Error
+            }
+        }
     }
 }
-
+/*
 impl<'a> Update<'a> for Pipeline {
     type UpdateContext = (&'a Context, &'a ShaderStore);
+    type LoadRequest = PipelineLoadRequest;
+    type LoadResponse = PipelineLoadResponse;
 
     fn update(
         &mut self,
@@ -101,125 +106,111 @@ impl<'a> Update<'a> for Pipeline {
         None
     }
 }
+*/
 
-/// Pipeline dependencies required for compilation
-pub struct PartialPipeline {
+/// Partially loaded pipeline and pipeline dependency tracking
+pub struct WaitingDependency {
     descriptor: Box<PipelineDescriptor>,
-    vertex_layouts: Vec<VertexBufferLayout>,
+    vertex_layouts: VertexBufferLayouts,
     vertex_shader: ShaderDependency,
     fragment_shader: ShaderDependency,
 }
 
-impl PartialPipeline {
+impl WaitingDependency {
     fn from_descriptor(
-        load_context: &LoadContext<'_, Pipeline>,
         descriptor: Box<PipelineDescriptor>,
-        vertex_layouts: Vec<VertexBufferLayout>,
-        shaders: &mut ShaderStoreRead<'_>,
+        vertex_layouts: VertexBufferLayouts,
     ) -> PartialPipeline {
-        let vertex_shader = ShaderDependency::new(
-            shaders,
-            &descriptor.vertex_stage.shader,
-            ShaderType::Vertex,
-            load_context,
-            Ok(PipelineLoadData::ShaderReady(ShaderType::Vertex)),
-        );
-        let fragment_shader = ShaderDependency::new(
-            shaders,
-            &descriptor.fragment_stage.shader,
-            ShaderType::Fragment,
-            load_context,
-            Ok(PipelineLoadData::ShaderReady(ShaderType::Fragment)),
-        );
-
         PartialPipeline {
             descriptor,
             vertex_layouts,
-            vertex_shader,
-            fragment_shader,
-        }
-    }
-
-    fn with_updated_shader_dependency(self, shader_type: ShaderType, shaders: &mut ShaderStoreRead<'_>) -> Self {
-        match shader_type {
-            ShaderType::Vertex => PartialPipeline {
-                vertex_shader: self.vertex_shader.update(shaders),
-                ..self
-            },
-            ShaderType::Fragment => PartialPipeline {
-                fragment_shader: self.fragment_shader.update(shaders),
-                ..self
-            },
-            _ => unreachable!(),
+            vertex_shader : ShaderDependency::from_key(ShaderType::Vertex,descriptor.vertex_stage.shader.clone()),
+            fragment_shader: ShaderDependency::from_key(ShaderType::Fragment,descriptor.fragment_stage.shader.clone()),
         }
     }
 
     fn into_pipeline(
         self,
-        load_context: &LoadContext<'_, Pipeline>,
+        &load_handler: AsyncLoadHandler<Pipeline>,
+        load_token: &LoadToken<Pipeline>,
         context: &Context,
         shaders: &mut ShaderStoreRead<'_>,
-        listeners: LoadListeners,
+        //listeners: LoadListeners,
     ) -> Pipeline {
-        match (&self.vertex_shader, &self.fragment_shader) {
-            (ShaderDependency::Failed, _) => {
-                listeners.notify_all();
-                log::warn!("Pipeline[{:?}] compilation failed due to vertex shader", load_context);
-                Pipeline::Error
+        let vs = match self.vertex_shader.request(shaders, ||{} ) {
+            Ok(vs) => vs,
+            Err(err) => {
+                log::warn!("[{:?}] Pipeline vertex shader dependency failed: {:?}", load_token, err);
+                return Pipeline::Error
             }
-            (_, ShaderDependency::Failed) => {
-                listeners.notify_all();
-                log::warn!("Pipeline[{:?}] compilation failed due to fragment shader", load_context);
-                Pipeline::Error
+        };
+
+        let fs = match self.fragment_shader.request(shaders, ||{} ) {
+            Ok(fs) => fs,
+            Err(err) => {
+                log::warn!("[{:?}] Pipeline fragment shader dependency failed: {:?}", load_token, err);
+                return Pipeline::Error
             }
+        };
 
-            (ShaderDependency::Pending(_, _), _) => Pipeline::WaitingDependency(self, listeners),
-            (_, ShaderDependency::Pending(_, _)) => Pipeline::WaitingDependency(self, listeners),
-
-            (ShaderDependency::Completed(vs), ShaderDependency::Completed(fs)) => {
-                listeners.notify_all();
-                match self.descriptor.to_pipeline_buffer(
-                    context.device(),
-                    context.swap_chain_format(),
-                    &self.vertex_layouts,
-                    |stage| match stage {
-                        ShaderType::Vertex => Ok(shaders.at(&vs).shadere_module().unwrap()),
-                        ShaderType::Fragment => Ok(shaders.at(&fs).shadere_module().unwrap()),
-                        _ => unreachable!(),
-                    },
-                ) {
-                    Ok(pipeline) => {
-                        log::debug!("Pipeline[{:?}] compilation completed", load_context);
-                        Pipeline::Compiled(pipeline)
-                    }
-                    Err(err) => {
-                        log::warn!("Pipeline[{:?}] compilation failed: {:?}", load_context, err);
-                        Pipeline::Error
-                    }
+        if let (Some(vs), Some(fs)) = (vs,fs) {
+            //listeners.notify_all();
+            self.descriptor.to_pipeline_buffer(
+                context.device(),
+                context.swap_chain_format(),
+                &self.vertex_layouts,
+                |stage| match stage {
+                    ShaderType::Vertex => Ok(shaders.at(vs).shadere_module().unwrap()),
+                    ShaderType::Fragment => Ok(shaders.at(fs).shadere_module().unwrap()),
+                    _ => unreachable!(),
+                },
+            ) {
+                Ok(pipeline) => {
+                    log::debug!("[{:?}] Pipeline compilation completed", load_token);
+                    Pipeline::Compiled(pipeline)
+                }
+                Err(err) => {
+                    log::warn!("[{:?}] Pipeline compilation failed: {:?}", load_token, err);
+                    Pipeline::Error
                 }
             }
         }
+        else {
+            load_handler.request(load_token, WaitDependencies(deps));
+            WaitingDependency( self )
+        }
     }
 }
-
+/*
 pub enum PipelineLoadData {
-    Descriptor(Box<PipelineDescriptor>, Vec<VertexBufferLayout>),
+    Descriptor(Box<PipelineDescriptor>, VertexBufferLayouts),
     ShaderReady(ShaderType),
 }
+*/
+pub enum PipelineLoadRequest {
+    LoadResource(Url, VertexLayouts)
+    WaitDependency
+};
 
-pub type PipelineLoadRequest = PipelineKey;
 pub type PipelineLoadResponse = Result<PipelineLoadData, PipelineLoadError>;
 
 /// Error during pipeline load
 #[derive(Debug)]
 pub enum PipelineLoadError {
     Asset(AssetError),
+    DependencyFailed,
     Canceled,
 }
 
 impl From<UrlError> for PipelineLoadError {
     fn from(err: UrlError) -> PipelineLoadError {
         PipelineLoadError::Asset(AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<LoadCanceled> for PipelineLoadError {
+    fn from(_err: LoadCanceled) -> PipelineLoadError {
+        PipelineLoadError::Canceled
     }
 }
 
@@ -234,7 +225,7 @@ impl From<bincode::Error> for PipelineLoadError {
         PipelineLoadError::Asset(AssetError::ContentLoad(format!("Binary stream error: {}", err)))
     }
 }
-
+/*
 pub struct PipelineLoader {
     assetio: Arc<AssetIO>,
 }
@@ -288,7 +279,7 @@ pub type PipelineStore = Store<Pipeline>;
 pub type PipelineStoreRead<'a> = ReadGuard<'a, Pipeline>;
 pub type PipelineIndex = Index<Pipeline>;
 pub type PipelineId = GeneralId<Pipeline>;
-
+*/
 pub mod systems {
     use super::*;
     use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
@@ -300,9 +291,7 @@ pub mod systems {
             .write_resource::<PipelineStore>()
             .build(move |_, _, (context, shaders, pipelines), _| {
                 //log::info!("pipeline");
-                let mut pipelines = pipelines.write();
-                pipelines.update2((&*context, &*shaders));
-                pipelines.finalize_requests();
+                pipelines.load_and_finalize_requests(&*context);
             })
     }
 
@@ -310,7 +299,6 @@ pub mod systems {
         SystemBuilder::new("gc_pipelines")
             .write_resource::<PipelineStore>()
             .build(move |_, _, pipelines, _| {
-                let mut pipelines = pipelines.write();
                 pipelines.drain_unused();
             })
     }

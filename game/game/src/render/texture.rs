@@ -1,11 +1,97 @@
 use crate::assets::{AssetError, AssetIO, TextureBuffer, TextureImage, Url, UrlError};
 use crate::render::Context;
 use shine_ecs::core::store::{
-    CancellationToken, Data, DataLoader, DataUpdater, FromKey, GeneralId, Index, LoadContext, LoadListeners, ReadGuard,
-    Store,
+    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
 use std::pin::Pin;
-use std::sync::Arc;
+
+/// Unique key for a texture
+pub type TextureKey = String;
+
+pub enum Texture {
+    Requested(Url /*LoadListeners*/),
+    Compiled(TextureBuffer),
+    Error,
+}
+
+impl Texture {
+    pub fn texture_buffer(&self) -> Option<&TextureBuffer> {
+        if let Texture::Compiled(ref texture_buffer) = self {
+            Some(texture_buffer)
+        } else {
+            None
+        }
+    }
+}
+
+impl Data for Texture {
+    type Key = TextureKey;
+}
+
+impl FromKey for Texture {
+    fn from_key(key: &String) -> Self {
+        match Url::parse(&key) {
+            Ok(url) => Texture::Requested(url /*, LoadListener::new()*/),
+            Err(err) => {
+                log::warn!("Invalid texture url ({}): {:?}", key, err);
+                Texture::Error
+            }
+        }
+    }
+}
+
+impl<'a> OnLoading<'a> for Texture {
+    type LoadingContext = &'a Context;
+}
+
+impl OnLoad for Texture {
+    type LoadRequest = TextureLoadRequest;
+    type LoadResponse = TextureLoadResponse;
+    type LoadHandler = AsyncLoadHandler<Self>;
+
+    fn on_load_request(&mut self, load_handler: &mut Self::LoadHandler, load_token: LoadToken<Self>) {
+        match self {
+            Texture::Requested(id) => load_handler.request(load_token, id.to_owned()),
+            _ => unreachable!(),
+        }
+    }
+
+    fn on_load_response<'l>(
+        &mut self,
+        _load_handler: &mut Self::LoadHandler,
+        load_context: &mut &'l Context,
+        load_token: LoadToken<Self>,
+        load_response: TextureLoadResponse,
+    ) {
+        *self = match (std::mem::replace(self, Texture::Error), load_response) {
+            (Texture::Requested(_ /*,listeners*/), Err(err)) => {
+                //listeners.notify_all();
+                log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
+                Texture::Error
+            }
+
+            (Texture::Requested(_ /*,listeners*/), Ok(texture_image)) => {
+                //listeners.notify_all();
+                match texture_image.to_texture_buffer(load_context.device()) {
+                    Ok((texture_buffer, init_command)) => {
+                        load_context.queue().submit(init_command);
+                        log::debug!("[{:?}] Texture compilation completed", load_token);
+                        Texture::Compiled(texture_buffer)
+                    }
+                    Err(err) => {
+                        log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
+                        Texture::Error
+                    }
+                }
+            }
+
+            _ => unreachable!(),
+        };
+    }
+}
+
+pub type TextureLoadRequest = Url;
+pub type TextureLoadResponse = Result<TextureImage, TextureLoadError>;
 
 /// Error during texture loading
 #[derive(Debug)]
@@ -17,6 +103,12 @@ pub enum TextureLoadError {
 impl From<UrlError> for TextureLoadError {
     fn from(err: UrlError) -> TextureLoadError {
         TextureLoadError::Asset(AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<LoadCanceled> for TextureLoadError {
+    fn from(_err: LoadCanceled) -> TextureLoadError {
+        TextureLoadError::Canceled
     }
 }
 
@@ -32,137 +124,36 @@ impl From<bincode::Error> for TextureLoadError {
     }
 }
 
-pub enum Texture {
-    Pending(LoadListeners),
-    Compiled(TextureBuffer),
-    Error,
-    None,
-}
+impl AssetIO {
+    async fn load_texture_from_url(&mut self, load_token: LoadToken<Texture>, url: Url) -> TextureLoadResponse {
+        log::debug!("[{:?}] Loading texture...", load_token);
+        let data = self.download_binary(&url).await?;
 
-impl Texture {
-    pub fn texture_buffer(&self) -> Option<&TextureBuffer> {
-        if let Texture::Compiled(ref texture_buffer) = self {
-            Some(texture_buffer)
-        } else {
-            None
-        }
-    }
-
-    fn on_update(
-        &mut self,
-        load_context: LoadContext<'_, Texture>,
-        context: &Context,
-        load_response: TextureLoadResponse,
-    ) -> Option<String> {
-        *self = match (std::mem::replace(self, Texture::None), load_response) {
-            (Texture::Pending(listeners), Err(err)) => {
-                listeners.notify_all();
-                log::warn!("Texture[{:?}] compilation failed: {:?}", load_context, err);
-                Texture::Error
-            }
-
-            (Texture::Pending(listeners), Ok(texture_image)) => {
-                listeners.notify_all();
-                match texture_image.to_texture_buffer(context.device()) {
-                    Ok((texture_buffer, init_command)) => {
-                        context.queue().submit(init_command);
-                        log::debug!("Texture[{:?}] compilation completed", load_context);
-                        Texture::Compiled(texture_buffer)
-                    }
-                    Err(err) => {
-                        log::warn!("Texture[{:?}] compilation failed: {:?}", load_context, err);
-                        Texture::Error
-                    }
-                }
-            }
-
-            _ => unreachable!(),
-        };
-        None
-    }
-}
-
-impl Data for Texture {
-    type Key = String;
-    type LoadRequest = TextureLoadRequest;
-    type LoadResponse = TextureLoadResponse;
-}
-
-impl FromKey for Texture {
-    fn from_key(key: &String) -> (Self, Option<String>) {
-        (Texture::Pending(LoadListeners::new()), Some(key.to_owned()))
-    }
-}
-
-pub type TextureLoadRequest = String;
-pub type TextureLoadResponse = Result<TextureImage, TextureLoadError>;
-
-pub struct TextureLoader {
-    assetio: Arc<AssetIO>,
-}
-
-impl TextureLoader {
-    pub fn new(assetio: Arc<AssetIO>) -> TextureLoader {
-        TextureLoader { assetio }
-    }
-
-    async fn load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<Texture>,
-        source_id: String,
-    ) -> TextureLoadResponse {
-        if cancellation_token.is_canceled() {
-            return Err(TextureLoadError::Canceled);
-        }
-
-        let url = Url::parse(&source_id)?;
-        log::debug!("[{}] Loading texture...", url.as_str());
-        let data = self.assetio.download_binary(&url).await?;
-
-        log::debug!("[{}] Decompressiong texture...", url.as_str());
+        load_token.ok()?;
+        log::debug!("[{:?}] Decompressing texture...", load_token);
         let texture_image = bincode::deserialize::<TextureImage>(&data)?.decompress()?;
         Ok(texture_image)
     }
-
-    async fn try_load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<Texture>,
-        source_id: String,
-    ) -> Option<TextureLoadResponse> {
-        match self.load_from_url(cancellation_token, source_id).await {
-            Err(TextureLoadError::Canceled) => None,
-            result => Some(result),
-        }
-    }
 }
 
-impl DataLoader<Texture> for TextureLoader {
+impl AsyncLoader<Texture> for AssetIO {
     fn load<'a>(
         &'a mut self,
-        source_id: String,
-        cancellation_token: CancellationToken<Texture>,
+        load_token: LoadToken<Texture>,
+        request: TextureLoadRequest,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<TextureLoadResponse>>>> {
-        Box::pin(self.try_load_from_url(cancellation_token, source_id))
+        Box::pin(async move {
+            match self.load_texture_from_url(load_token, request).await {
+                Err(TextureLoadError::Canceled) => None,
+                result => Some(result),
+            }
+        })
     }
 }
 
-pub struct TextureUpdater<'a>(&'a Context);
-
-impl<'a> DataUpdater<'a, Texture> for TextureUpdater<'a> {
-    fn update<'u>(
-        &mut self,
-        load_context: LoadContext<'u, Texture>,
-        data: &mut Texture,
-        load_response: TextureLoadResponse,
-    ) -> Option<TextureLoadRequest> {
-        data.on_update(load_context, self.0, load_response)
-    }
-}
-
-pub type TextureStore = Store<Texture>;
-pub type TextureStoreRead<'a> = ReadGuard<'a, Texture>;
+pub type TextureStore = Store<Texture, AsyncLoadHandler<Texture>>;
+pub type TextureStoreRead<'a> = ReadGuard<'a, Texture, AsyncLoadHandler<Texture>>;
 pub type TextureIndex = Index<Texture>;
-pub type TextureId = GeneralId<Texture>;
 
 pub mod systems {
     use super::*;
@@ -173,10 +164,7 @@ pub mod systems {
             .read_resource::<Context>()
             .write_resource::<TextureStore>()
             .build(move |_, _, (context, textures), _| {
-                let mut textures = textures.write();
-                let context: &Context = &*context;
-                textures.update(&mut TextureUpdater(context));
-                textures.finalize_requests();
+                textures.load_and_finalize_requests(&*context);
             })
     }
 
@@ -184,7 +172,6 @@ pub mod systems {
         SystemBuilder::new("gc_texture")
             .write_resource::<TextureStore>()
             .build(move |_, _, textures, _| {
-                let mut textures = textures.write();
                 textures.drain_unused();
             })
     }

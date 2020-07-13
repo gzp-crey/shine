@@ -7,18 +7,17 @@ pub fn no_load<D: Data>(page_size: usize) -> Store<D, ()> {
     Store::new(page_size)
 }
 
-pub fn async_load<D, W: AsyncLoader<D>>(page_size: usize, loader: W) -> Store<D, AsyncLoadContext<D>>
+pub fn async_load<D, W: AsyncLoader<D>>(page_size: usize, loader: W) -> Store<D, AsyncLoadHandler<D>>
 where
-    D: OnLoad<LoadContext = AsyncLoadContext<D>>,
+    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
 {
     use futures::channel::mpsc;
 
     let (request_sender, request_receiver) = mpsc::unbounded();
     let (response_sender, response_receiver) = mpsc::unbounded();
 
-    let load_context = AsyncLoadContext {
+    let load_context = AsyncLoadHandler {
         request_sender,
-        response_sender: response_sender.clone(),
         response_receiver,
     };
 

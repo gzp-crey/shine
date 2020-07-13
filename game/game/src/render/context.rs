@@ -13,13 +13,10 @@ pub struct Context {
 impl Context {
     pub async fn new(instance: wgpu::Instance, surface: &Surface, config: &Config) -> Result<Context, GameError> {
         let adapter = instance
-            .request_adapter(
-                &wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::Default,
-                    compatible_surface: Some(surface.surface()),
-                },
-                wgpu::UnsafeFeatures::disallow(),
-            )
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::Default,
+                compatible_surface: Some(surface.surface()),
+            })
             .await
             .ok_or_else(|| GameError::Render("Adapter not found".to_owned()))?;
 

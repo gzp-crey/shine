@@ -29,11 +29,11 @@ impl VertexTypeId {
         VertexTypeId(bincode::serialize(&vec![layout]).unwrap())
     }
 
-    pub fn from_layouts(layouts: &Vec<VertexBufferLayout>) -> Self {
+    pub fn from_layouts(layouts: &VertexBufferLayouts) -> Self {
         VertexTypeId(bincode::serialize(layouts).unwrap())
     }
 
-    pub fn to_layout(&self) -> Vec<VertexBufferLayout> {
+    pub fn to_layout(&self) -> VertexBufferLayouts {
         bincode::deserialize(&self.0).unwrap()
     }
 }
@@ -68,6 +68,8 @@ pub struct VertexBufferLayout {
     pub stride: wgpu::BufferAddress,
     pub attributes: Vec<VertexAttribute>,
 }
+
+pub type VertexBufferLayouts = Vec<VertexBufferLayout>;
 
 pub trait Vertex: 'static + bytemuck::Pod + bytemuck::Zeroable {
     fn buffer_layout() -> VertexBufferLayout;

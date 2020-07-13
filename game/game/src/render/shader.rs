@@ -1,71 +1,104 @@
 use crate::assets::{AssetError, AssetIO, ShaderType, Url, UrlError};
 use crate::render::Context;
 use shine_ecs::core::store::{
-    CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
-    Update,
+    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
-use std::io;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::{io, mem};
 
-/// Helper to manage the state of a shader dependency
-pub enum ShaderDependency {
+enum ShaderDependencyInner {
+    Unknown,
+    ShaderKey(ShaderType, ShaderKey),
     Pending(ShaderType, ShaderIndex),
-    Completed(ShaderIndex),
+    Subscribed(ShaderType, ShaderIndex),
+    Completed(ShaderType, ShaderIndex),
     Failed,
 }
 
-impl ShaderDependency {
-    pub fn new<D: Data>(
+impl ShaderDependencyInner {
+    fn from_shader_index<F>(
+        ty: ShaderType,
+        id: ShaderIndex,
         shaders: &mut ShaderStoreRead<'_>,
-        key: &str,
-        shader_type: ShaderType,
-        load_context: &LoadContext<'_, D>,
-        notify_data: D::LoadResponse,
-    ) -> ShaderDependency {
-        let id = shaders.get_or_add_blocking(&key.to_owned());
+        on_subscribe: F,
+    ) -> ShaderDependencyInner
+    where
+        F: FnOnce(),
+    {
         match shaders.at(&id) {
-            Shader::Pending(ref listeners) => {
-                listeners.add(load_context, notify_data);
-                ShaderDependency::Pending(shader_type, id)
+            Shader::Requested(_) => {
+                on_subscribe();
+                ShaderDependencyInner::Subscribed(ty, id)
             }
             Shader::Compiled(st, _) => {
-                if *st == shader_type {
-                    ShaderDependency::Completed(id)
+                if *st == ty {
+                    ShaderDependencyInner::Completed(ty, id)
                 } else {
-                    ShaderDependency::Failed
+                    ShaderDependencyInner::Failed
                 }
             }
-            Shader::Error => ShaderDependency::Failed,
-            Shader::None => unreachable!(),
+            _ => ShaderDependencyInner::Failed,
         }
     }
 
-    pub fn update(self, shaders: &mut ShaderStoreRead<'_>) -> ShaderDependency {
+    fn request<F>(self, shaders: &mut ShaderStoreRead<'_>, on_subscribe: F) -> ShaderDependencyInner
+    where
+        F: FnOnce(),
+    {
+        use ShaderDependencyInner::*;
         match self {
-            ShaderDependency::Pending(shader_type, id) => match shaders.at(&id) {
-                Shader::Pending(_) => ShaderDependency::Pending(shader_type, id),
-                Shader::Compiled(st, _) => {
-                    if *st == shader_type {
-                        ShaderDependency::Completed(id)
-                    } else {
-                        ShaderDependency::Failed
-                    }
-                }
-                Shader::Error => ShaderDependency::Failed,
-                Shader::None => unreachable!(),
-            },
-            sd => sd,
+            s @ Completed(_, _) | s @ Failed | s @ Unknown => s,
+            ShaderKey(ty, key) => {
+                let id = shaders.get_or_add(&key.to_owned());
+                ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe)
+            }
+            Pending(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe),
+            Subscribed(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, || {}),
         }
     }
 }
 
+
+/// Error indicating a failed shader dependency request.
+pub struct ShaderDependencyError;
+
+/// Helper to manage dependency on a shader
+pub struct ShaderDependency(ShaderDependencyInner);
+
+impl ShaderDependency {
+    pub fn unknown() -> ShaderDependency {
+        ShaderDependency(ShaderDependencyInner::Unknown)
+    }
+
+    pub fn from_key(ty: ShaderType, key: ShaderKey) -> ShaderDependency {
+        ShaderDependency(ShaderDependencyInner::ShaderKey(ty, key))
+    }
+
+    pub fn from_index(ty: ShaderType, id: ShaderIndex) -> ShaderDependency {
+        ShaderDependency(ShaderDependencyInner::Pending(ty, id))
+    }
+
+    pub fn request<F>(&mut self, shaders: &mut ShaderStoreRead<'_>, on_subscribe: F) -> Result<Option<&ShaderIndex>, ShaderDependencyError>
+    where
+        F: FnOnce(),
+    {
+        self.0 = mem::replace(&mut self.0, ShaderDependencyInner::Failed).request(shaders, on_subscribe);
+        match &self.0 {
+            Completed(_, id) => Ok(Some(id)),
+            Failed => Err(ShaderDependencyError),
+            _ => Ok(None)
+        }
+    }
+}
+
+/// Unique key for a shader
+pub type ShaderKey = String;
+
 pub enum Shader {
-    Pending(LoadListeners),
+    Requested(Url),
     Compiled(ShaderType, wgpu::ShaderModule),
     Error,
-    None,
 }
 
 impl Shader {
@@ -79,48 +112,66 @@ impl Shader {
 }
 
 impl Data for Shader {
-    type Key = String;
-    type LoadRequest = ShaderLoadRequest;
-    type LoadResponse = ShaderLoadResponse;
+    type Key = ShaderKey;
 }
 
 impl FromKey for Shader {
-    fn from_key(key: &String) -> (Self, Option<String>) {
-        (Shader::Pending(LoadListeners::new()), Some(key.to_owned()))
+    fn from_key(key: &ShaderKey) -> Self {
+        match Url::parse(&key) {
+            Ok(url) => Shader::Requested(url /*, LoadListener::new()*/),
+            Err(err) => {
+                log::warn!("Invalid shader url ({}): {:?}", key, err);
+                Shader::Error
+            }
+        }
     }
 }
 
-impl<'a> Update<'a> for Shader {
-    type UpdateContext = &'a Context;
+impl<'a> OnLoading<'a> for Shader {
+    type LoadingContext = &'a Context;
+}
 
-    fn update(
+impl OnLoad for Shader {
+    type LoadRequest = ShaderLoadRequest;
+    type LoadResponse = ShaderLoadResponse;
+    type LoadHandler = AsyncLoadHandler<Self>;
+
+    fn on_load_request(&mut self, load_handler: &mut Self::LoadHandler, load_token: LoadToken<Self>) {
+        match self {
+            Shader::Requested(id) => load_handler.request(load_token, id.clone()),
+            _ => unreachable!(),
+        }
+    }
+
+    fn on_load_response<'l>(
         &mut self,
-        load_context: LoadContext<'_, Shader>,
-        update_context: Self::UpdateContext,
+        _load_handler: &mut Self::LoadHandler,
+        load_context: &mut &'l Context,
+        load_token: LoadToken<Self>,
         load_response: ShaderLoadResponse,
-    ) -> Option<ShaderLoadRequest> {
-        let context = update_context;
-        *self = match (std::mem::replace(self, Shader::None), load_response) {
-            (Shader::Pending(listeners), Err(err)) => {
-                listeners.notify_all();
-                log::warn!("Shader[{:?}] compilation failed: {:?}", load_context, err);
+    ) {
+        *self = match (mem::replace(self, Shader::Error), load_response) {
+            (Shader::Requested(_ /*, listeners*/), Err(err)) => {
+                //listeners.notify_all();
+                log::warn!("[{:?}] Shader compilation failed: {:?}", load_token, err);
                 Shader::Error
             }
 
-            (Shader::Pending(listeners), Ok((ty, spirv))) => {
-                listeners.notify_all();
-                let shader = context.device().create_shader_module(wgpu::util::make_spirv(&spirv));
-                log::debug!("Shader[{:?}] compilation completed", load_context);
+            (Shader::Requested(_ /*, listeners*/), Ok((ty, spirv))) => {
+                //listeners.notify_all();
+                let shader = load_context
+                    .device()
+                    .create_shader_module(wgpu::util::make_spirv(&spirv));
+                log::debug!("[{:?}] Shader compilation completed", load_token);
                 Shader::Compiled(ty, shader)
             }
 
             _ => unreachable!(),
         };
-        None
     }
 }
 
-pub type ShaderLoadRequest = String;
+pub type ShaderLoadRequest = Url;
 pub type ShaderLoadResponse = Result<(ShaderType, Vec<u8>), ShaderLoadError>;
 
 /// Error during shader load
@@ -136,6 +187,12 @@ impl From<UrlError> for ShaderLoadError {
     }
 }
 
+impl From<LoadCanceled> for ShaderLoadError {
+    fn from(_err: LoadCanceled) -> ShaderLoadError {
+        ShaderLoadError::Canceled
+    }
+}
+
 impl From<AssetError> for ShaderLoadError {
     fn from(err: AssetError) -> ShaderLoadError {
         ShaderLoadError::Asset(err)
@@ -148,54 +205,32 @@ impl From<io::Error> for ShaderLoadError {
     }
 }
 
-pub struct ShaderLoader {
-    assetio: Arc<AssetIO>,
-}
-
-impl ShaderLoader {
-    pub fn new(assetio: Arc<AssetIO>) -> ShaderLoader {
-        ShaderLoader { assetio }
-    }
-
-    async fn load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<Shader>,
-        source_id: String,
-    ) -> ShaderLoadResponse {
-        if cancellation_token.is_canceled() {
-            return Err(ShaderLoadError::Canceled);
-        }
-        let url = Url::parse(&source_id)?;
+impl AssetIO {
+    async fn load_shader_from_url(&mut self, load_token: LoadToken<Shader>, url: Url) -> ShaderLoadResponse {
         let ty = ShaderType::from_str(url.extension())?;
-        log::debug!("[{}] Loading shader...", url.as_str());
-        let data = self.assetio.download_binary(&url).await?;
+        log::debug!("[{:?}] Loading shader...", load_token);
+        let data = self.download_binary(&url).await?;
         Ok((ty, data))
     }
-
-    async fn try_load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<Shader>,
-        source_id: String,
-    ) -> Option<ShaderLoadResponse> {
-        match self.load_from_url(cancellation_token, source_id).await {
-            Err(ShaderLoadError::Canceled) => None,
-            result => Some(result),
-        }
-    }
 }
 
-impl DataLoader<Shader> for ShaderLoader {
+impl AsyncLoader<Shader> for AssetIO {
     fn load<'a>(
         &'a mut self,
-        source_id: String,
-        cancellation_token: CancellationToken<Shader>,
+        load_token: LoadToken<Shader>,
+        request: ShaderLoadRequest,
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<ShaderLoadResponse>>>> {
-        Box::pin(self.try_load_from_url(cancellation_token, source_id))
+        Box::pin(async move {
+            match self.load_shader_from_url(load_token, request).await {
+                Err(ShaderLoadError::Canceled) => None,
+                result => Some(result),
+            }
+        })
     }
 }
 
-pub type ShaderStore = Store<Shader>;
-pub type ShaderStoreRead<'a> = ReadGuard<'a, Shader>;
+pub type ShaderStore = Store<Shader, AsyncLoadHandler<Shader>>;
+pub type ShaderStoreRead<'a> = ReadGuard<'a, Shader, AsyncLoadHandler<Shader>>;
 pub type ShaderIndex = Index<Shader>;
 
 pub mod systems {
@@ -207,10 +242,7 @@ pub mod systems {
             .read_resource::<Context>()
             .write_resource::<ShaderStore>()
             .build(move |_, _, (context, shaders), _| {
-                //log::info!("shader");
-                let mut shaders = shaders.write();
-                shaders.update2(&*context);
-                shaders.finalize_requests();
+                shaders.load_and_finalize_requests(&*context);
             })
     }
 
@@ -218,7 +250,6 @@ pub mod systems {
         SystemBuilder::new("gc_shaders")
             .write_resource::<ShaderStore>()
             .build(move |_, _, shaders, _| {
-                let mut shaders = shaders.write();
                 shaders.drain_unused();
             })
     }

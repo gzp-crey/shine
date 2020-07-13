@@ -19,8 +19,8 @@ legion = {git = "https://github.com/TomGillen/legion.git", default-features = fa
 fxhash = "0.2"
 
 # native
-# "macros" is required only for test, but see https://github.com/rust-lang/cargo/issues/1596
-tokio = { version = "0.2", features = ["rt-core", "rt-util", "blocking", "macros"], optional = true }
+# "macros, time" is required only for test, but see https://github.com/rust-lang/cargo/issues/1596
+tokio = { version = "0.2", features = ["rt-core", "rt-util", "blocking", "macros", "time"], optional = true }
 
 # wasm support
 wasm-bindgen = { version = "0.2", optional = true }

@@ -2,7 +2,7 @@ use crate::assets::AssetIO;
 use crate::input::{self, InputSystem};
 use crate::render::{self, Context, RenderSystem, Surface};
 use crate::{Config, GameError, ScheduleSet};
-use shine_ecs::core::store::{Data, DataLoader, Store};
+use shine_ecs::core::store::{AsyncLoader, OnLoad, Store};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
     world::World,
@@ -10,7 +10,7 @@ use shine_ecs::legion::{
 use std::sync::Arc;
 
 pub struct GameView {
-    pub assetio: Arc<AssetIO>,
+    pub assetio: AssetIO,
     pub surface: Surface,
     pub resources: Resources,
     pub world: World,
@@ -19,10 +19,8 @@ pub struct GameView {
 
 impl GameView {
     pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameView, GameError> {
-        let assetio = Arc::new(
-            AssetIO::new(config.virtual_schemes.clone())
-                .map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?,
-        );
+        let assetio = AssetIO::new(config.virtual_schemes.clone())
+            .map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?;
         let context = Context::new(wgpu_instance, &surface, &config).await?;
 
         let mut view = GameView {
@@ -40,10 +38,10 @@ impl GameView {
             "prepare_update",
             Schedule::builder()
                 .add_system(render::systems::update_shaders())
-                .add_system(render::systems::update_textures())
-                .add_system(render::systems::update_pipelines())
-                .add_system(render::systems::update_frame_graphs())
-                .add_system(render::systems::update_models())
+                //.add_system(render::systems::update_textures())
+                //.add_system(render::systems::update_pipelines())
+                //.add_system(render::systems::update_frame_graphs())
+                //.add_system(render::systems::update_models())
                 .add_system(input::systems::advance_input_states())
                 .flush()
                 .build(),
@@ -52,22 +50,16 @@ impl GameView {
         view.schedules.insert(
             "gc",
             Schedule::builder()
-                .add_system(render::systems::gc_models())
-                .add_system(render::systems::gc_frame_graphs())
-                .add_system(render::systems::gc_pipelines())
-                .add_system(render::systems::gc_textures())
+                //.add_system(render::systems::gc_models())
+                //.add_system(render::systems::gc_frame_graphs())
+                //.add_system(render::systems::gc_pipelines())
+                //.add_system(render::systems::gc_textures())
                 .add_system(render::systems::gc_shaders())
                 .flush()
                 .build(),
         )?;
 
         Ok(view)
-    }
-
-    pub fn register_store<D: Data, L: DataLoader<D>>(&mut self, loader: L, store_page_size: usize) {
-        let (store, loader) = Store::<D>::new_with_loader(store_page_size, loader);
-        self.resources.insert(store);
-        loader.start();
     }
 
     pub fn run_logic(&mut self, logic: &str) {
