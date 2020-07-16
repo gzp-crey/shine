@@ -80,10 +80,10 @@ where
             }
         };
 
+        log::trace!("Loading {:?}", load_token);
         if load_token.is_canceled() {
             return true;
         }
-        log::trace!("Loading {:?}", load_token);
         let output = match self.loader.load(load_token.clone(), data).await {
             Some(output) => output,
             None => return true,
@@ -109,6 +109,7 @@ where
     #[cfg(feature = "native")]
     pub fn start(mut self) {
         use tokio::{runtime::Handle, task};
+        log::debug!("Starting async loader");
         task::spawn_blocking(move || {
             Handle::current().block_on(task::LocalSet::new().run_until(async move {
                 task::spawn_local(async move {

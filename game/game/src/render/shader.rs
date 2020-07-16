@@ -79,15 +79,15 @@ impl OnLoad for Shader {
         match load_response.0 {
             Err(err) => {
                 self.shader = CompiledShader::Error;
-                self.listeners.notify_all();
                 log::warn!("[{:?}] Shader compilation failed: {:?}", load_token, err);
+                self.listeners.notify_all();
             }
 
             Ok((ty, spirv)) => {
                 let shader = context.device().create_shader_module(wgpu::util::make_spirv(&spirv));
                 self.shader = CompiledShader::Compiled(ty, shader);
-                self.listeners.notify_all();
                 log::debug!("[{:?}] Shader compilation completed", load_token);
+                self.listeners.notify_all();
             }
         };
     }

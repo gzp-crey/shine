@@ -76,6 +76,7 @@ impl Pipeline {
                     return;
                 }
                 Ok(None) => {
+                    log::debug!("[{:?}] Pipeline, missing vertex shader dependency", load_token);
                     self.pipeline = CompiledPipeline::None;
                     return;
                 }
@@ -89,6 +90,7 @@ impl Pipeline {
                     return;
                 }
                 Ok(None) => {
+                    log::debug!("[{:?}] Pipeline, missing fragment shader dependency", load_token);
                     self.pipeline = CompiledPipeline::None;
                     return;
                 }
@@ -115,6 +117,7 @@ impl Pipeline {
                 }
             };
         } else {
+            log::debug!("[{:?}] Pipeline descriptor missing", load_token);
             self.pipeline = CompiledPipeline::None;
         }
     }
@@ -167,46 +170,59 @@ impl OnLoad for Pipeline {
                 if self
                     .descriptor
                     .as_ref()
-                    .map(|old| &old.vertex_stage.shader == &desc.vertex_stage.shader)
+                    .map(|old| &old.vertex_stage.shader != &desc.vertex_stage.shader)
                     .unwrap_or(true)
                 {
+                    log::trace!(
+                        "[{:?}] Pipeline vertex shader altered: {:?}",
+                        load_token,
+                        desc.vertex_stage.shader
+                    );
                     self.vertex_shader =
                         ShaderDependency::from_key(ShaderType::Vertex, desc.vertex_stage.shader.clone());
+                    let _ = self.vertex_shader.request(shaders, |listeners| {
+                        listeners.add(
+                            load_handler,
+                            load_token.clone(),
+                            PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ShaderType::Vertex))),
+                        );
+                    });
                 }
                 if self
                     .descriptor
                     .as_ref()
-                    .map(|old| &old.fragment_stage.shader == &desc.fragment_stage.shader)
+                    .map(|old| &old.fragment_stage.shader != &desc.fragment_stage.shader)
                     .unwrap_or(true)
                 {
+                    log::trace!(
+                        "[{:?}] Pipeline vertex shader altered: {:?}",
+                        load_token,
+                        desc.fragment_stage.shader
+                    );
                     self.fragment_shader =
                         ShaderDependency::from_key(ShaderType::Fragment, desc.fragment_stage.shader.clone());
+                    let _ = self.fragment_shader.request(shaders, |listeners| {
+                        listeners.add(
+                            load_handler,
+                            load_token.clone(),
+                            PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ShaderType::Fragment))),
+                        );
+                    });
                 }
                 self.descriptor = Some(*desc);
                 self.recompile(load_token, context, shaders);
             }
             Ok(PipelineLoadResponseInner::ShaderReady(ty)) => match ty {
                 ShaderType::Vertex => {
-                    self.vertex_shader.request(shaders, |listeners| {
-                        listeners.add(
-                            load_handler,
-                            load_token.clone(),
-                            PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ty))),
-                        );
-                    });
+                    log::debug!("[{:?}] Pipeline vertex shader loaded", load_token);
                     self.recompile(load_token, context, shaders);
                 }
                 ShaderType::Fragment => {
-                    let _ = self.fragment_shader.request(shaders, |listeners| {
-                        listeners.add(
-                            load_handler,
-                            load_token.clone(),
-                            PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ty))),
-                        );
-                    });
+                    log::debug!("[{:?}] Pipeline fragment shader loaded", load_token);
                     self.recompile(load_token, context, shaders);
                 }
-                _ => {
+                ty => {
+                    log::warn!("[{:?}] Pipeline got invalid shader response: {:?}", load_token, ty);
                     self.pipeline = CompiledPipeline::Error;
                 }
             },

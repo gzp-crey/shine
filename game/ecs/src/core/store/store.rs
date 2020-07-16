@@ -372,6 +372,8 @@ where
         let (exclusive, load_handler) = exclusive;
 
         while let Some((load_token, load_response)) = load_handler.next_response() {
+            log::trace!("Receive loading request for {:?}", load_token);
+
             if load_token.is_canceled() {
                 continue;
             }
