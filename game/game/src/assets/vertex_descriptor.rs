@@ -29,7 +29,7 @@ impl VertexTypeId {
         VertexTypeId(bincode::serialize(&vec![layout]).unwrap())
     }
 
-    pub fn from_layouts(layouts: &VertexBufferLayouts) -> Self {
+    pub fn from_layouts(layouts: &[VertexBufferLayout]) -> Self {
         VertexTypeId(bincode::serialize(layouts).unwrap())
     }
 

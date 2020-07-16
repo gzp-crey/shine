@@ -1,10 +1,94 @@
 use crate::assets::{gltf, AssetError, AssetIO, ModelBuffer, ModelData, Url, UrlError};
-use crate::render::{Context, PipelineStore, PipelineStoreRead};
+use crate::render::Context;
 use shine_ecs::core::store::{
-    CancellationToken, Data, DataLoader, DataUpdater, FromKey, Index, LoadContext, LoadListeners, ReadGuard, Store,
+    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
 use std::pin::Pin;
-use std::sync::Arc;
+
+/// Unique key for a model
+pub type ModelKey = String;
+
+pub enum CompiledModel {
+    None,
+    Error,
+    Compiled(ModelBuffer),
+}
+
+pub struct Model {
+    id: String,
+    model: CompiledModel,
+}
+
+impl Model {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn model(&self) -> &CompiledModel {
+        &self.model
+    }
+
+    pub fn model_module(&self) -> Option<&ModelBuffer> {
+        if let CompiledModel::Compiled(model) = &self.model {
+            Some(model)
+        } else {
+            None
+        }
+    }
+}
+
+impl Data for Model {
+    type Key = ModelKey;
+}
+
+impl FromKey for Model {
+    fn from_key(key: &ModelKey) -> Self {
+        Model {
+            id: key.to_owned(),
+            model: CompiledModel::None,
+        }
+    }
+}
+
+impl<'l> OnLoading<'l> for Model {
+    type LoadingContext = (&'l Context,);
+}
+
+impl OnLoad for Model {
+    type LoadRequest = ModelLoadRequest;
+    type LoadResponse = ModelLoadResponse;
+    type LoadHandler = AsyncLoadHandler<Self>;
+
+    fn on_load_request(&mut self, load_handler: &mut Self::LoadHandler, load_token: LoadToken<Self>) {
+        load_handler.request(load_token, ModelLoadRequest(self.id.clone()));
+    }
+
+    fn on_load_response<'l>(
+        &mut self,
+        _load_handler: &mut Self::LoadHandler,
+        load_context: &mut (&'l Context,),
+        load_token: LoadToken<Self>,
+        load_response: ModelLoadResponse,
+    ) {
+        let (context,) = (load_context.0,);
+        match load_response.0 {
+            Err(err) => {
+                self.model = CompiledModel::Error;
+                //self.listeners.notify_all();
+                log::warn!("[{:?}] Model compilation failed: {:?}", load_token, err);
+            }
+
+            Ok(model_data) => {
+                self.model = CompiledModel::Compiled(model_data.to_model_buffer(context.device()));
+                //self.listeners.notify_all();
+                log::debug!("[{:?}] Model compilation completed", load_token);
+            }
+        };
+    }
+}
+
+pub struct ModelLoadRequest(ModelKey);
+pub struct ModelLoadResponse(Result<ModelData, ModelLoadError>);
 
 /// Error during model loading.
 #[derive(Debug)]
@@ -19,133 +103,50 @@ impl From<UrlError> for ModelLoadError {
     }
 }
 
+impl From<LoadCanceled> for ModelLoadError {
+    fn from(_err: LoadCanceled) -> ModelLoadError {
+        ModelLoadError::Canceled
+    }
+}
+
 impl From<AssetError> for ModelLoadError {
     fn from(err: AssetError) -> ModelLoadError {
         ModelLoadError::Asset(err)
     }
 }
 
-pub enum Model {
-    Pending(LoadListeners),
-    Compiled(ModelBuffer),
-    Error,
-    None,
-}
-
-impl Model {
-    pub fn model_buffer(&self) -> Option<&ModelBuffer> {
-        if let Model::Compiled(ref model_buffer) = self {
-            Some(model_buffer)
-        } else {
-            None
-        }
-    }
-
-    fn on_update(
+impl AssetIO {
+    async fn load_model(
         &mut self,
-        load_context: LoadContext<'_, Model>,
-        context: &Context,
-        _pipelines: &mut PipelineStoreRead<'_>,
-        load_response: ModelLoadResponse,
-    ) -> Option<String> {
-        *self = match (std::mem::replace(self, Model::None), load_response) {
-            (Model::Pending(listeners), Err(err)) => {
-                log::warn!("Model[{:?}] compilation failed: {:?}", load_context, err);
-                listeners.notify_all();
-                Model::Error
-            }
-
-            (Model::Pending(listeners), Ok(model_data)) => {
-                log::debug!("Model[{:?}] compilation completed", load_context);
-                listeners.notify_all();
-                Model::Compiled(model_data.to_model_buffer(context.device()))
-            }
-
-            (Model::Compiled(_), _) => unreachable!(),
-            (Model::Error, _) => unreachable!(),
-            (Model::None, _) => unreachable!(),
-        };
-        None
-    }
-}
-
-impl Data for Model {
-    type Key = String;
-    type LoadRequest = ModelLoadRequest;
-    type LoadResponse = ModelLoadResponse;
-}
-
-impl FromKey for Model {
-    fn from_key(key: &String) -> (Self, Option<String>) {
-        (Model::Pending(LoadListeners::new()), Some(key.to_owned()))
-    }
-}
-
-pub type ModelLoadRequest = String;
-pub type ModelLoadResponse = Result<ModelData, ModelLoadError>;
-
-pub struct ModelLoader {
-    assetio: Arc<AssetIO>,
-}
-
-impl ModelLoader {
-    pub fn new(assetio: Arc<AssetIO>) -> ModelLoader {
-        ModelLoader { assetio }
-    }
-
-    async fn load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<Model>,
+        load_token: LoadToken<Model>,
         source_id: String,
-    ) -> ModelLoadResponse {
-        if cancellation_token.is_canceled() {
-            return Err(ModelLoadError::Canceled);
-        }
+    ) -> Result<ModelData, ModelLoadError> {
         let url = Url::parse(&source_id)?;
-        log::debug!("[{}] Loading model...", url.as_str());
+        log::debug!("[{:?}] Loading model...", load_token);
         match url.extension() {
-            "gltf" | "glb" => Ok(gltf::load_from_url(&self.assetio, &url).await?),
+            "gltf" | "glb" => Ok(gltf::load_from_url(&self, &url).await?),
             ext => Err(ModelLoadError::Asset(AssetError::UnsupportedFormat(ext.to_owned()))),
         }
     }
+}
 
-    async fn try_load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<Model>,
-        source_id: String,
-    ) -> Option<ModelLoadResponse> {
-        match self.load_from_url(cancellation_token, source_id).await {
-            Err(ModelLoadError::Canceled) => None,
-            result => Some(result),
-        }
+impl AsyncLoader<Model> for AssetIO {
+    fn load<'l>(
+        &'l mut self,
+        load_token: LoadToken<Model>,
+        request: ModelLoadRequest,
+    ) -> Pin<Box<dyn 'l + std::future::Future<Output = Option<ModelLoadResponse>>>> {
+        Box::pin(async move {
+            match self.load_model(load_token, request.0).await {
+                Err(ModelLoadError::Canceled) => None,
+                result => Some(ModelLoadResponse(result)),
+            }
+        })
     }
 }
 
-impl DataLoader<Model> for ModelLoader {
-    fn load<'a>(
-        &'a mut self,
-        source_id: String,
-        cancellation_token: CancellationToken<Model>,
-    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<ModelLoadResponse>>>> {
-        Box::pin(self.try_load_from_url(cancellation_token, source_id))
-    }
-}
-
-pub struct ModelUpdater<'a>(&'a Context, &'a PipelineStore);
-
-impl<'a> DataUpdater<'a, Model> for ModelUpdater<'a> {
-    fn update<'u>(
-        &mut self,
-        load_context: LoadContext<'u, Model>,
-        data: &mut Model,
-        load_response: ModelLoadResponse,
-    ) -> Option<ModelLoadRequest> {
-        data.on_update(load_context, self.0, &mut self.1.read(), load_response)
-    }
-}
-
-pub type ModelStore = Store<Model>;
-pub type ModelStoreRead<'a> = ReadGuard<'a, Model>;
+pub type ModelStore = Store<Model, AsyncLoadHandler<Model>>;
+pub type ModelStoreRead<'a> = ReadGuard<'a, Model, AsyncLoadHandler<Model>>;
 pub type ModelIndex = Index<Model>;
 
 pub mod systems {
@@ -153,26 +154,18 @@ pub mod systems {
     use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
 
     pub fn update_models() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_model")
+        SystemBuilder::new("update_models")
             .read_resource::<Context>()
-            .read_resource::<PipelineStore>()
             .write_resource::<ModelStore>()
-            .build(move |_, _, (context, pipelines, models), _| {
-                //log::info!("models");
-                let mut models = models.write();
-                let context: &Context = &*context;
-                let pipelines: &PipelineStore = &*pipelines;
-                //shaders.drain_unused();
-                models.update(&mut ModelUpdater(context, pipelines));
-                models.finalize_requests();
+            .build(move |_, _, (context, models), _| {
+                models.load_and_finalize_requests((&*context,));
             })
     }
 
     pub fn gc_models() -> Box<dyn Schedulable> {
-        SystemBuilder::new("gc_model")
+        SystemBuilder::new("gc_models")
             .write_resource::<ModelStore>()
             .build(move |_, _, models, _| {
-                let mut models = models.write();
                 models.drain_unused();
             })
     }

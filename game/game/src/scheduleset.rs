@@ -39,3 +39,9 @@ impl ScheduleSet {
         let _ = self.logics.remove(&name.to_owned());
     }
 }
+
+impl Default for ScheduleSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}

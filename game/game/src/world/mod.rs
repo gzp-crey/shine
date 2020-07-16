@@ -9,7 +9,6 @@ pub mod test3;
 pub mod test4;
 
 use crate::assets::{AssetError, AssetIO, Url};
-use crate::GameError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

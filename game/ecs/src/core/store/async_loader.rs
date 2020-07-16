@@ -1,14 +1,21 @@
 use crate::core::store::{Data, LoadHandler, LoadToken, OnLoad};
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::sink::SinkExt;
-use futures::stream::StreamExt;
-use std::pin::Pin;
+use futures::{
+    channel::mpsc::{UnboundedReceiver, UnboundedSender},
+    SinkExt, StreamExt,
+};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    pin::Pin,
+    sync::Mutex,
+};
 
 pub struct AsyncLoadHandler<D>
 where
     D: OnLoad<LoadHandler = Self>,
 {
     pub(crate) request_sender: UnboundedSender<(LoadToken<D>, D::LoadRequest)>,
+    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, D::LoadResponse)>,
     pub(crate) response_receiver: UnboundedReceiver<(LoadToken<D>, D::LoadResponse)>,
 }
 
@@ -119,5 +126,105 @@ where
         spawn_local(async move {
             self.run().await;
         });
+    }
+}
+
+/// Helper trait to erase type info for notification handling.
+trait AsyncListeners {
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn notify(&mut self);
+}
+
+/// Listener of a specific type.
+struct TypedAsyncListeners<D>
+where
+    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+{
+    response_sender: UnboundedSender<(LoadToken<D>, D::LoadResponse)>,
+    listeners: Vec<(LoadToken<D>, D::LoadResponse)>,
+}
+
+impl<D> TypedAsyncListeners<D>
+where
+    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+{
+    fn add(&mut self, load_token: LoadToken<D>, request: D::LoadResponse) {
+        if !load_token.is_canceled() {
+            self.listeners.push((load_token, request));
+        }
+    }
+}
+
+impl<D: Data> AsyncListeners for TypedAsyncListeners<D>
+where
+    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+{
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn notify(&mut self) {
+        for (load_token, request) in self.listeners.drain(..) {
+            if load_token.is_canceled() {
+                continue;
+            }
+
+            log::debug!("[{:?}] Notify dependency completed", load_token);
+            if let Err(err) = self.response_sender.unbounded_send((load_token, request)) {
+                log::error!("Failed to notify store: {:?}", err);
+            }
+        }
+    }
+}
+
+/// Manage listener waiting for load completion.
+pub struct AsyncLoadListeners {
+    listeners: Mutex<HashMap<TypeId, Box<dyn AsyncListeners>>>,
+}
+
+impl AsyncLoadListeners {
+    pub fn new() -> AsyncLoadListeners {
+        AsyncLoadListeners {
+            listeners: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn add<'a, D>(&self, load_handler: &AsyncLoadHandler<D>, load_token: LoadToken<D>, request: D::LoadResponse)
+    where
+        D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+    {
+        if load_token.is_canceled() {
+            return;
+        }
+
+        let mut listeners = self.listeners.lock().unwrap();
+
+        let listener = listeners
+            .entry(TypeId::of::<TypedAsyncListeners<D>>())
+            .or_insert_with(|| {
+                Box::new(TypedAsyncListeners {
+                    response_sender: load_handler.response_sender.clone(),
+                    listeners: Vec::new(),
+                })
+            });
+
+        let listener = Any::downcast_mut::<TypedAsyncListeners<D>>(listener.as_any_mut()).unwrap();
+        log::debug!("Add dependency listener: [{:?}]", load_token);
+        listener.add(load_token, request);
+    }
+
+    pub fn notify_all(&self) {
+        let mut listeners = self.listeners.lock().unwrap();
+        {
+            for (_, mut listener) in listeners.drain() {
+                listener.notify();
+            }
+        }
+    }
+}
+
+impl Default for AsyncLoadListeners {
+    fn default() -> AsyncLoadListeners {
+        AsyncLoadListeners::new()
     }
 }

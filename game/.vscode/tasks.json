@@ -8,13 +8,13 @@
             "type": "shell",
             "command": "cargo",
             "args": [
-                "fmt",
+                "fmt"
             ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -34,7 +34,7 @@
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -48,18 +48,18 @@
             "args": [
                 "test",
                 "-p",
-                "shine-ycrdt",
+                "shine-ycrdt"
             ],
             "options": {
                 "env": {
-                    "RUST_BACKTRACE" : "1"
+                    "RUST_BACKTRACE": "1"
                 }
             },
             "presentation": {
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -79,7 +79,7 @@
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -99,14 +99,14 @@
             ],
             "options": {
                 "env": {
-                    "RUST_BACKTRACE" : "1"
+                    "RUST_BACKTRACE": "1"
                 }
             },
             "presentation": {
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -125,10 +125,10 @@
                 "cwd": "wasmgame"
             },
             "presentation": {
-                "echo": true, 
+                "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -147,10 +147,10 @@
                 "cwd": "wasmgame"
             },
             "presentation": {
-                "echo": true, 
+                "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [],
             "group": "build"
@@ -168,7 +168,7 @@
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -180,7 +180,7 @@
             "type": "shell",
             "command": "cargo",
             "args": [
-                "run",                
+                "run",
                 "-p",
                 "shine-cooker",
                 "--",
@@ -188,14 +188,14 @@
             ],
             "options": {
                 "env": {
-                    "RUST_BACKTRACE" : "1"
+                    "RUST_BACKTRACE": "1"
                 }
             },
             "presentation": {
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -207,13 +207,13 @@
             "type": "shell",
             "command": "python",
             "args": [
-                "assets/server/server.py",
+                "assets/server/server.py"
             ],
             "presentation": {
-                "echo": true, 
+                "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [],
             "group": "build"
@@ -227,12 +227,12 @@
                 "--features",
                 "native",
                 "--",
-                "--nocapture",
+                //"--nocapture",
                 "--test-threads=1"
             ],
             "options": {
                 "env": {
-                    "RUST_BACKTRACE" : "1"
+                    "RUST_BACKTRACE": "1"
                 },
                 "cwd": "${workspaceFolder}/ecs"
             },
@@ -240,7 +240,7 @@
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
@@ -261,7 +261,7 @@
             ],
             "options": {
                 "env": {
-                    "RUST_BACKTRACE" : "1"
+                    "RUST_BACKTRACE": "1"
                 },
                 "cwd": "${workspaceFolder}/game"
             },
@@ -269,12 +269,38 @@
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "clear": true,
+                "clear": true
             },
             "problemMatcher": [
                 "$rustc"
             ],
             "group": "build"
         },
+        {
+            "label": "clippy *",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "clippy",
+                "--features",
+                "native"
+            ],
+            "options": {
+                "env": {
+                    "RUST_BACKTRACE": "1"
+                },
+                "cwd": "${workspaceFolder}/game"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        }
     ]
 }

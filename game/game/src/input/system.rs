@@ -15,6 +15,12 @@ impl CurrentInputState {
     }
 }
 
+impl Default for CurrentInputState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Deref for CurrentInputState {
     type Target = InputState;
 

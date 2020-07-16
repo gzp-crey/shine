@@ -36,6 +36,12 @@ impl ContentHasher {
     }
 }
 
+impl Default for ContentHasher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Create a storage compatible path from a hash
 pub fn hash_to_path(hash: &str) -> String {
     format!("{}/{}", &hash[..4], &hash[4..])

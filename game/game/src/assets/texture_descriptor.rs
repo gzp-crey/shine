@@ -70,6 +70,12 @@ impl ImageDescriptor {
     }
 }
 
+impl Default for ImageDescriptor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Render target descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderTargetDescriptor {
@@ -80,7 +86,7 @@ pub struct RenderTargetDescriptor {
 impl RenderTargetDescriptor {}
 
 /// Sampler descriptor
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct SamplerDescriptor {
     pub address_mode_u: wgpu::AddressMode,
     pub address_mode_v: wgpu::AddressMode,
@@ -123,7 +129,6 @@ impl SamplerDescriptor {
             lod_max_clamp: self.lod_max_clamp,
             compare: self.compare,
             anisotropy_clamp: self.anisotropy_clamp,
-            ..Default::default()
         }
     }
 }
@@ -141,6 +146,12 @@ impl TextureDescriptor {
             image: ImageDescriptor::new(),
             sampler: SamplerDescriptor::new(),
         }
+    }
+}
+
+impl Default for TextureDescriptor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

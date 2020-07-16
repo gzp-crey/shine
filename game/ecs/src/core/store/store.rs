@@ -115,8 +115,8 @@ where
 {
     fn clone(&self) -> Self {
         match &self {
-            EntityKey::Named(ref k) => EntityKey::Named(k.clone()),
-            EntityKey::Unnamed(ref k) => EntityKey::Unnamed(k.clone()),
+            EntityKey::Named(k) => EntityKey::Named(k.clone()),
+            EntityKey::Unnamed(k) => EntityKey::Unnamed(*k),
         }
     }
 }
@@ -609,7 +609,7 @@ impl<'a, D: Data, L> ReadGuard<'a, D, L> {
         })
     }
 
-    pub fn at<'i: 'a>(&self, index: &'i Index<D>) -> &D {
+    pub fn at<'s, 'i: 's>(&'s self, index: &'i Index<D>) -> &'s D {
         // To release/modify the indexed object from the container,
         // one have to get mutable reference to the store,
         // but that would contradict to the borrow checker.
@@ -709,14 +709,14 @@ impl<'a, D: Data, L> WriteGuard<'a, D, L> {
         })
     }
 
-    pub fn at<'i: 'a>(&self, index: &'i Index<D>) -> &D {
+    pub fn at<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s D {
         // To release/modify the indexed object from the container,
         // one have to get mutable reference to the store,
         // but that would contradict to the borrow checker.
         unsafe { &index.entry().value }
     }
 
-    pub fn at_mut<'i: 'a>(&mut self, index: &'i Index<D>) -> &mut D {
+    pub fn at_mut<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s mut D {
         // To release/modify the indexed object from the container,
         // one have to get mutable reference to the store,
         // but that would contradict to the borrow checker.

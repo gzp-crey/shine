@@ -1,7 +1,8 @@
 use crate::assets::{AssetError, AssetIO, ShaderType, Url, UrlError};
 use crate::render::Context;
 use shine_ecs::core::store::{
-    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
+    AsyncLoadHandler, AsyncLoadListeners, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad,
+    OnLoading, ReadGuard, Store,
 };
 use std::pin::Pin;
 use std::str::FromStr;
@@ -10,7 +11,7 @@ use std::{io, mem};
 /// Unique key for a shader
 pub type ShaderKey = String;
 
-pub enum ShaderData {
+pub enum CompiledShader {
     None,
     Error,
     Compiled(ShaderType, wgpu::ShaderModule),
@@ -18,7 +19,8 @@ pub enum ShaderData {
 
 pub struct Shader {
     id: String,
-    shader: ShaderData,
+    shader: CompiledShader,
+    listeners: AsyncLoadListeners,
 }
 
 impl Shader {
@@ -26,12 +28,12 @@ impl Shader {
         &self.id
     }
 
-    pub fn shader(&self) -> &ShaderData {
+    pub fn shader(&self) -> &CompiledShader {
         &self.shader
     }
 
-    pub fn shadere_module(&self) -> Option<&wgpu::ShaderModule> {
-        if let ShaderData::Compiled(_, sh) = &self.shader {
+    pub fn shader_module(&self) -> Option<&wgpu::ShaderModule> {
+        if let CompiledShader::Compiled(_, sh) = &self.shader {
             Some(sh)
         } else {
             None
@@ -47,13 +49,14 @@ impl FromKey for Shader {
     fn from_key(key: &ShaderKey) -> Self {
         Shader {
             id: key.to_owned(),
-            shader: ShaderData::None,
+            shader: CompiledShader::None,
+            listeners: AsyncLoadListeners::default(),
         }
     }
 }
 
 impl<'l> OnLoading<'l> for Shader {
-    type LoadingContext = &'l Context;
+    type LoadingContext = (&'l Context,);
 }
 
 impl OnLoad for Shader {
@@ -68,24 +71,23 @@ impl OnLoad for Shader {
     fn on_load_response<'l>(
         &mut self,
         _load_handler: &mut Self::LoadHandler,
-        load_context: &mut &'l Context,
+        load_context: &mut (&'l Context,),
         load_token: LoadToken<Self>,
         load_response: ShaderLoadResponse,
     ) {
+        let (context,) = (load_context.0,);
         match load_response.0 {
             Err(err) => {
+                self.shader = CompiledShader::Error;
+                self.listeners.notify_all();
                 log::warn!("[{:?}] Shader compilation failed: {:?}", load_token, err);
-                self.shader = ShaderData::Error;
-                //self.listeners.notify_all();
             }
 
             Ok((ty, spirv)) => {
-                let shader = load_context
-                    .device()
-                    .create_shader_module(wgpu::util::make_spirv(&spirv));
+                let shader = context.device().create_shader_module(wgpu::util::make_spirv(&spirv));
+                self.shader = CompiledShader::Compiled(ty, shader);
+                self.listeners.notify_all();
                 log::debug!("[{:?}] Shader compilation completed", load_token);
-                self.shader = ShaderData::Compiled(ty, shader)
-                //self.listeners.notify_all();
             }
         };
     }
@@ -167,7 +169,7 @@ pub mod systems {
             .read_resource::<Context>()
             .write_resource::<ShaderStore>()
             .build(move |_, _, (context, shaders), _| {
-                shaders.load_and_finalize_requests(&*context);
+                shaders.load_and_finalize_requests((&*context,));
             })
     }
 
@@ -198,37 +200,38 @@ impl ShaderDependencyInner {
         on_subscribe: F,
     ) -> ShaderDependencyInner
     where
-        F: FnOnce(),
+        F: FnOnce(&AsyncLoadListeners),
     {
-        match &shaders.at(&id).shader {
-            ShaderData::None => {
-                on_subscribe();
+        let shader = shaders.at(&id);
+        match &shader.shader {
+            CompiledShader::None => {
+                on_subscribe(&shader.listeners);
                 ShaderDependencyInner::Subscribed(ty, id)
             }
-            ShaderData::Compiled(st, _) => {
+            CompiledShader::Compiled(st, _) => {
                 if *st == ty {
                     ShaderDependencyInner::Completed(ty, id)
                 } else {
                     ShaderDependencyInner::Failed
                 }
             }
-            ShaderData::Error => ShaderDependencyInner::Failed,
+            CompiledShader::Error => ShaderDependencyInner::Failed,
         }
     }
 
     fn request<F>(self, shaders: &mut ShaderStoreRead<'_>, on_subscribe: F) -> ShaderDependencyInner
     where
-        F: FnOnce(),
+        F: FnOnce(&AsyncLoadListeners),
     {
         use ShaderDependencyInner::*;
         match self {
             s @ Completed(_, _) | s @ Failed | s @ Unknown | s @ None => s,
             ShaderKey(ty, key) => {
-                let id = shaders.get_or_add(&key.to_owned());
+                let id = shaders.get_or_add(&key);
                 ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe)
             }
             Pending(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe),
-            Subscribed(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, || {}),
+            Subscribed(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, |_| {}),
         }
     }
 }
@@ -256,29 +259,20 @@ impl ShaderDependency {
         ShaderDependency(ShaderDependencyInner::Pending(ty, id))
     }
 
-    pub fn request<F>(
-        &mut self,
-        shaders: &mut ShaderStoreRead<'_>,
-        on_subscribe: F,
-    ) -> Result<Option<&ShaderIndex>, ShaderDependencyError>
+    pub fn request<F>(&mut self, shaders: &mut ShaderStoreRead<'_>, on_subscribe: F)
     where
-        F: FnOnce(),
+        F: FnOnce(&AsyncLoadListeners),
     {
         self.0 = mem::replace(&mut self.0, ShaderDependencyInner::Failed).request(shaders, on_subscribe);
-        match &self.0 {
-            ShaderDependencyInner::Completed(_, id) => Ok(Some(id)),
-            Failed => Err(ShaderDependencyError),
-            _ => Ok(None),
-        }
     }
 
-    pub fn shader_module(
-        &mut self,
-        shaders: &mut ShaderStoreRead<'_>,
-    ) -> Result<Option<&wgpu::ShaderModule>, ShaderDependencyError> {
+    pub fn shader_module<'m, 's: 'm, 'a: 'm>(
+        &'s mut self,
+        shaders: &'a ShaderStoreRead<'m>,
+    ) -> Result<Option<&'m wgpu::ShaderModule>, ShaderDependencyError> {
         match &self.0 {
-            ShaderDependencyInner::Completed(_, id) => Ok(shaders.at(id).shadere_module()),
-            Failed => Err(ShaderDependencyError),
+            ShaderDependencyInner::Completed(_, id) => Ok(shaders.at(id).shader_module()),
+            ShaderDependencyInner::Failed => Err(ShaderDependencyError),
             _ => Ok(None),
         }
     }
