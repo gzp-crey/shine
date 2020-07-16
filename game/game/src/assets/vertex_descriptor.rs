@@ -63,7 +63,7 @@ impl VertexAttribute {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VertexBufferLayout {
     pub stride: wgpu::BufferAddress,
     pub attributes: Vec<VertexAttribute>,

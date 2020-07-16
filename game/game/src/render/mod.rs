@@ -10,8 +10,8 @@ mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderKey, ShaderStore, ShaderStoreRead};
 mod texture;
 pub use self::texture::{Texture, TextureIndex, TextureKey, TextureStore, TextureStoreRead};
-//mod pipeline;
-//pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead};
+mod pipeline;
+pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead};
 //mod frame_graph;
 //pub use self::frame_graph::{
 //    FrameGraph, FrameGraphId, FrameGraphIndex, FrameGraphKey, FrameGraphLoader, FrameGraphStore, FrameGraphStoreRead,

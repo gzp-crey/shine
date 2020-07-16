@@ -8,15 +8,28 @@ use std::pin::Pin;
 /// Unique key for a texture
 pub type TextureKey = String;
 
-pub enum Texture {
-    Requested(Url /*LoadListeners*/),
-    Compiled(TextureBuffer),
+pub enum TextureData {
+    None,
     Error,
+    Compiled(TextureBuffer),
+}
+
+pub struct Texture {
+    id: String,
+    texture: TextureData,
 }
 
 impl Texture {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn texture(&self) -> &TextureData {
+        &self.texture
+    }
+
     pub fn texture_buffer(&self) -> Option<&TextureBuffer> {
-        if let Texture::Compiled(ref texture_buffer) = self {
+        if let TextureData::Compiled(texture_buffer) = &self.texture {
             Some(texture_buffer)
         } else {
             None
@@ -29,19 +42,16 @@ impl Data for Texture {
 }
 
 impl FromKey for Texture {
-    fn from_key(key: &String) -> Self {
-        match Url::parse(&key) {
-            Ok(url) => Texture::Requested(url /*, LoadListener::new()*/),
-            Err(err) => {
-                log::warn!("Invalid texture url ({}): {:?}", key, err);
-                Texture::Error
-            }
+    fn from_key(key: &TextureKey) -> Self {
+        Texture {
+            id: key.to_owned(),
+            texture: TextureData::None,
         }
     }
 }
 
-impl<'a> OnLoading<'a> for Texture {
-    type LoadingContext = &'a Context;
+impl<'l> OnLoading<'l> for Texture {
+    type LoadingContext = &'l Context;
 }
 
 impl OnLoad for Texture {
@@ -50,10 +60,7 @@ impl OnLoad for Texture {
     type LoadHandler = AsyncLoadHandler<Self>;
 
     fn on_load_request(&mut self, load_handler: &mut Self::LoadHandler, load_token: LoadToken<Self>) {
-        match self {
-            Texture::Requested(id) => load_handler.request(load_token, id.to_owned()),
-            _ => unreachable!(),
-        }
+        load_handler.request(load_token, TextureLoadRequest(self.id.clone()));
     }
 
     fn on_load_response<'l>(
@@ -63,35 +70,33 @@ impl OnLoad for Texture {
         load_token: LoadToken<Self>,
         load_response: TextureLoadResponse,
     ) {
-        *self = match (std::mem::replace(self, Texture::Error), load_response) {
-            (Texture::Requested(_ /*,listeners*/), Err(err)) => {
-                //listeners.notify_all();
+        match load_response.0 {
+            Err(err) => {
                 log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
-                Texture::Error
+                self.texture = TextureData::Error;
+                //listeners.notify_all();
             }
 
-            (Texture::Requested(_ /*,listeners*/), Ok(texture_image)) => {
-                //listeners.notify_all();
+            Ok(texture_image) => {
                 match texture_image.to_texture_buffer(load_context.device()) {
                     Ok((texture_buffer, init_command)) => {
                         load_context.queue().submit(init_command);
                         log::debug!("[{:?}] Texture compilation completed", load_token);
-                        Texture::Compiled(texture_buffer)
+                        self.texture = TextureData::Compiled(texture_buffer);
                     }
                     Err(err) => {
                         log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
-                        Texture::Error
+                        self.texture = TextureData::Error;
                     }
                 }
+                //listeners.notify_all();
             }
-
-            _ => unreachable!(),
         };
     }
 }
 
-pub type TextureLoadRequest = Url;
-pub type TextureLoadResponse = Result<TextureImage, TextureLoadError>;
+pub struct TextureLoadRequest(TextureKey);
+pub struct TextureLoadResponse(Result<TextureImage, TextureLoadError>);
 
 /// Error during texture loading
 #[derive(Debug)]
@@ -125,7 +130,12 @@ impl From<bincode::Error> for TextureLoadError {
 }
 
 impl AssetIO {
-    async fn load_texture_from_url(&mut self, load_token: LoadToken<Texture>, url: Url) -> TextureLoadResponse {
+    async fn load_texture(
+        &mut self,
+        load_token: LoadToken<Texture>,
+        source_id: String,
+    ) -> Result<TextureImage, TextureLoadError> {
+        let url = Url::parse(&source_id)?;
         log::debug!("[{:?}] Loading texture...", load_token);
         let data = self.download_binary(&url).await?;
 
@@ -137,15 +147,15 @@ impl AssetIO {
 }
 
 impl AsyncLoader<Texture> for AssetIO {
-    fn load<'a>(
-        &'a mut self,
+    fn load<'l>(
+        &'l mut self,
         load_token: LoadToken<Texture>,
         request: TextureLoadRequest,
-    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<TextureLoadResponse>>>> {
+    ) -> Pin<Box<dyn 'l + std::future::Future<Output = Option<TextureLoadResponse>>>> {
         Box::pin(async move {
-            match self.load_texture_from_url(load_token, request).await {
+            match self.load_texture(load_token, request.0).await {
                 Err(TextureLoadError::Canceled) => None,
-                result => Some(result),
+                result => Some(TextureLoadResponse(result)),
             }
         })
     }
