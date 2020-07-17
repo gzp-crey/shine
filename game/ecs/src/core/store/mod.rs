@@ -2,14 +2,17 @@ mod store;
 pub use store::*;
 mod async_loader;
 pub use async_loader::*;
+mod auto_named_id;
+pub use auto_named_id::*;
 
 pub fn no_load<D: Data>(page_size: usize) -> Store<D, ()> {
     Store::new(page_size)
 }
 
-pub fn async_load<D, W: AsyncLoader<D>>(page_size: usize, loader: W) -> Store<D, AsyncLoadHandler<D>>
+pub fn async_load<D, L>(page_size: usize, loader: L) -> Store<D, AsyncLoadHandler<D>>
 where
     D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+    L: AsyncLoader<D>,
 {
     use futures::channel::mpsc;
 
@@ -18,6 +21,7 @@ where
 
     let load_context = AsyncLoadHandler {
         request_sender,
+        response_sender: response_sender.clone(),
         response_receiver,
     };
 

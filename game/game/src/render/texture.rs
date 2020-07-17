@@ -1,14 +1,15 @@
 use crate::assets::{AssetError, AssetIO, TextureBuffer, TextureImage, Url, UrlError};
 use crate::render::Context;
 use shine_ecs::core::store::{
-    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
+    AsyncLoadHandler, AsyncLoader, AutoNamedId, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading,
+    ReadGuard, Store,
 };
 use std::pin::Pin;
 
 /// Unique key for a texture
 pub type TextureKey = String;
 
-pub enum TextureData {
+pub enum CompiledTexture {
     None,
     Error,
     Compiled(TextureBuffer),
@@ -16,7 +17,7 @@ pub enum TextureData {
 
 pub struct Texture {
     id: String,
-    texture: TextureData,
+    texture: CompiledTexture,
 }
 
 impl Texture {
@@ -24,13 +25,13 @@ impl Texture {
         &self.id
     }
 
-    pub fn texture(&self) -> &TextureData {
+    pub fn texture(&self) -> &CompiledTexture {
         &self.texture
     }
 
     pub fn texture_buffer(&self) -> Option<&TextureBuffer> {
-        if let TextureData::Compiled(texture_buffer) = &self.texture {
-            Some(texture_buffer)
+        if let CompiledTexture::Compiled(texture) = &self.texture {
+            Some(texture)
         } else {
             None
         }
@@ -45,13 +46,13 @@ impl FromKey for Texture {
     fn from_key(key: &TextureKey) -> Self {
         Texture {
             id: key.to_owned(),
-            texture: TextureData::None,
+            texture: CompiledTexture::None,
         }
     }
 }
 
 impl<'l> OnLoading<'l> for Texture {
-    type LoadingContext = &'l Context;
+    type LoadingContext = (&'l Context,);
 }
 
 impl OnLoad for Texture {
@@ -66,30 +67,32 @@ impl OnLoad for Texture {
     fn on_load_response<'l>(
         &mut self,
         _load_handler: &mut Self::LoadHandler,
-        load_context: &mut &'l Context,
+        load_context: &mut (&'l Context,),
         load_token: LoadToken<Self>,
         load_response: TextureLoadResponse,
     ) {
+        let (context,) = (load_context.0,);
         match load_response.0 {
             Err(err) => {
-                log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
-                self.texture = TextureData::Error;
+                self.texture = CompiledTexture::Error;
                 //listeners.notify_all();
+                log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
             }
 
             Ok(texture_image) => {
-                match texture_image.to_texture_buffer(load_context.device()) {
-                    Ok((texture_buffer, init_command)) => {
-                        load_context.queue().submit(init_command);
+                match texture_image.to_texture_buffer(context.device()) {
+                    Ok((texture, init_command)) => {
+                        context.queue().submit(init_command);
+                        self.texture = CompiledTexture::Compiled(texture);
+                        //listeners.notify_all();
                         log::debug!("[{:?}] Texture compilation completed", load_token);
-                        self.texture = TextureData::Compiled(texture_buffer);
                     }
                     Err(err) => {
+                        self.texture = CompiledTexture::Error;
+                        //listeners.notify_all();
                         log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
-                        self.texture = TextureData::Error;
                     }
                 }
-                //listeners.notify_all();
             }
         };
     }
@@ -164,6 +167,7 @@ impl AsyncLoader<Texture> for AssetIO {
 pub type TextureStore = Store<Texture, AsyncLoadHandler<Texture>>;
 pub type TextureStoreRead<'a> = ReadGuard<'a, Texture, AsyncLoadHandler<Texture>>;
 pub type TextureIndex = Index<Texture>;
+pub type TextureNamedId = AutoNamedId<Texture>;
 
 pub mod systems {
     use super::*;
@@ -174,7 +178,7 @@ pub mod systems {
             .read_resource::<Context>()
             .write_resource::<TextureStore>()
             .build(move |_, _, (context, textures), _| {
-                textures.load_and_finalize_requests(&*context);
+                textures.load_and_finalize_requests((&*context,));
             })
     }
 

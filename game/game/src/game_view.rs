@@ -2,12 +2,10 @@ use crate::assets::AssetIO;
 use crate::input::{self, InputSystem};
 use crate::render::{self, Context, RenderSystem, Surface};
 use crate::{Config, GameError, ScheduleSet};
-use shine_ecs::core::store::{AsyncLoader, OnLoad, Store};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},
     world::World,
 };
-use std::sync::Arc;
 
 pub struct GameView {
     pub assetio: AssetIO,
@@ -38,10 +36,10 @@ impl GameView {
             "prepare_update",
             Schedule::builder()
                 .add_system(render::systems::update_shaders())
-                //.add_system(render::systems::update_textures())
-                //.add_system(render::systems::update_pipelines())
+                .add_system(render::systems::update_textures())
+                .add_system(render::systems::update_pipelines())
                 //.add_system(render::systems::update_frame_graphs())
-                //.add_system(render::systems::update_models())
+                .add_system(render::systems::update_models())
                 .add_system(input::systems::advance_input_states())
                 .flush()
                 .build(),
@@ -50,10 +48,10 @@ impl GameView {
         view.schedules.insert(
             "gc",
             Schedule::builder()
-                //.add_system(render::systems::gc_models())
+                .add_system(render::systems::gc_models())
                 //.add_system(render::systems::gc_frame_graphs())
-                //.add_system(render::systems::gc_pipelines())
-                //.add_system(render::systems::gc_textures())
+                .add_system(render::systems::gc_pipelines())
+                .add_system(render::systems::gc_textures())
                 .add_system(render::systems::gc_shaders())
                 .flush()
                 .build(),

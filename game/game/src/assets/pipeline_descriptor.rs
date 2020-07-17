@@ -140,7 +140,7 @@ impl PipelineUniformLayout {
             Ok(Some((
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: None,
-                    bindings: &bindings,
+                    entries: &bindings,
                 }),
                 layout,
             )))
@@ -169,7 +169,7 @@ impl VertexStage {
         }
     }
 
-    pub fn check_vertex_layouts(&self, vertex_layouts: &Vec<VertexBufferLayout>) -> Result<(), AssetError> {
+    pub fn check_vertex_layouts(&self, vertex_layouts: &[VertexBufferLayout]) -> Result<(), AssetError> {
         // check vertex attribute source duplication and the format compatibility
         let mut semantics = HashSet::new();
         for layout in vertex_layouts {
@@ -204,7 +204,7 @@ impl VertexStage {
 
     pub fn create_attribute_descriptors(
         &self,
-        vertex_layouts: &Vec<VertexBufferLayout>,
+        vertex_layouts: &[VertexBufferLayout],
     ) -> Result<Vec<(wgpu::BufferAddress, Vec<wgpu::VertexAttributeDescriptor>)>, AssetError> {
         let mut descriptors = Vec::new();
         for layout in vertex_layouts {
@@ -262,7 +262,7 @@ impl PipelineDescriptor {
         &self,
         device: &wgpu::Device,
         color_state_format: wgpu::TextureFormat,
-        vertex_layouts: &Vec<VertexBufferLayout>,
+        vertex_layouts: &[VertexBufferLayout],
         mut get_shader: F,
     ) -> Result<PipelineBuffer, AssetError>
     where
@@ -299,6 +299,7 @@ impl PipelineDescriptor {
             }
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 bind_group_layouts: &bind_group_layouts,
+                push_constant_ranges: &[],
             })
         };
 
@@ -388,7 +389,7 @@ impl PipelineBuffer {
             for u in uniforms {
                 let resource = get_value(u.uniform());
                 //todo: check if resource is conforming to uniform
-                bindings.push(wgpu::Binding {
+                bindings.push(wgpu::BindGroupEntry {
                     binding: u.location(),
                     resource,
                 });
@@ -397,7 +398,7 @@ impl PipelineBuffer {
             Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
                 layout: bind_group_layout,
-                bindings: &bindings,
+                entries: &bindings,
             }))
         } else {
             None

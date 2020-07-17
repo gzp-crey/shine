@@ -1,9 +1,13 @@
 use crate::core::arena::Arena;
-use std::collections::HashMap;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
+use std::{
+    collections::HashMap,
+    fmt,
+    hash::{Hash, Hasher},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak,
+    },
+};
 
 /// Trait for the data stored in a Store
 pub trait Data: 'static {
@@ -115,8 +119,8 @@ where
 {
     fn clone(&self) -> Self {
         match &self {
-            EntityKey::Named(ref k) => EntityKey::Named(k.clone()),
-            EntityKey::Unnamed(ref k) => EntityKey::Unnamed(k.clone()),
+            EntityKey::Named(k) => EntityKey::Named(k.clone()),
+            EntityKey::Unnamed(k) => EntityKey::Unnamed(*k),
         }
     }
 }
@@ -372,6 +376,8 @@ where
         let (exclusive, load_handler) = exclusive;
 
         while let Some((load_token, load_response)) = load_handler.next_response() {
+            log::trace!("Receive loading response for {:?}", load_token);
+
             if load_token.is_canceled() {
                 continue;
             }
@@ -549,12 +555,18 @@ where
 }
 
 /// Guarded read access to a store
-pub struct ReadGuard<'a, D: Data, L> {
-    shared: RwLockReadGuard<'a, SharedData<D>>,
-    exclusive: &'a Mutex<(ExclusiveData<D>, L)>,
+pub struct ReadGuard<'g, D, L>
+where
+    D: Data,
+{
+    shared: RwLockReadGuard<'g, SharedData<D>>,
+    exclusive: &'g Mutex<(ExclusiveData<D>, L)>,
 }
 
-impl<'a, D: Data, L> ReadGuard<'a, D, L> {
+impl<'g, D, L> ReadGuard<'g, D, L>
+where
+    D: Data,
+{
     /// Try to get the index of a resource by the key.
     /// This operation may block if item is not found in the shared store and the transient container is
     /// in use. (ex. A new item is constructed.)
@@ -609,7 +621,7 @@ impl<'a, D: Data, L> ReadGuard<'a, D, L> {
         })
     }
 
-    pub fn at<'i: 'a>(&self, index: &'i Index<D>) -> &D {
+    pub fn at<'s, 'i: 's>(&'s self, index: &'i Index<D>) -> &'s D {
         // To release/modify the indexed object from the container,
         // one have to get mutable reference to the store,
         // but that would contradict to the borrow checker.
@@ -618,12 +630,15 @@ impl<'a, D: Data, L> ReadGuard<'a, D, L> {
 }
 
 /// Guarded mutable access to a store
-pub struct WriteGuard<'a, D: Data, L = ()> {
-    shared: RwLockWriteGuard<'a, SharedData<D>>,
-    locked_exclusive: MutexGuard<'a, (ExclusiveData<D>, L)>,
+pub struct WriteGuard<'g, D, L>
+where
+    D: Data,
+{
+    shared: RwLockWriteGuard<'g, SharedData<D>>,
+    locked_exclusive: MutexGuard<'g, (ExclusiveData<D>, L)>,
 }
 
-impl<'a, D: Data, L> WriteGuard<'a, D, L> {
+impl<'g, D: Data, L> WriteGuard<'g, D, L> {
     /// Try to get the index of a resource by the key.
     /// This operation never blocks as WriteGueard has an exclusive access to the Store
     pub fn try_get(&self, k: &D::Key) -> Option<Index<D>> {
@@ -709,14 +724,14 @@ impl<'a, D: Data, L> WriteGuard<'a, D, L> {
         })
     }
 
-    pub fn at<'i: 'a>(&self, index: &'i Index<D>) -> &D {
+    pub fn at<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s D {
         // To release/modify the indexed object from the container,
         // one have to get mutable reference to the store,
         // but that would contradict to the borrow checker.
         unsafe { &index.entry().value }
     }
 
-    pub fn at_mut<'i: 'a>(&mut self, index: &'i Index<D>) -> &mut D {
+    pub fn at_mut<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s mut D {
         // To release/modify the indexed object from the container,
         // one have to get mutable reference to the store,
         // but that would contradict to the borrow checker.

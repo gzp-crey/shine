@@ -3,7 +3,7 @@ use crate::assets::{
     TextureSemantic, Uniform, GLOBAL_UNIFORMS,
 };
 use crate::render::{
-    Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead, TextureId, TextureStore,
+    Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
     TextureStoreRead,
 };
 use crate::world::{GameWorld, GameWorldBuilder};
@@ -93,8 +93,8 @@ impl GameWorld for TestWorld {
 
 /// Resources for the test
 struct TestScene {
-    pipeline: PipelineId,
-    texture: TextureId,
+    pipeline: PipelineNamedId,
+    texture: TextureNamedId,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
     bind_group: Option<wgpu::BindGroup>,
 }
@@ -102,8 +102,8 @@ struct TestScene {
 impl TestScene {
     fn new(test: Test3) -> TestScene {
         TestScene {
-            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fTex2f>(&test.pipeline)),
-            texture: TextureId::from_key(test.texture),
+            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Pos3fTex2f>(&test.pipeline)),
+            texture: TextureNamedId::from_key(test.texture),
             buffers: None,
             bind_group: None,
         }

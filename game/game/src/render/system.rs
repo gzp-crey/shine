@@ -1,7 +1,6 @@
-use crate::render::{
-    Context, Frame, /*FrameGraphLoader, ModelLoader, PipelineLoader,*/ /*ShaderLoader*/ /*, TextureLoader*/
-};
+use crate::render::{Context, Frame, /*FrameGraphLoader,*/ Model, Pipeline, Shader, Texture};
 use crate::{GameError, GameView};
+use shine_ecs::core::store;
 
 pub trait RenderSystem {
     fn add_render_system(&mut self, context: Context) -> Result<(), GameError>;
@@ -33,11 +32,15 @@ impl RenderSystem for GameView {
         self.resources.insert(context);
         self.resources.insert(Frame::new());
 
-        //self.register_store(ShaderLoader::new(self.assetio.clone()), 16);
-        //self.register_store(PipelineLoader::new(self.assetio.clone()), 16);
-        //self.register_store(ModelLoader::new(self.assetio.clone()), 16);
-        //self.register_store(TextureLoader::new(self.assetio.clone()), 16);
-        //self.register_store(FrameGraphLoader::new(self.assetio.clone()), 16);
+        self.resources
+            .insert(store::async_load::<Shader, _>(16, self.assetio.clone()));
+        self.resources
+            .insert(store::async_load::<Texture, _>(16, self.assetio.clone()));
+        self.resources
+            .insert(store::async_load::<Pipeline, _>(16, self.assetio.clone()));
+        self.resources
+            .insert(store::async_load::<Model, _>(16, self.assetio.clone()));
+        //self.resources.insert(store::async_load::<FrameGraph>(16, assetio.clone()));
 
         Ok(())
     }

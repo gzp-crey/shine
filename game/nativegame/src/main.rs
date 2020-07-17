@@ -41,7 +41,7 @@ fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url) -> Result<(), 
         WorldData::Test3(test) => game.load_world(test)?,
         WorldData::Test4(test) => game.load_world(test)?,
     }
-    game.gc();
+    //game.gc();
     Ok(())
 }
 
@@ -161,13 +161,11 @@ async fn run() {
 
 fn main() {
     let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Warn)
         .filter_module("shine_native", log::LevelFilter::Trace)
         .filter_module("shine_ecs", log::LevelFilter::Trace)
         .filter_module("shine_game", log::LevelFilter::Trace)
         .filter_module("shine_input", log::LevelFilter::Info)
-        .filter_module("wgpu_core", log::LevelFilter::Warn)
-        .filter_module("mio", log::LevelFilter::Warn)
         .try_init();
     let mut rt = Runtime::new().unwrap();
 

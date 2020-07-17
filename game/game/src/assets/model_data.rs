@@ -33,7 +33,7 @@ impl MeshData {
         MeshBuffer {
             vertex_buffer: self.vertices.to_vertex_buffer(device),
             index_buffer: self.indices.as_ref().map(|indices| indices.to_index_buffer(device)),
-            lod: self.lod.clone(),
+            lod: self.lod,
         }
     }
 }
@@ -52,6 +52,12 @@ impl ModelData {
         ModelBuffer {
             meshes: self.meshes.iter().map(|mesh| mesh.to_mesh_buffer(device)).collect(),
         }
+    }
+}
+
+impl Default for ModelData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

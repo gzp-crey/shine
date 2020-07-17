@@ -97,6 +97,12 @@ impl FirstPersonShooter {
     }
 }
 
+impl Default for FirstPersonShooter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GameInput for FirstPersonShooter {
     fn as_any(&self) -> &dyn Any {
         self

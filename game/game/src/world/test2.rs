@@ -1,5 +1,5 @@
 use crate::assets::vertex::{self, Pos3fCol4f};
-use crate::render::{Context, Frame, PipelineId, PipelineKey, PipelineStore, PipelineStoreRead};
+use crate::render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
 use crate::world::{GameWorld, GameWorldBuilder};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
@@ -79,14 +79,14 @@ impl GameWorld for TestWorld {
 
 /// Resources for the test
 struct TestScene {
-    pipeline: PipelineId,
+    pipeline: PipelineNamedId,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 impl TestScene {
     fn new(test: Test2) -> TestScene {
         TestScene {
-            pipeline: PipelineId::from_key(PipelineKey::new::<vertex::Pos3fCol4f>(&test.pipeline)),
+            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Pos3fCol4f>(&test.pipeline)),
             buffers: None,
         }
     }

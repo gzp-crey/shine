@@ -1,13 +1,13 @@
 use crate::assets::{vertex, AssetError, AssetIO, IndexData, MeshData, ModelData, Url, VertexData};
-use base64;
 use gltf::{accessor::Dimensions, buffer, Document, Gltf, Primitive, Semantic};
 use itertools::izip;
 
 ///Load data from url
 pub fn load_source(uri: &str) -> Result<Vec<u8>, AssetError> {
     if uri.starts_with("data:") {
-        let match0 = &uri["data:".len()..].split(";base64,").nth(0);
-        let match1 = &uri["data:".len()..].split(";base64,").nth(1);
+        let mut split = uri["data:".len()..].split(";base64,");
+        let match0 = split.next();
+        let match1 = split.next();
         if let Some(data) = match1 {
             base64::decode(&data).map_err(|err| AssetError::ContentLoad(format!("Embedded data error: {:?}", err)))
         } else if let Some(data) = match0 {
@@ -39,7 +39,7 @@ pub fn import_buffer_data(document: &Document, mut blob: Option<Vec<u8>>) -> Res
     Ok(buffers)
 }
 
-pub fn create_vertex_p3c4(buffers: &Vec<buffer::Data>, primitive: &Primitive<'_>) -> VertexData {
+pub fn create_vertex_p3c4(buffers: &[buffer::Data], primitive: &Primitive<'_>) -> VertexData {
     let vertex_count = primitive.get(&Semantic::Positions).map(|a| a.count()).unwrap();
     let mut vertices: Vec<vertex::Pos3fCol4f> = Vec::with_capacity(vertex_count);
 

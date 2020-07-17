@@ -31,8 +31,15 @@ impl InputIdGenerator {
         InputIdGenerator(start)
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> InputId {
         self.0 += 1;
         InputId(self.0)
+    }
+}
+
+impl Default for InputIdGenerator {
+    fn default() -> Self {
+        Self::new()
     }
 }
