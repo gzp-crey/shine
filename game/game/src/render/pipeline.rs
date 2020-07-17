@@ -67,9 +67,20 @@ impl Pipeline {
         }
     }
 
-    fn recompile(&mut self, load_token: LoadToken<Pipeline>, context: &Context, shaders: &mut ShaderStoreRead<'_>) {
+    fn recompile(
+        &mut self,
+        load_handler: &mut AsyncLoadHandler<Pipeline>,
+        context: &Context,
+        shaders: &mut ShaderStoreRead<'_>,
+        load_token: LoadToken<Pipeline>,
+    ) {
         if let Some(descriptor) = &self.descriptor {
-            let vs = match self.vertex_shader.shader_module(shaders) {
+            let vs = match self.vertex_shader.request(shaders, |listeners| {
+                listeners.add(
+                    load_token.clone(),
+                    PipelineLoadRequest::shader_loaded(ShaderType::Vertex),
+                )
+            }) {
                 Err(_) => {
                     log::warn!("[{:?}] Pipeline vertex shader dependency failed", load_token);
                     self.pipeline = PipelineData::Error;
@@ -79,10 +90,15 @@ impl Pipeline {
                     self.pipeline = PipelineData::None;
                     return;
                 }
-                Ok(Some(sh)) => sh,
+                Ok(Some(sh)) => shaders.at(sh),
             };
 
-            let fs = match self.fragment_shader.shader_module(shaders) {
+            let fs = match self.fragment_shader.request(shaders, |listeners| {
+                listeners.add(
+                    load_token.clone(),
+                    PipelineLoadRequest::shader_loaded(ShaderType::Fragment),
+                )
+            }) {
                 Err(_) => {
                     log::warn!("[{:?}] Pipeline fragment shader dependency failed", load_token);
                     self.pipeline = PipelineData::Error;
@@ -92,7 +108,7 @@ impl Pipeline {
                     self.pipeline = PipelineData::None;
                     return;
                 }
-                Ok(Some(sh)) => sh,
+                Ok(Some(sh)) => shaders.at(sh),
             };
 
             self.pipeline = match descriptor.to_pipeline_buffer(
@@ -153,7 +169,7 @@ impl OnLoad for Pipeline {
 
     fn on_load_response<'l>(
         &mut self,
-        _load_handler: &mut Self::LoadHandler,
+        load_handler: &mut Self::LoadHandler,
         load_context: &mut (&'l Context, &'l ShaderStore),
         load_token: LoadToken<Self>,
         load_response: PipelineLoadResponse,
@@ -183,16 +199,16 @@ impl OnLoad for Pipeline {
                         ShaderDependency::from_key(ShaderType::Fragment, desc.fragment_stage.shader.clone());
                 }
                 self.descriptor = Some(*desc);
-                self.recompile(load_token, context, shaders);
+                self.recompile(load_handler, context, shaders, load_token);
             }
             Ok(PipelineLoadResponseInner::ShaderReady(ty)) => match ty {
                 ShaderType::Vertex => {
                     self.vertex_shader.request(shaders, || {});
-                    self.recompile(load_token, context, shaders);
+                    self.recompile(load_handler, context, shaders, load_token);
                 }
                 ShaderType::Fragment => {
                     let _ = self.fragment_shader.request(shaders, || {});
-                    self.recompile(load_token, context, shaders);
+                    self.recompile(load_handler, context, shaders, load_token);
                 }
                 _ => {
                     self.pipeline = PipelineData::Error;
@@ -210,6 +226,12 @@ enum PipelineLoadResponseInner {
 }
 
 pub struct PipelineLoadResponse(Result<PipelineLoadResponseInner, PipelineLoadError>);
+
+impl PipelineLoadResponse {
+    fn shader_loaded(ty: ShaderType) -> PipelineLoadResponse {
+        PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ty)))
+    }
+}
 
 /// Error during pipeline load
 #[derive(Debug)]
