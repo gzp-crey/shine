@@ -53,7 +53,9 @@ fn simple_single_threaded() {
         let mut store = store.try_read().unwrap();
         assert!(store.try_get(&TestDataId(0)) == None);
 
+        //r0 = store.get_or_load(&TestDataId(0)); // shall not compile as TestData is not OnLoad
         r0 = store.get_or_add(&TestDataId(0));
+
         assert!(store.at(&r0).0 == format!("id: {}", 0));
 
         r1 = store.get_or_add(&TestDataId(1));

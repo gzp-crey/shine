@@ -53,6 +53,8 @@ where
     fn next_response(&mut self) -> Option<(LoadToken<D>, D::LoadResponse)>;
 }
 
+pub struct NoLoad;
+
 enum EntityKey<D>
 where
     D: Data,
@@ -337,7 +339,7 @@ where
 /// - 3nd on requests entries are dropped if there are no external references left. Dispite of
 ///   having a reference count of zero for the sotred items, they are not reclaimed without an explicit
 ///   request.
-pub struct Store<D, L = ()>
+pub struct Store<D, L = NoLoad>
 where
     D: Data,
 {
@@ -412,12 +414,12 @@ where
     }
 }
 
-impl<D> Store<D, ()>
+impl<D> Store<D, NoLoad>
 where
     D: Data,
 {
     /// Create a new store without the loading pipeline.
-    pub(crate) fn new(page_size: usize) -> Store<D, ()> {
+    pub(crate) fn new(page_size: usize) -> Store<D, NoLoad> {
         Store {
             shared: RwLock::new(SharedData {
                 entries: HashMap::new(),
@@ -428,7 +430,7 @@ where
                     entries: HashMap::new(),
                     unnamed_id: 0,
                 },
-                (),
+                NoLoad,
             )),
         }
     }
@@ -583,12 +585,21 @@ where
         })
     }
 
+    pub fn at<'s, 'i: 's>(&'s self, index: &'i Index<D>) -> &'s D {
+        // To release/modify the indexed object from the container,
+        // one have to get mutable reference to the store,
+        // but that would contradict to the borrow checker.
+        unsafe { &index.entry().value }
+    }
+}
+
+impl<'g, D> ReadGuard<'g, D, NoLoad>
+where
+    D: FromKey,
+{
     /// Try to get an item or create it from the key if not found.
     /// This operation may block but it ensures, an item is created (and stored) exactly once.
-    pub fn get_or_add(&mut self, k: &D::Key) -> Index<D>
-    where
-        D: FromKey,
-    {
+    pub fn get_or_add(&mut self, k: &D::Key) -> Index<D> {
         let shared = &self.shared;
         let exclusive = &self.exclusive;
 
@@ -599,14 +610,16 @@ where
             exclusive.get_or_create(k, move |k| <D as FromKey>::from_key(k.name()), move |_, _| {})
         })
     }
+}
 
+impl<'g, D, L> ReadGuard<'g, D, L>
+where
+    D: FromKey + OnLoad<LoadHandler = L>,
+    L: 'static,
+{
     /// Try to get an item or create it from the key and trigger loading if not found.
     /// This operation may block but it ensures, an item is created (and stored) exactly once.
-    pub fn get_or_load(&mut self, k: &D::Key) -> Index<D>
-    where
-        D: FromKey + OnLoad<LoadHandler = L>,
-        L: 'static,
-    {
+    pub fn get_or_load(&mut self, k: &D::Key) -> Index<D> {
         let shared = &self.shared;
         let exclusive = &self.exclusive;
 
@@ -621,13 +634,6 @@ where
             )
         })
     }
-
-    pub fn at<'s, 'i: 's>(&'s self, index: &'i Index<D>) -> &'s D {
-        // To release/modify the indexed object from the container,
-        // one have to get mutable reference to the store,
-        // but that would contradict to the borrow checker.
-        unsafe { &index.entry().value }
-    }
 }
 
 /// Guarded mutable access to a store
@@ -639,7 +645,10 @@ where
     locked_exclusive: MutexGuard<'g, (ExclusiveData<D>, L)>,
 }
 
-impl<'g, D: Data, L> WriteGuard<'g, D, L> {
+impl<'g, D, L> WriteGuard<'g, D, L>
+where
+    D: Data,
+{
     /// Try to get the index of a resource by the key.
     /// This operation never blocks as WriteGueard has an exclusive access to the Store
     pub fn try_get(&self, k: &D::Key) -> Option<Index<D>> {
@@ -651,6 +660,25 @@ impl<'g, D: Data, L> WriteGuard<'g, D, L> {
         exclusive.get(&k).or_else(|| shared.get(&k))
     }
 
+    pub fn at<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s D {
+        // To release/modify the indexed object from the container,
+        // one have to get mutable reference to the store,
+        // but that would contradict to the borrow checker.
+        unsafe { &index.entry().value }
+    }
+
+    pub fn at_mut<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s mut D {
+        // To release/modify the indexed object from the container,
+        // one have to get mutable reference to the store,
+        // but that would contradict to the borrow checker.
+        unsafe { &mut index.entry_mut().value }
+    }
+}
+
+impl<'g, D> WriteGuard<'g, D, NoLoad>
+where
+    D: Data,
+{
     /// Add a new item to the store with an auto-assigned key.
     /// As item has an auto-key, the object can be accessed only through index. If index is dropped the
     /// item cannot be retreived from the store any more.
@@ -682,7 +710,13 @@ impl<'g, D: Data, L> WriteGuard<'g, D, L> {
             .get(&k)
             .unwrap_or_else(|| exclusive.get_or_create(k, move |k| <D as FromKey>::from_key(k.name()), move |_, _| {}))
     }
+}
 
+impl<'g, D, L> WriteGuard<'g, D, L>
+where
+    D: FromKey + OnLoad<LoadHandler = L>,
+    L: 'static,
+{
     /// Add a new item to the store with an auto-assigned key and trigger the loading.
     /// As item has an auto-key, the object can be accessed only through index. If index is dropped the
     /// item cannot be retreived from the store any more.
@@ -723,19 +757,5 @@ impl<'g, D: Data, L> WriteGuard<'g, D, L> {
                 move |entity, token| entity.on_load_request(load_handler, token),
             )
         })
-    }
-
-    pub fn at<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s D {
-        // To release/modify the indexed object from the container,
-        // one have to get mutable reference to the store,
-        // but that would contradict to the borrow checker.
-        unsafe { &index.entry().value }
-    }
-
-    pub fn at_mut<'s, 'i: 's>(&'s mut self, index: &'i Index<D>) -> &'s mut D {
-        // To release/modify the indexed object from the container,
-        // one have to get mutable reference to the store,
-        // but that would contradict to the borrow checker.
-        unsafe { &mut index.entry_mut().value }
     }
 }

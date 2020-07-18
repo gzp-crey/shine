@@ -5,7 +5,7 @@ pub use async_loader::*;
 mod auto_named_id;
 pub use auto_named_id::*;
 
-pub fn no_load<D: Data>(page_size: usize) -> Store<D, ()> {
+pub fn no_load<D: Data>(page_size: usize) -> Store<D, NoLoad> {
     Store::new(page_size)
 }
 
