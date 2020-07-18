@@ -41,7 +41,9 @@ const VERTICES: &[Pos3fTex2f] = &[
     },
 ];
 
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
+// const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4]; workaround for Buffers that are mapped at creation have to be aligned to COPY_BUFFER_ALIGNMENT'
+const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, 0];
+const INDEX_COUNT: usize = 9;
 
 /// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
@@ -133,7 +135,7 @@ impl TestScene {
             (
                 device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
                 device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
-                INDICES.len() as u32,
+                INDEX_COUNT/*INDICES.len()*/ as u32,
             )
         });
 

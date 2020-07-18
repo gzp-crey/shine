@@ -317,6 +317,7 @@ where
             };
             let (id, entry) = arena.allocate(entry);
             let token = LoadToken(Arc::downgrade(&entry.load_token), entry as *mut _, k);
+            log::debug!("[{:?}] Entry created", token);
             post_build(&mut entry.value, token);
             (id, entry as *mut _)
         });

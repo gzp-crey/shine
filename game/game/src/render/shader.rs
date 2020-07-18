@@ -65,6 +65,7 @@ impl OnLoad for Shader {
     type LoadHandler = AsyncLoadHandler<Self>;
 
     fn on_load_request(&mut self, load_handler: &mut Self::LoadHandler, load_token: LoadToken<Self>) {
+        log::trace!("[{:?}] Sending load request", load_token);
         load_handler.request(load_token, ShaderLoadRequest(self.id.clone()));
     }
 
@@ -228,7 +229,7 @@ impl ShaderDependencyInner {
             s @ Completed(_, _) | s @ Failed | s @ Unknown | s @ None => s,
             ShaderKey(ty, key) => {
                 log::trace!("Requesting shader: {:?}", key);
-                let id = shaders.get_or_add(&key);
+                let id = shaders.get_or_load(&key);
                 ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe)
             }
             Pending(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe),
@@ -270,8 +271,7 @@ impl ShaderDependency {
     pub fn shader_module<'m, 'a: 'm, 's: 'm>(
         &'s mut self,
         shaders: &'a ShaderStoreRead<'m>,
-    ) -> Result<Option<&'m wgpu::ShaderModule>, ShaderDependencyError>
-    {
+    ) -> Result<Option<&'m wgpu::ShaderModule>, ShaderDependencyError> {
         match &self.0 {
             ShaderDependencyInner::Completed(_, id) => Ok(shaders.at(id).shader_module()),
             ShaderDependencyInner::Failed => Err(ShaderDependencyError),
