@@ -24,7 +24,7 @@
 				"frame_depth"
 			],
 			"method": {
-				"FullScreenQuad": "scene.pl"
+				"Scene": "scene"
 			}
 		},
 

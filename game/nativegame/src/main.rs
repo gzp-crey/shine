@@ -40,8 +40,9 @@ fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url) -> Result<(), 
         WorldData::Test2(test) => game.load_world(test)?,
         WorldData::Test3(test) => game.load_world(test)?,
         WorldData::Test4(test) => game.load_world(test)?,
+        WorldData::Test5(test) => game.load_world(test)?,
     }
-    //game.gc();
+    game.gc();
     Ok(())
 }
 
@@ -66,6 +67,7 @@ async fn run() {
         let test2_url = Url::parse("world://test_worlds/test2/test.wrld").unwrap();
         let test3_url = Url::parse("world://test_worlds/test3/test.wrld").unwrap();
         let test4_url = Url::parse("world://test_worlds/test4/test.wrld").unwrap();
+        let test5_url = Url::parse("world://test_worlds/test5/test.wrld").unwrap();
         let mut game = rt.block_on(GameView::new(config, wgpu_instance, surface)).unwrap();
 
         let event_proxy = event_loop.create_proxy();
@@ -104,6 +106,7 @@ async fn run() {
                                 Some(VirtualKeyCode::Key2) => load_world(&rt, &mut game, &test2_url).unwrap(),
                                 Some(VirtualKeyCode::Key3) => load_world(&rt, &mut game, &test3_url).unwrap(),
                                 Some(VirtualKeyCode::Key4) => load_world(&rt, &mut game, &test4_url).unwrap(),
+                                Some(VirtualKeyCode::Key5) => load_world(&rt, &mut game, &test5_url).unwrap(),
                                 Some(VirtualKeyCode::F9) => game.gc(),
                                 _ => {}
                             }

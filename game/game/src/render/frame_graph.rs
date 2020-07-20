@@ -1,14 +1,94 @@
-use crate::assets::{AssetError, AssetIO, FrameGraphBuffer, FrameGraphDescriptor, Url, UrlError};
-use crate::render::{Context, PipelineStore, PipelineStoreRead};
-use shine_ecs::core::store::{
-    CancellationToken, Data, DataLoader, DataUpdater, FromKey, GeneralId, Index, LoadContext, LoadListeners, ReadGuard,
-    Store,
-};
+use crate::assets::{AssetError, AssetIO, FrameGraphDescriptor, Url, UrlError};
+use crate::render::{Context, Frame, FrameOutput, PipelineStore, PipelineStoreRead};
+use futures::channel::oneshot;
 use std::fmt;
-use std::pin::Pin;
-use std::sync::Arc;
 
-/// Error during frame graph loading
+struct RenderTarget {
+    name: String,
+}
+
+struct Pass {
+    name: String,
+    /*pub struct FramePassDescriptor {
+        pub input: HashMap<String, SamplerDescriptor>,
+        pub output: Vec<String>,
+        pub method: FramePassMethod,
+    }*/
+}
+
+pub struct FrameGraphBuffer {
+    targets: Vec<RenderTarget>,
+    passes: Vec<Pass>,
+}
+
+impl FrameGraphBuffer {
+    pub fn from_descriptor(_descriptor: FrameGraphDescriptor) -> FrameGraphBuffer {
+        FrameGraphBuffer {
+            targets: Vec::new(),
+            passes: Vec::new(),
+        }
+    }
+}
+
+enum CompiledFrameGraph {
+    Error,
+    Waiting(oneshot::Receiver<FrameGraphLoadResponse>),
+    Compiled(FrameGraphBuffer),
+}
+
+pub struct FrameGraph {
+    graph: CompiledFrameGraph,
+}
+
+impl FrameGraph {
+    pub fn from_descriptor(descriptor: FrameGraphDescriptor) -> FrameGraph {
+        let graph = FrameGraphBuffer::from_descriptor(descriptor);
+        FrameGraph {
+            graph: CompiledFrameGraph::Compiled(graph),
+        }
+    }
+
+    pub fn graph(&self) -> Option<&FrameGraphBuffer> {
+        if let CompiledFrameGraph::Compiled(graph) = &self.graph {
+            Some(graph)
+        } else {
+            None
+        }
+    }
+
+    pub fn graph_mut(&mut self) -> Option<&mut FrameGraphBuffer> {
+        if let CompiledFrameGraph::Compiled(graph) = &mut self.graph {
+            Some(graph)
+        } else {
+            None
+        }
+    }
+
+    pub fn update(&mut self) {
+        let load_response = if let CompiledFrameGraph::Waiting(recv) = &mut self.graph {
+            match recv.try_recv() {
+                Err(_) => Err(FrameGraphLoadError::Canceled),
+                Ok(None) => return,
+                Ok(Some(FrameGraphLoadResponse(response))) => response,
+            }
+        } else {
+            return;
+        };
+
+        match load_response {
+            Err(_) => self.graph = CompiledFrameGraph::Error,
+            Ok(descriptor) => self.graph = CompiledFrameGraph::Compiled(FrameGraphBuffer::from_descriptor(descriptor)),
+        };
+    }
+
+    pub fn start_frame(&mut self) {}
+
+    pub fn end_frame(&mut self) {}
+}
+
+struct FrameGraphLoadResponse(Result<FrameGraphDescriptor, FrameGraphLoadError>);
+
+/// Error during frame graph load
 #[derive(Debug)]
 pub enum FrameGraphLoadError {
     Asset(AssetError),
@@ -33,199 +113,48 @@ impl From<bincode::Error> for FrameGraphLoadError {
     }
 }
 
-/// Frame graph dependencies required for compilation
-pub struct PartialFrameGraph {
-    descriptor: Box<FrameGraphDescriptor>,
-}
+impl AssetIO {
+    async fn load_frame_graph(&self, source_id: String) -> Result<FrameGraphDescriptor, FrameGraphLoadError> {
+        let url = Url::parse(&source_id)?;
+        log::debug!("[{:?}] Loading frame graph...", source_id);
+        let data = self.download_binary(&url).await?;
 
-impl PartialFrameGraph {
-    fn from_descriptor(
-        load_context: &LoadContext<'_, FrameGraph>,
-        descriptor: Box<FrameGraphDescriptor>,
-        pipelines: &mut PipelineStoreRead<'_>,
-    ) -> PartialFrameGraph {
-        PartialFrameGraph { descriptor }
+        let descriptor = bincode::deserialize::<FrameGraphDescriptor>(&data)?;
+        log::trace!("Graph: {:#?}", descriptor);
+        Ok(descriptor)
     }
-
-    fn into_frame_graph(
-        self,
-        load_context: &LoadContext<'_, FrameGraph>,
-        context: &Context,
-        pipelines: &mut PipelineStoreRead<'_>,
-        listeners: LoadListeners,
-    ) -> FrameGraph {
-        unimplemented!()
-    }
-}
-
-pub enum FrameGraph {
-    Pending(LoadListeners),
-    WaitingDependency(PartialFrameGraph, LoadListeners),
-    Compiled(FrameGraphBuffer),
-    Error,
-    None,
 }
 
 impl FrameGraph {
-    pub fn frame_graph_buffer(&self) -> Option<&FrameGraphBuffer> {
-        if let FrameGraph::Compiled(ref frame_graph_buffer) = self {
-            Some(frame_graph_buffer)
-        } else {
-            None
-        }
-    }
+    pub fn load_from_url(assetio: AssetIO, descriptor: String) -> FrameGraph {
+        let (sender, receiver) = oneshot::channel();
 
-    fn on_update(
-        &mut self,
-        load_context: LoadContext<'_, FrameGraph>,
-        context: &Context,
-        pipelines: &mut PipelineStoreRead<'_>,
-        load_response: FrameGraphLoadResponse,
-    ) -> Option<FrameGraphKey> {
-        *self = match (std::mem::replace(self, FrameGraph::None), load_response) {
-            (FrameGraph::Pending(listeners), Err(err)) => {
-                log::debug!("Frame graph compilation failed [{:?}]: {:?}", load_context, err);
-                listeners.notify_all();
-                FrameGraph::Error
-            }
-
-            (FrameGraph::Pending(listeners), Ok(FrameGraphLoadData::Descriptor(descriptor))) => {
-                let frame_graph = PartialFrameGraph::from_descriptor(&load_context, descriptor, pipelines);
-                frame_graph.into_frame_graph(&load_context, context, pipelines, listeners)
-            }
-
-            (
-                FrameGraph::WaitingDependency(frame_graph, listeners),
-                Ok(FrameGraphLoadData::PipelineReady(pipeline_id)),
-            ) => {
-                unimplemented!()
-                /*pipeline
-                .with_updated_shader_dependency(pipeline_id, pipelines)
-                .into_frame_graph(&load_context, context, pipelines, listeners)*/
-            }
-
-            (FrameGraph::Error, Ok(FrameGraphLoadData::PipelineReady(_))) => FrameGraph::Error,
-
-            _ => unreachable!(),
-        };
-
-        None
-    }
-}
-
-pub type FrameGraphKey = String;
-
-impl Data for FrameGraph {
-    type Key = FrameGraphKey;
-    type LoadRequest = FrameGraphLoadRequest;
-    type LoadResponse = FrameGraphLoadResponse;
-}
-
-impl FromKey for FrameGraph {
-    fn from_key(key: &FrameGraphKey) -> (Self, Option<FrameGraphKey>) {
-        (FrameGraph::Pending(LoadListeners::new()), Some(key.to_owned()))
-    }
-}
-
-pub enum FrameGraphLoadData {
-    Descriptor(Box<FrameGraphDescriptor>),
-    PipelineReady(String),
-}
-
-pub type FrameGraphLoadRequest = FrameGraphKey;
-pub type FrameGraphLoadResponse = Result<FrameGraphLoadData, FrameGraphLoadError>;
-
-pub struct FrameGraphLoader {
-    assetio: Arc<AssetIO>,
-}
-
-impl FrameGraphLoader {
-    pub fn new(assetio: Arc<AssetIO>) -> FrameGraphLoader {
-        FrameGraphLoader { assetio }
-    }
-
-    async fn load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<FrameGraph>,
-        source_id: FrameGraphKey,
-    ) -> FrameGraphLoadResponse {
-        if cancellation_token.is_canceled() {
-            return Err(FrameGraphLoadError::Canceled);
+        #[cfg(feature = "native")]
+        {
+            use tokio::{runtime::Handle, task};
+            task::spawn_blocking(move || {
+                Handle::current().block_on(async move {
+                    let desc = assetio.load_frame_graph(descriptor).await;
+                    if let Err(_) = sender.send(FrameGraphLoadResponse(desc)) {
+                        log::warn!("Failed to send frame graph result");
+                    }
+                })
+            });
         }
 
-        let url = Url::parse(&source_id)?;
-        log::debug!("[{}] Loading frame graph ...", url.as_str());
-
-        let data = self.assetio.download_binary(&url).await?;
-        let descriptor = bincode::deserialize::<FrameGraphDescriptor>(&data)?;
-        log::trace!("frame_graph: {:#?}", descriptor);
-
-        Ok(FrameGraphLoadData::Descriptor(Box::new(descriptor)))
-    }
-
-    async fn try_load_from_url(
-        &mut self,
-        cancellation_token: CancellationToken<FrameGraph>,
-        frame_graph_key: FrameGraphKey,
-    ) -> Option<FrameGraphLoadResponse> {
-        match self.load_from_url(cancellation_token, frame_graph_key).await {
-            Err(FrameGraphLoadError::Canceled) => None,
-            result => Some(result),
+        #[cfg(feature = "wasm")]
+        {
+            use wasm_bindgen_futures::spawn_local;
+            spawn_local(async move {
+                let desc = assetio.load_frame_graph(descriptor).await;
+                if let Err(_) = sender.send(FrameGraphLoadResponse(desc)) {
+                    log::warn!("Failed to send frame graph result");
+                }
+            });
         }
-    }
-}
 
-impl DataLoader<FrameGraph> for FrameGraphLoader {
-    fn load<'a>(
-        &'a mut self,
-        frame_graph_key: FrameGraphKey,
-        cancellation_token: CancellationToken<FrameGraph>,
-    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<FrameGraphLoadResponse>>>> {
-        Box::pin(self.try_load_from_url(cancellation_token, frame_graph_key))
-    }
-}
-
-impl<'a> DataUpdater<'a, FrameGraph> for (&Context, &PipelineStore) {
-    fn update<'u>(
-        &mut self,
-        load_context: LoadContext<'u, FrameGraph>,
-        data: &mut FrameGraph,
-        load_response: FrameGraphLoadResponse,
-    ) -> Option<FrameGraphLoadRequest> {
-        data.on_update(load_context, self.0, &mut self.1.read(), load_response)
-    }
-}
-
-pub type FrameGraphStore = Store<FrameGraph>;
-pub type FrameGraphStoreRead<'a> = ReadGuard<'a, FrameGraph>;
-pub type FrameGraphIndex = Index<FrameGraph>;
-pub type FrameGraphId = GeneralId<FrameGraph>;
-
-pub mod systems {
-    use super::*;
-    use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
-
-    pub fn update_frame_graphs() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_frame_graphs")
-            .read_resource::<Context>()
-            .read_resource::<PipelineStore>()
-            .write_resource::<FrameGraphStore>()
-            .build(move |_, _, (context, pipelines, frame_graphs), _| {
-                //log::info!("frame_graph");
-                let mut frame_graphs = frame_graphs.write();
-                let context: &Context = &*context;
-                let pipelines: &PipelineStore = &*pipelines;
-                frame_graphs.update(&mut (context, pipelines));
-                frame_graphs.finalize_requests();
-            })
-    }
-
-    pub fn gc_frame_graphs() -> Box<dyn Schedulable> {
-        SystemBuilder::new("gc_frame_graphs")
-            .write_resource::<FrameGraphStore>()
-            .build(move |_, _, frame_graphs, _| {
-                let mut frame_graphs = frame_graphs.write();
-                frame_graphs.drain_unused();
-            })
+        FrameGraph {
+            graph: CompiledFrameGraph::Waiting(receiver),
+        }
     }
 }

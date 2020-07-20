@@ -130,7 +130,7 @@ impl From<io::Error> for ShaderLoadError {
 
 impl AssetIO {
     async fn load_shader(
-        &mut self,
+        &self,
         load_token: LoadToken<Shader>,
         source_id: String,
     ) -> Result<(ShaderType, Vec<u8>), ShaderLoadError> {

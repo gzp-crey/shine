@@ -12,10 +12,8 @@ mod texture;
 pub use self::texture::{Texture, TextureIndex, TextureKey, TextureNamedId, TextureStore, TextureStoreRead};
 mod pipeline;
 pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
-//mod frame_graph;
-//pub use self::frame_graph::{
-//    FrameGraph, FrameGraphId, FrameGraphIndex, FrameGraphKey, FrameGraphLoader, FrameGraphStore, FrameGraphStoreRead,
-//};
+mod frame_graph;
+pub use self::frame_graph::FrameGraph;
 mod model;
 pub use self::model::{Model, ModelIndex, ModelKey, ModelStore, ModelStoreRead};
 

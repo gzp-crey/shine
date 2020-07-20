@@ -1,4 +1,4 @@
-use crate::assets::vertex::{self, Pos3fCol4f};
+use crate::assets::vertex;
 use crate::render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
 use crate::world::{GameWorld, GameWorldBuilder};
 use crate::{GameError, GameView};
@@ -9,44 +9,18 @@ use shine_ecs::legion::{
 };
 use std::any::Any;
 
-const VERTICES: &[Pos3fCol4f] = &[
-    Pos3fCol4f {
-        position: [-0.0868241, 0.49240386, 0.0],
-        color: [0.5, 0.0, 0.0, 1.0],
-    },
-    Pos3fCol4f {
-        position: [-0.49513406, 0.06958647, 0.0],
-        color: [0.0, 0.5, 0.0, 1.0],
-    },
-    Pos3fCol4f {
-        position: [-0.21918549, -0.44939706, 0.0],
-        color: [0.0, 0.0, 0.5, 1.0],
-    },
-    Pos3fCol4f {
-        position: [0.35966998, -0.3473291, 0.0],
-        color: [0.5, 0.5, 0.0, 1.0],
-    },
-    Pos3fCol4f {
-        position: [0.44147372, 0.2347359, 0.0],
-        color: [0.0, 0.5, 0.5, 1.0],
-    },
-];
-
-// const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4]; workaround for Buffers that are mapped at creation have to be aligned to COPY_BUFFER_ALIGNMENT'
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, 0];
-const INDEX_COUNT: usize = 9;
-
 /// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Test2 {
+pub struct Test5 {
+    pub frame_graph: String,
     pub pipeline: String,
 }
 
-impl GameWorldBuilder for Test2 {
+impl GameWorldBuilder for Test5 {
     type World = TestWorld;
 
     fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
-        log::info!("Adding test2 scene to the world");
+        log::info!("Adding test5 scene to the world");
 
         game.resources.insert(TestScene::new(self));
 
@@ -70,7 +44,7 @@ impl GameWorld for TestWorld {
     }
 
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
-        log::info!("Removing test2 scene from the world");
+        log::info!("Removing test5 scene from the world");
 
         game.schedules.remove("render");
         let _ = game.resources.remove::<TestScene>();
@@ -82,26 +56,13 @@ impl GameWorld for TestWorld {
 /// Resources for the test
 struct TestScene {
     pipeline: PipelineNamedId,
-    buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 impl TestScene {
-    fn new(test: Test2) -> TestScene {
+    fn new(test: Test5) -> TestScene {
         TestScene {
-            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Pos3fCol4f>(&test.pipeline)),
-            buffers: None,
+            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Null>(&test.pipeline)),
         }
-    }
-
-    fn prepare(&mut self, device: &wgpu::Device) {
-        self.buffers.get_or_insert_with(|| {
-            log::trace!("creating buffers");
-            let v = device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX);
-            log::trace!("creating buffers2");
-            let i = device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX);
-            log::trace!("creating buffers3");
-            (v, i, INDEX_COUNT/*INDICES.len()*/ as u32)
-        });
     }
 
     fn render(
@@ -112,13 +73,9 @@ impl TestScene {
     ) {
         let pipeline = self.pipeline.get(pipelines);
 
-        if let Some(ref buffers) = self.buffers {
-            if let Some(pipeline) = pipeline.pipeline_buffer() {
-                let mut pass = pipeline.bind(encoder, pass_descriptor);
-                pass.set_vertex_buffer(0, buffers.0.slice(..));
-                pass.set_index_buffer(buffers.1.slice(..));
-                pass.draw_indexed(0..buffers.2, 0, 0..1);
-            }
+        if let Some(pipeline) = pipeline.pipeline_buffer() {
+            let mut pass = pipeline.bind(encoder, pass_descriptor);
+            pass.draw(0..3, 0..1);
         }
     }
 }
@@ -131,10 +88,6 @@ fn render_test() -> Box<dyn Schedulable> {
         .write_resource::<TestScene>()
         .build(move |_, _, (context, frame, pipelines, scene), _| {
             let mut pipelines = pipelines.read();
-
-            {
-                scene.prepare(&context.device());
-            }
 
             let mut encoder = context
                 .device()

@@ -116,11 +116,7 @@ impl From<AssetError> for ModelLoadError {
 }
 
 impl AssetIO {
-    async fn load_model(
-        &mut self,
-        load_token: LoadToken<Model>,
-        source_id: String,
-    ) -> Result<ModelData, ModelLoadError> {
+    async fn load_model(&self, load_token: LoadToken<Model>, source_id: String) -> Result<ModelData, ModelLoadError> {
         let url = Url::parse(&source_id)?;
         log::debug!("[{:?}] Loading model...", load_token);
         match url.extension() {

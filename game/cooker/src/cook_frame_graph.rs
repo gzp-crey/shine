@@ -1,5 +1,5 @@
 use crate::{cook_pipeline, cook_texture, AssetNaming, Context, CookingError, Dependency};
-use shine_game::assets::{AssetId, FrameGraphDescriptor, PassMethod, Url};
+use shine_game::assets::{AssetId, FrameGraphDescriptor, FramePassMethod, Url};
 
 async fn find_frame_graph_etag(context: &Context, frame_graph_url: &Url) -> Result<String, CookingError> {
     Ok(context.source_io.download_etag(&frame_graph_url).await?)
@@ -35,13 +35,14 @@ pub async fn cook_frame_graph(
     log::debug!("[{}] Cooking frame graph content...", frame_graph_url.as_str());
     for ref mut pass in frame_graph.passes.values_mut() {
         match pass.method {
-            PassMethod::FullScreenQuad(ref mut pipeline) => {
+            FramePassMethod::FullScreenQuad(ref mut pipeline) => {
                 log::debug!("[{}] Cooking FullScreenQuad pipeline...", frame_graph_url.as_str());
                 let pipeline_id = AssetId::new(&pipeline)?.to_absolute_id(asset_base, &frame_graph_base)?;
                 let pipeline_dependency = cook_pipeline::cook_pipeline(context, asset_base, &pipeline_id).await?;
                 *pipeline = pipeline_dependency.url().as_str().to_owned();
                 dependnecies.push(pipeline_dependency);
             }
+            FramePassMethod::Scene(_) => {}
         }
     }
 

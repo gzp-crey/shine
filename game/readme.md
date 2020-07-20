@@ -8,29 +8,21 @@
 
 * [ ] world trait to start/stop world
 
-* [ ] Create a most simple wolrd
+* [ ] Create a most simple world
 
-* [ ] Parent/child poisioning (?)
+* [ ] Parent/child positioning (?)
 
 #### render
 
-* [ ] pipeline render target
+* [ ] move wgpu resource creation from asset module into render module (replica _to_ with _from_ functions)
 
-* [ ] frame target
-
-* [ ] texture target, how to define texture layout ?
+* [ ] frame graph
 
 ### Native sample
-
-* [x] update and render loop
-
-* [x] input handling (for fps)
 
 * [ ] fix prev/current state time and elapsed time for inputs
 
 ### WASM sample
-
-* [x] fix compilation
 
 * [ ] update and render loop
 

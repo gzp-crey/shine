@@ -287,7 +287,7 @@ impl From<bincode::Error> for PipelineLoadError {
 
 impl AssetIO {
     async fn load_pipeline(
-        &mut self,
+        &self,
         load_token: LoadToken<Pipeline>,
         source_id: String,
         vertex_layouts: VertexBufferLayouts,

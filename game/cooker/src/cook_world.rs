@@ -1,4 +1,4 @@
-use crate::{cook_pipeline, cook_texture, AssetNaming, Context, CookingError, Dependency};
+use crate::{cook_frame_graph, cook_pipeline, cook_texture, AssetNaming, Context, CookingError, Dependency};
 use shine_game::assets::{AssetId, Url};
 use shine_game::world::WorldData;
 
@@ -60,6 +60,23 @@ pub async fn cook_world(context: &Context, asset_base: &Url, world_id: &AssetId)
             let texture_dependency = cook_texture::cook_texture(context, asset_base, &texture_id).await?;
             test.texture = texture_dependency.url().as_str().to_owned();
             dependnecies.push(texture_dependency);
+        }
+        WorldData::Test5(ref mut test) => {
+            let frame_graph_id = AssetId::new(&test.frame_graph)?.to_absolute_id(asset_base, &world_base)?;
+            let frame_graph_dependency =
+                cook_frame_graph::cook_frame_graph(context, asset_base, &frame_graph_id).await?;
+            test.frame_graph = frame_graph_dependency.url().as_str().to_owned();
+            dependnecies.push(frame_graph_dependency);
+
+            let pipeline_id = AssetId::new(&test.pipeline)?.to_absolute_id(asset_base, &world_base)?;
+            let pipeline_dependency = cook_pipeline::cook_pipeline(context, asset_base, &pipeline_id).await?;
+            test.pipeline = pipeline_dependency.url().as_str().to_owned();
+            dependnecies.push(pipeline_dependency);
+
+            /*let texture_id = AssetId::new(&test.texture)?.to_absolute_id(asset_base, &world_base)?;
+            let texture_dependency = cook_texture::cook_texture(context, asset_base, &texture_id).await?;
+            test.texture = texture_dependency.url().as_str().to_owned();
+            dependnecies.push(texture_dependency);*/
         }
     }
     log::trace!("[{}] Cooked world:\n{:#?}", world_url.as_str(), world);

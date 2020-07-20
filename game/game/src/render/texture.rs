@@ -134,7 +134,7 @@ impl From<bincode::Error> for TextureLoadError {
 
 impl AssetIO {
     async fn load_texture(
-        &mut self,
+        &self,
         load_token: LoadToken<Texture>,
         source_id: String,
     ) -> Result<TextureImage, TextureLoadError> {

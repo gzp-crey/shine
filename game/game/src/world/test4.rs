@@ -267,7 +267,7 @@ fn render() -> Box<dyn Schedulable> {
             {
                 let pass_descriptor = wgpu::RenderPassDescriptor {
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: frame.texture_view(),
+                        attachment: &frame.output().frame.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
