@@ -7,7 +7,6 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
-use std::any::Any;
 
 const VERTICES: &[Pos3fCol4f] = &[
     Pos3fCol4f {
@@ -61,14 +60,6 @@ impl GameWorldBuilder for Test2 {
 pub struct TestWorld;
 
 impl GameWorld for TestWorld {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test2 scene from the world");
 

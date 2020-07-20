@@ -1,15 +1,13 @@
 use crate::{GameError, GameView};
-use std::any::Any;
 
-pub trait GameWorldBuilder {
-    type World: GameWorld;
+pub trait GameLoadWorld: 'static + Send + Sync {
+    type Source;
 
-    fn build(self, game: &mut GameView) -> Result<Self::World, GameError>;
+    fn build(source: Self::Source, game: &mut GameView) -> Result<Self, GameError>
+    where
+        Self: Sized;
 }
 
-pub trait GameWorld: 'static + Any + Send + Sync {
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-
+pub trait GameUnloadWorld: 'static + Send + Sync {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError>;
 }

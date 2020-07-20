@@ -7,7 +7,6 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
-use std::any::Any;
 
 /// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,14 +34,6 @@ impl GameWorldBuilder for Test5 {
 pub struct TestWorld;
 
 impl GameWorld for TestWorld {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test5 scene from the world");
 

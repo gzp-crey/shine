@@ -1,13 +1,12 @@
 use crate::assets::vertex;
 use crate::render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
-use crate::world::{GameWorld, GameWorldBuilder};
+use crate::world::{GameLoadWorld, GameUnloadWorld};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
-use std::any::Any;
 
 /// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
@@ -15,13 +14,16 @@ pub struct Test1 {
     pub pipeline: String,
 }
 
-impl GameWorldBuilder for Test1 {
-    type World = TestWorld;
+/// Manage the lifecycle of the test
+pub struct TestWorld;
 
-    fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
+impl GameLoadWorld for TestWorld {
+    type Source = Test1;
+
+    fn build(source: Test1, game: &mut GameView) -> Result<TestWorld, GameError> {
         log::info!("Adding test1 scene to the world");
 
-        game.resources.insert(TestScene::new(self));
+        game.resources.insert(TestScene::new(source));
 
         let render = Schedule::builder().add_system(render_test()).flush().build();
         game.schedules.insert("render", render)?;
@@ -30,18 +32,7 @@ impl GameWorldBuilder for Test1 {
     }
 }
 
-/// Manage the lifecycle of the test
-pub struct TestWorld;
-
-impl GameWorld for TestWorld {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
+impl GameUnloadWorld for TestWorld {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test1 scene from the world");
 
