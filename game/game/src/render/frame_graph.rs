@@ -1,6 +1,6 @@
 use crate::assets::{AssetError, AssetIO, FrameGraphDescriptor, Url, UrlError};
 use crate::render::{Context, Frame, FrameOutput, PipelineStore, PipelineStoreRead};
-use futures::channel::oneshot;
+use shine_ecs::core::async_task::AsyncTask;
 use std::fmt;
 
 struct RenderTarget {
@@ -32,7 +32,7 @@ impl FrameGraphBuffer {
 
 enum CompiledFrameGraph {
     Error,
-    Waiting(oneshot::Receiver<FrameGraphLoadResponse>),
+    Waiting(AsyncTask<Result<FrameGraphDescriptor, FrameGraphLoadError>>),
     Compiled(FrameGraphBuffer),
 }
 
@@ -66,10 +66,10 @@ impl FrameGraph {
 
     pub fn update(&mut self) {
         let load_response = if let CompiledFrameGraph::Waiting(recv) = &mut self.graph {
-            match recv.try_recv() {
-                Err(_) => Err(FrameGraphLoadError::Canceled),
+            match recv.try_get() {
                 Ok(None) => return,
-                Ok(Some(FrameGraphLoadResponse(response))) => response,
+                Err(_) => Err(FrameGraphLoadError::Canceled),
+                Ok(Some(response)) => response,
             }
         } else {
             return;
@@ -85,8 +85,6 @@ impl FrameGraph {
 
     pub fn end_frame(&mut self) {}
 }
-
-struct FrameGraphLoadResponse(Result<FrameGraphDescriptor, FrameGraphLoadError>);
 
 /// Error during frame graph load
 #[derive(Debug)]
@@ -127,34 +125,10 @@ impl AssetIO {
 
 impl FrameGraph {
     pub fn load_from_url(assetio: AssetIO, descriptor: String) -> FrameGraph {
-        let (sender, receiver) = oneshot::channel();
-
-        #[cfg(feature = "native")]
-        {
-            use tokio::{runtime::Handle, task};
-            task::spawn_blocking(move || {
-                Handle::current().block_on(async move {
-                    let desc = assetio.load_frame_graph(descriptor).await;
-                    if let Err(_) = sender.send(FrameGraphLoadResponse(desc)) {
-                        log::warn!("Failed to send frame graph result");
-                    }
-                })
-            });
-        }
-
-        #[cfg(feature = "wasm")]
-        {
-            use wasm_bindgen_futures::spawn_local;
-            spawn_local(async move {
-                let desc = assetio.load_frame_graph(descriptor).await;
-                if let Err(_) = sender.send(FrameGraphLoadResponse(desc)) {
-                    log::warn!("Failed to send frame graph result");
-                }
-            });
-        }
+        let task = async move { assetio.load_frame_graph(descriptor).await };
 
         FrameGraph {
-            graph: CompiledFrameGraph::Waiting(receiver),
+            graph: CompiledFrameGraph::Waiting(AsyncTask::start(task)),
         }
     }
 }

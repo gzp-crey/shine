@@ -1,4 +1,3 @@
-use crate::assets::FrameGraphDescriptor;
 use crate::render::{Context, Frame, FrameGraph, Model, Pipeline, Shader, Texture};
 use crate::{GameError, GameView};
 use shine_ecs::core::store;

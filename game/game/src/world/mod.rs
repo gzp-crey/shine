@@ -4,10 +4,10 @@ mod system;
 pub use self::system::*;
 
 pub mod test1;
-/*pub mod test2;
+pub mod test2;
 pub mod test3;
 pub mod test4;
-pub mod test5;*/
+pub mod test5;
 
 use crate::assets::{AssetError, AssetIO, Url};
 use serde::{Deserialize, Serialize};
@@ -15,10 +15,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub enum WorldData {
     Test1(test1::Test1),
-    /*Test2(test2::Test2),
+    Test2(test2::Test2),
     Test3(test3::Test3),
     Test4(test4::Test4),
-    Test5(test5::Test5),*/
+    Test5(test5::Test5),
 }
 
 impl WorldData {

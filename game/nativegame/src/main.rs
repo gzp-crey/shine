@@ -1,7 +1,12 @@
 #![feature(async_closure)]
 
 use shine_game::{
-    assets::Url, input::InputSystem, render::Surface, wgpu, world::WorldSystem, Config, GameError, GameView,
+    assets::Url,
+    input::InputSystem,
+    render::Surface,
+    wgpu,
+    world::{test1::Test1World, test2::Test2World, test3::Test3World, test4::Test4World, test5::Test5World, WorldSystem},
+    Config, GameError, GameView,
 };
 use std::time::{Duration, Instant};
 use tokio::runtime::{Handle as RuntimeHandle, Runtime};
@@ -36,11 +41,11 @@ fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url) -> Result<(), 
         .block_on(WorldData::from_url(&game.assetio, url))
         .map_err(|err| GameError::Setup(format!("Failed to load world: {}", err)))?;
     match world_data {
-        WorldData::Test1(test) => game.load_world(test)?,
-        WorldData::Test2(test) => game.load_world(test)?,
-        WorldData::Test3(test) => game.load_world(test)?,
-        WorldData::Test4(test) => game.load_world(test)?,
-        WorldData::Test5(test) => game.load_world(test)?,
+        WorldData::Test1(test) => game.load_world::<Test1World>(test)?,
+        WorldData::Test2(test) => game.load_world::<Test2World>(test)?,
+        WorldData::Test3(test) => game.load_world::<Test3World>(test)?,
+        WorldData::Test4(test) => game.load_world::<Test4World>(test)?,
+        WorldData::Test5(test) => game.load_world::<Test5World>(test)?,
     }
     game.gc();
     Ok(())

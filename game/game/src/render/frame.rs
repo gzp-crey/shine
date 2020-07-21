@@ -49,15 +49,7 @@ impl Frame {
     pub fn output(&self) -> &FrameOutput {
         self.frame.as_ref().unwrap()
     }
-
-    /*pub fn descriptor(&self) -> &wgpu::SwapChainDescriptor {
-        &self.output().descriptor
-    }
-
-    pub fn texture_view(&self) -> &wgpu::TextureView {
-        &self.output().frame.view
-    }*/
-
+    
     pub fn add_command(&self, commands: wgpu::CommandBuffer) {
         let mut buffers = self.buffers.lock().unwrap();
         buffers.push(commands);

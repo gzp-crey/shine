@@ -9,7 +9,7 @@ use crate::render::{
     Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
     TextureStoreRead,
 };
-use crate::world::{GameWorld, GameWorldBuilder};
+use crate::world::{GameLoadWorld, GameUnloadWorld};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
@@ -51,14 +51,17 @@ pub struct Test4 {
     pub texture: String,
 }
 
-impl GameWorldBuilder for Test4 {
-    type World = TestWorld;
+/// Manage the lifecycle of the test
+pub struct Test4World;
 
-    fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
+impl GameLoadWorld for Test4World {
+    type Source = Test4;
+
+    fn build(source: Test4, game: &mut GameView) -> Result<Test4World, GameError> {
         log::info!("Adding test4 scene to the world");
 
         game.set_input(FirstPersonShooter::new())?;
-        game.resources.insert(TestScene::new(self));
+        game.resources.insert(TestScene::new(source));
         game.resources.insert(FirstPerson::new());
         game.resources.insert(Projection::new());
 
@@ -80,14 +83,11 @@ impl GameWorldBuilder for Test4 {
                 .build(),
         )?;
 
-        Ok(TestWorld)
+        Ok(Test4World)
     }
 }
 
-/// Manage the lifecycle of the test
-pub struct TestWorld;
-
-impl GameWorld for TestWorld {
+impl GameUnloadWorld for Test4World {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test4 scene from the world");
 

@@ -15,12 +15,12 @@ pub struct Test1 {
 }
 
 /// Manage the lifecycle of the test
-pub struct TestWorld;
+pub struct Test1World;
 
-impl GameLoadWorld for TestWorld {
+impl GameLoadWorld for Test1World {
     type Source = Test1;
 
-    fn build(source: Test1, game: &mut GameView) -> Result<TestWorld, GameError> {
+    fn build(source: Test1, game: &mut GameView) -> Result<Test1World, GameError> {
         log::info!("Adding test1 scene to the world");
 
         game.resources.insert(TestScene::new(source));
@@ -28,11 +28,11 @@ impl GameLoadWorld for TestWorld {
         let render = Schedule::builder().add_system(render_test()).flush().build();
         game.schedules.insert("render", render)?;
 
-        Ok(TestWorld)
+        Ok(Test1World)
     }
 }
 
-impl GameUnloadWorld for TestWorld {
+impl GameUnloadWorld for Test1World {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test1 scene from the world");
 

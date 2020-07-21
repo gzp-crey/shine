@@ -1,6 +1,6 @@
 use crate::assets::vertex;
 use crate::render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
-use crate::world::{GameWorld, GameWorldBuilder};
+use crate::world::{GameLoadWorld, GameUnloadWorld};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
@@ -15,25 +15,25 @@ pub struct Test5 {
     pub pipeline: String,
 }
 
-impl GameWorldBuilder for Test5 {
-    type World = TestWorld;
+/// Manage the lifecycle of the test
+pub struct Test5World;
 
-    fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
+impl GameLoadWorld for Test5World {
+    type Source = Test5;
+
+    fn build(source: Test5, game: &mut GameView) -> Result<Test5World, GameError> {
         log::info!("Adding test5 scene to the world");
 
-        game.resources.insert(TestScene::new(self));
+        game.resources.insert(TestScene::new(source));
 
         let render = Schedule::builder().add_system(render_test()).flush().build();
         game.schedules.insert("render", render)?;
 
-        Ok(TestWorld)
+        Ok(Test5World)
     }
 }
 
-/// Manage the lifecycle of the test
-pub struct TestWorld;
-
-impl GameWorld for TestWorld {
+impl GameUnloadWorld for Test5World {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test5 scene from the world");
 

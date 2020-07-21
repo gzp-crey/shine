@@ -6,7 +6,7 @@ use crate::render::{
     Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
     TextureStoreRead,
 };
-use crate::world::{GameWorld, GameWorldBuilder};
+use crate::world::{GameLoadWorld, GameUnloadWorld};
 use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
@@ -47,14 +47,16 @@ pub struct Test3 {
     pub pipeline: String,
     pub texture: String,
 }
+/// Manage the lifecycle of the test
+pub struct Test3World;
 
-impl GameWorldBuilder for Test3 {
-    type World = TestWorld;
+impl GameLoadWorld for Test3World {
+    type Source = Test3;
 
-    fn build(self, game: &mut GameView) -> Result<TestWorld, GameError> {
+    fn build(source: Test3, game: &mut GameView) -> Result<Test3World, GameError> {
         log::info!("Adding test3 scene to the world");
 
-        game.resources.insert(TestScene::new(self));
+        game.resources.insert(TestScene::new(source));
 
         game.schedules.insert(
             "render",
@@ -66,14 +68,11 @@ impl GameWorldBuilder for Test3 {
                 .build(),
         )?;
 
-        Ok(TestWorld)
+        Ok(Test3World)
     }
 }
 
-/// Manage the lifecycle of the test
-pub struct TestWorld;
-
-impl GameWorld for TestWorld {
+impl GameUnloadWorld for Test3World {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test3 scene from the world");
 
