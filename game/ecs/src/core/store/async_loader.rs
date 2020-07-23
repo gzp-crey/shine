@@ -190,7 +190,7 @@ impl AsyncLoadListeners {
         }
     }
 
-    pub fn add<'a, D>(&self, load_handler: &AsyncLoadHandler<D>, load_token: LoadToken<D>, request: D::LoadResponse)
+    pub fn add<D>(&self, load_handler: &AsyncLoadHandler<D>, load_token: LoadToken<D>, request: D::LoadResponse)
     where
         D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
     {

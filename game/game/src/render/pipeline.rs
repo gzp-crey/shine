@@ -1,8 +1,8 @@
 use crate::assets::{
-    AssetError, AssetIO, IntoVertexTypeId, PipelineBuffer, PipelineDescriptor, ShaderType, Url, UrlError,
-    VertexBufferLayouts, VertexTypeId,
+    AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, ShaderType, Url, UrlError, VertexBufferLayouts,
+    VertexTypeId,
 };
-use crate::render::{Context, ShaderDependency, ShaderStore, ShaderStoreRead};
+use crate::render::{Compile, Context, PipelineBuffer, ShaderDependency, ShaderStore, ShaderStoreRead};
 use shine_ecs::core::store::{
     AsyncLoadHandler, AsyncLoader, AutoNamedId, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading,
     ReadGuard, Store,
@@ -120,15 +120,13 @@ impl Pipeline {
                 Ok(Some(sh)) => sh,
             };
 
-            match descriptor.to_pipeline_buffer(
+            match descriptor.compile(
                 context.device(),
-                context.swap_chain_format(),
-                &self.vertex_layouts,
-                |stage| match stage {
+                (context.swap_chain_format(), &self.vertex_layouts, |stage| match stage {
                     ShaderType::Vertex => Ok(vs),
                     ShaderType::Fragment => Ok(fs),
                     _ => unreachable!(),
-                },
+                }),
             ) {
                 Ok(pipeline) => {
                     self.pipeline = CompiledPipeline::Compiled(pipeline);
@@ -193,7 +191,7 @@ impl OnLoad for Pipeline {
                 if self
                     .descriptor
                     .as_ref()
-                    .map(|old| &old.vertex_stage.shader != &desc.vertex_stage.shader)
+                    .map(|old| old.vertex_stage.shader != desc.vertex_stage.shader)
                     .unwrap_or(true)
                 {
                     log::trace!(
@@ -207,7 +205,7 @@ impl OnLoad for Pipeline {
                 if self
                     .descriptor
                     .as_ref()
-                    .map(|old| &old.fragment_stage.shader != &desc.fragment_stage.shader)
+                    .map(|old| old.fragment_stage.shader != desc.fragment_stage.shader)
                     .unwrap_or(true)
                 {
                     log::trace!(

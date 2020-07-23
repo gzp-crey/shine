@@ -19,7 +19,7 @@ where
 
         let async_task = async move {
             let data = task.await;
-            if let Err(_) = sender.send(data) {
+            if sender.send(data).is_err() {
                 log::warn!("Failed to send async task result");
             }
         };
@@ -36,7 +36,7 @@ where
             spawn_local(async_task);
         }
 
-        AsyncTask { receiver: receiver }
+        AsyncTask { receiver }
     }
 
     pub fn try_get(&mut self) -> Result<Option<T>, Canceled> {

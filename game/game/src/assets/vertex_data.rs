@@ -27,8 +27,4 @@ impl VertexData {
     pub fn count(&self) -> usize {
         self.count
     }
-
-    pub fn to_vertex_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
-        device.create_buffer_with_data(self.get_raw_buffer(), wgpu::BufferUsage::VERTEX)
-    }
 }

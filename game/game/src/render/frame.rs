@@ -7,49 +7,38 @@ pub struct FrameOutput {
 }
 
 pub struct Frame {
-    frame: Option<FrameOutput>,
-    //start: Instant,
     buffers: Mutex<Vec<wgpu::CommandBuffer>>,
-    graph: Option<FrameGraph>,
+    graph: FrameGraph,
 }
 
 impl Frame {
     pub fn new() -> Frame {
         Frame {
-            frame: None,
             buffers: Mutex::new(Vec::new()),
-            graph: None,
+            graph: FrameGraph::default(),
         }
     }
 
-    pub fn set_frame_graph(&mut self, graph: Option<FrameGraph>) {
+    pub fn set_frame_graph(&mut self, graph: FrameGraph) {
         self.graph = graph;
     }
 
     pub fn start(&mut self, frame_output: FrameOutput) {
-        self.frame = Some(frame_output);
-        if let Some(graph) = &mut self.graph {
-            graph.update();
-            graph.start_frame();
-        }
+        self.graph.start_frame(Some(frame_output));
     }
 
     pub fn end(&mut self, queue: &wgpu::Queue) {
-        if let Some(graph) = &mut self.graph {
-            graph.end_frame();
-        }
-
+        self.graph.end_frame();
         {
             let mut buffers = self.buffers.lock().unwrap();
             queue.submit(buffers.drain(..));
         }
-        self.frame = None;
     }
 
     pub fn output(&self) -> &FrameOutput {
-        self.frame.as_ref().unwrap()
+        self.graph.frame_output().unwrap()
     }
-    
+
     pub fn add_command(&self, commands: wgpu::CommandBuffer) {
         let mut buffers = self.buffers.lock().unwrap();
         buffers.push(commands);

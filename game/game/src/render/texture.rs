@@ -1,5 +1,5 @@
-use crate::assets::{AssetError, AssetIO, TextureBuffer, TextureImage, Url, UrlError};
-use crate::render::Context;
+use crate::assets::{AssetError, AssetIO, TextureImage, Url, UrlError};
+use crate::render::{Compile, Context, TextureBuffer};
 use shine_ecs::core::store::{
     AsyncLoadHandler, AsyncLoader, AutoNamedId, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading,
     ReadGuard, Store,
@@ -80,7 +80,7 @@ impl OnLoad for Texture {
             }
 
             Ok(texture_image) => {
-                match texture_image.to_texture_buffer(context.device()) {
+                match texture_image.compile(context.device(), ()) {
                     Ok((texture, init_command)) => {
                         context.queue().submit(init_command);
                         self.texture = CompiledTexture::Compiled(texture);

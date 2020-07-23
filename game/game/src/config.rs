@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
+use std::str::FromStr;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -50,8 +51,12 @@ impl Config {
         log::info!("configuration: {:#?}", cfg);
         Ok(cfg)
     }
+}
 
-    pub fn from_str(cfg: &str) -> Result<Self, GameError> {
+impl FromStr for Config {
+    type Err = GameError;
+
+    fn from_str(cfg: &str) -> Result<Self, GameError> {
         use config::{File, FileFormat};
         let mut s = config::Config::new();
 

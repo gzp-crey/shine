@@ -60,9 +60,9 @@ impl RenderSystem for GameView {
     fn set_frame_graph(&mut self, graph_id: Option<String>) {
         if let Some(mut frame) = self.resources.get_mut::<Frame>() {
             if let Some(graph_id) = graph_id {
-                frame.set_frame_graph(Some(FrameGraph::load_from_url(self.assetio.clone(), graph_id)))
+                frame.set_frame_graph(FrameGraph::load_from_url(self.assetio.clone(), graph_id))
             } else {
-                frame.set_frame_graph(None);
+                frame.set_frame_graph(FrameGraph::default());
             }
         }
     }

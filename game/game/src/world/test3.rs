@@ -1,10 +1,10 @@
 use crate::assets::{
     vertex::{self, Pos3fTex2f},
-    TextureSemantic, Uniform, GLOBAL_UNIFORMS,
+    TextureSemantic, Uniform,
 };
 use crate::render::{
     Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
-    TextureStoreRead,
+    TextureStoreRead, GLOBAL_UNIFORMS,
 };
 use crate::world::{GameLoadWorld, GameUnloadWorld};
 use crate::{GameError, GameView};
@@ -25,11 +25,11 @@ const VERTICES: &[Pos3fTex2f] = &[
     },
     Pos3fTex2f {
         position: [-0.21918549, -0.44939706, 0.0],
-        texcoord: [0.28081453, 0.949397057],
+        texcoord: [0.28081453, 0.949397],
     },
     Pos3fTex2f {
         position: [0.35966998, -0.3473291, 0.0],
-        texcoord: [0.85967, 0.84732911],
+        texcoord: [0.85967, 0.84732914],
     },
     Pos3fTex2f {
         position: [0.44147372, 0.2347359, 0.0],

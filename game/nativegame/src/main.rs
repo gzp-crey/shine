@@ -5,7 +5,9 @@ use shine_game::{
     input::InputSystem,
     render::Surface,
     wgpu,
-    world::{test1::Test1World, test2::Test2World, test3::Test3World, test4::Test4World, test5::Test5World, WorldSystem},
+    world::{
+        test1::Test1World, test2::Test2World, test3::Test3World, test4::Test4World, test5::Test5World, WorldSystem,
+    },
     Config, GameError, GameView,
 };
 use std::time::{Duration, Instant};

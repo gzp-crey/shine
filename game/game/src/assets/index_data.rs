@@ -16,8 +16,4 @@ impl IndexData {
     pub fn get_raw_buffer(&self) -> &[u8] {
         bytemuck::cast_slice(&self.0)
     }
-
-    pub fn to_index_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
-        device.create_buffer_with_data(self.get_raw_buffer(), wgpu::BufferUsage::INDEX)
-    }
 }

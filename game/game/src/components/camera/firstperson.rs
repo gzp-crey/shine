@@ -143,8 +143,8 @@ impl FirstPerson {
     fn clamp_angles(&mut self) {
         use std::f32::consts::PI;
 
-        self.yaw = self.yaw % (PI * 2.);
-        self.roll = self.roll % (PI * 2.);
+        self.yaw %= PI * 2.;
+        self.roll %= PI * 2.;
 
         let pitch_limit = PI - 0.001;
         if self.pitch < -pitch_limit {
@@ -177,15 +177,15 @@ impl Default for FirstPerson {
 
 impl Camera for FirstPerson {
     fn get_view(&self) -> Isometry3<f32> {
-        self.view.clone()
+        self.view
     }
 
     fn get_inverse_view(&self) -> Isometry3<f32> {
-        self.inverse_view.clone()
+        self.inverse_view
     }
 
     fn get_perspective(&self) -> Perspective3<f32> {
-        self.perspective.clone()
+        self.perspective
     }
 
     fn set<C: Camera>(&mut self, c: &C) {

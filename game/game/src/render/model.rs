@@ -1,5 +1,5 @@
-use crate::assets::{gltf, AssetError, AssetIO, ModelBuffer, ModelData, Url, UrlError};
-use crate::render::Context;
+use crate::assets::{gltf, AssetError, AssetIO, ModelData, Url, UrlError};
+use crate::render::{Compile, Context, ModelBuffer};
 use shine_ecs::core::store::{
     AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
@@ -79,7 +79,7 @@ impl OnLoad for Model {
             }
 
             Ok(model_data) => {
-                self.model = CompiledModel::Compiled(model_data.to_model_buffer(context.device()));
+                self.model = CompiledModel::Compiled(model_data.compile(context.device(), ()));
                 //self.listeners.notify_all();
                 log::debug!("[{:?}] Model compilation completed", load_token);
             }
