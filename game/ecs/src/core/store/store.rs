@@ -379,9 +379,10 @@ where
         let (exclusive, load_handler) = exclusive;
 
         while let Some((load_token, load_response)) = load_handler.next_response() {
-            log::trace!("Receive loading response for {:?}", load_token);
+            log::trace!("[{:?}] Receive loading response", load_token);
 
             if load_token.is_canceled() {
+                log::trace!("[{:?}] Resource cancaled", load_token);
                 continue;
             }
 
@@ -405,6 +406,7 @@ where
             }
 
             let entry = unsafe { &mut *load_token.1 };
+            log::trace!("[{:?}] On load response", load_token);
             entry
                 .value
                 .on_load_response(load_handler, &mut loading_context, load_token, load_response);

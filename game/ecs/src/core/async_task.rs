@@ -19,6 +19,7 @@ where
 
         let async_task = async move {
             let data = task.await;
+            log::debug!("Sending async task");
             if sender.send(data).is_err() {
                 log::warn!("Failed to send async task result");
             }

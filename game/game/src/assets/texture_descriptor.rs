@@ -36,14 +36,22 @@ impl Default for ImageDescriptor {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum RenderTargetSize {
+    /// Size matching the frame output
+    Matching,
+    /// Size propotional to the render target
+    Propotional(f32,f32),
+    /// Fixed sized
+    Fixed(u32,u32)
+}
+
 /// Render target descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderTargetDescriptor {
     pub format: wgpu::TextureFormat,
-    pub size_scale: (f32, f32),
+    pub size: RenderTargetSize,
 }
-
-impl RenderTargetDescriptor {}
 
 /// Sampler descriptor
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]

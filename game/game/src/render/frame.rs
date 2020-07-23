@@ -28,11 +28,12 @@ impl Frame {
     }
 
     pub fn end(&mut self, queue: &wgpu::Queue) {
-        self.graph.end_frame();
+        self.graph.postprocess_frame();
         {
             let mut buffers = self.buffers.lock().unwrap();
             queue.submit(buffers.drain(..));
         }
+        self.graph.end_frame();
     }
 
     pub fn output(&self) -> &FrameOutput {

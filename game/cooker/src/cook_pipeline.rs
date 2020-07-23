@@ -1,5 +1,6 @@
 use crate::{cook_shader, AssetNaming, Context, CookingError, Dependency};
-use shine_game::assets::{AssetId, PipelineDescriptor, Url, UNIFORM_GROUP_COUNT};
+use shine_game::assets::{AssetId, PipelineDescriptor, Url};
+use shine_game::render::MAX_UNIFORM_GROUP_COUNT;
 
 async fn find_pipeline_etag(context: &Context, pipeline_url: &Url) -> Result<String, CookingError> {
     Ok(context.source_io.download_etag(&pipeline_url).await?)
@@ -31,7 +32,7 @@ pub async fn cook_pipeline(
 
     let mut dependencies = Vec::new();
 
-    for i in 0..UNIFORM_GROUP_COUNT {
+    for i in 0..MAX_UNIFORM_GROUP_COUNT {
         let layout = pipeline.get_uniform_layout(i)?;
         log::trace!(
             "[{}] Uniform group({}) layout:\n{:#?}",

@@ -37,7 +37,7 @@ async fn logic(event_loop_proxy: EventLoopProxy<CustomEvent>) {
     }
 }
 
-fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url) -> Result<(), GameError> {
+fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url, gc: bool) -> Result<(), GameError> {
     use shine_game::world::WorldData;
     let world_data = rt
         .block_on(WorldData::from_url(&game.assetio, url))
@@ -49,7 +49,17 @@ fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url) -> Result<(), 
         WorldData::Test4(test) => game.load_world::<Test4World>(test)?,
         WorldData::Test5(test) => game.load_world::<Test5World>(test)?,
     }
-    game.gc();
+    if gc {
+        game.gc();
+    }
+    Ok(())
+}
+
+fn unload_world(_rt: &RuntimeHandle, game: &mut GameView, gc: bool) -> Result<(), GameError> {
+    game.unload_world()?;
+    if gc {
+        game.gc();
+    }
     Ok(())
 }
 
@@ -101,6 +111,7 @@ async fn run() {
                     WindowEvent::KeyboardInput { input, .. } => {
                         let _ = game.inject_input(input);
                         if input.state == ElementState::Pressed {
+                            let alt = input.modifiers.shift();
                             match input.virtual_keycode {
                                 Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
                                 /*Some(VirtualKeyCode::F11) => {
@@ -108,12 +119,12 @@ async fn run() {
                                     flame::clear();
                                     flame::start("frame");
                                 },*/
-                                Some(VirtualKeyCode::Key0) => game.unload_world().unwrap(),
-                                Some(VirtualKeyCode::Key1) => load_world(&rt, &mut game, &test1_url).unwrap(),
-                                Some(VirtualKeyCode::Key2) => load_world(&rt, &mut game, &test2_url).unwrap(),
-                                Some(VirtualKeyCode::Key3) => load_world(&rt, &mut game, &test3_url).unwrap(),
-                                Some(VirtualKeyCode::Key4) => load_world(&rt, &mut game, &test4_url).unwrap(),
-                                Some(VirtualKeyCode::Key5) => load_world(&rt, &mut game, &test5_url).unwrap(),
+                                Some(VirtualKeyCode::Key0) => unload_world(&rt, &mut game, alt).unwrap(),
+                                Some(VirtualKeyCode::Key1) => load_world(&rt, &mut game, &test1_url, alt).unwrap(),
+                                Some(VirtualKeyCode::Key2) => load_world(&rt, &mut game, &test2_url, alt).unwrap(),
+                                Some(VirtualKeyCode::Key3) => load_world(&rt, &mut game, &test3_url, alt).unwrap(),
+                                Some(VirtualKeyCode::Key4) => load_world(&rt, &mut game, &test4_url, alt).unwrap(),
+                                Some(VirtualKeyCode::Key5) => load_world(&rt, &mut game, &test5_url, alt).unwrap(),
                                 Some(VirtualKeyCode::F9) => game.gc(),
                                 _ => {}
                             }

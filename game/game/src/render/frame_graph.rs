@@ -130,6 +130,8 @@ impl FrameGraph {
         self.graph.frame_output()
     }
 
+    pub fn postprocess_frame(&mut self) {}
+
     pub fn end_frame(&mut self) {
         self.graph.end_frame();
     }

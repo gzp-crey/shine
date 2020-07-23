@@ -184,7 +184,8 @@ impl OnLoad for Pipeline {
     ) {
         let (context, shaders) = (load_context.0, &mut load_context.1.read());
         match load_response.0 {
-            Err(_) => {
+            Err(err) => {
+                log::warn!("[{:?}] Pipeline compilation failed: {:?}", load_token, err);
                 self.pipeline = CompiledPipeline::Error;
             }
             Ok(PipelineLoadResponseInner::PipelineDescriptor(desc)) => {

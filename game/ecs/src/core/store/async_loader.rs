@@ -92,7 +92,7 @@ where
             return true;
         }
 
-        log::trace!("Sending load response for {:?}", load_token);
+        log::trace!("[{:?}] Sending load response", load_token);
         match self.response_sender.send((load_token, output)).await {
             Ok(_) => true,
             Err(err) => {
