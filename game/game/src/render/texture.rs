@@ -1,5 +1,5 @@
 use crate::assets::{AssetError, AssetIO, TextureImage, Url, UrlError};
-use crate::render::{Compile, Context, TextureBuffer};
+use crate::render::{Compile, CompiledTexture, Context};
 use shine_ecs::core::store::{
     AsyncLoadHandler, AsyncLoader, AutoNamedId, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading,
     ReadGuard, Store,
@@ -9,15 +9,12 @@ use std::pin::Pin;
 /// Unique key for a texture
 pub type TextureKey = String;
 
-pub enum CompiledTexture {
-    None,
-    Error,
-    Compiled(TextureBuffer),
-}
+#[derive(Debug, Clone)]
+pub struct TextureError;
 
 pub struct Texture {
     id: String,
-    texture: CompiledTexture,
+    texture: Result<Option<CompiledTexture>, TextureError>,
 }
 
 impl Texture {
@@ -25,12 +22,16 @@ impl Texture {
         &self.id
     }
 
-    pub fn texture(&self) -> &CompiledTexture {
-        &self.texture
+    pub fn texture(&self) -> Result<Option<&CompiledTexture>, TextureError> {
+        match &self.texture {
+            Err(_) => Err(TextureError),
+            Ok(None) => Ok(None),
+            Ok(Some(texture)) => Ok(Some(texture)),
+        }
     }
 
-    pub fn texture_buffer(&self) -> Option<&TextureBuffer> {
-        if let CompiledTexture::Compiled(texture) = &self.texture {
+    pub fn texture_buffer(&self) -> Option<&CompiledTexture> {
+        if let Ok(Some(texture)) = &self.texture {
             Some(texture)
         } else {
             None
@@ -46,7 +47,7 @@ impl FromKey for Texture {
     fn from_key(key: &TextureKey) -> Self {
         Texture {
             id: key.to_owned(),
-            texture: CompiledTexture::None,
+            texture: Ok(None),
         }
     }
 }
@@ -74,7 +75,7 @@ impl OnLoad for Texture {
         let (context,) = (load_context.0,);
         match load_response.0 {
             Err(err) => {
-                self.texture = CompiledTexture::Error;
+                self.texture = Err(TextureError);
                 //listeners.notify_all();
                 log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
             }
@@ -83,12 +84,12 @@ impl OnLoad for Texture {
                 match texture_image.compile(context.device(), ()) {
                     Ok((texture, init_command)) => {
                         context.queue().submit(init_command);
-                        self.texture = CompiledTexture::Compiled(texture);
+                        self.texture = Ok(Some(texture));
                         //listeners.notify_all();
                         log::debug!("[{:?}] Texture compilation completed", load_token);
                     }
                     Err(err) => {
-                        self.texture = CompiledTexture::Error;
+                        self.texture = Err(TextureError);
                         //listeners.notify_all();
                         log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
                     }

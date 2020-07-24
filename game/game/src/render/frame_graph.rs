@@ -1,10 +1,6 @@
-use crate::assets::{AssetError, AssetIO, FrameGraphDescriptor, Url, UrlError};
-use crate::render::{FrameOutput, PipelineStore, PipelineStoreRead};
+use crate::assets::{AssetError, AssetIO, FrameGraphDescriptor, RenderTargetDescriptor, Url, UrlError};
+use crate::render::{Compile, CompiledRenderTarget, FrameOutput, PipelineStore, PipelineStoreRead};
 use shine_ecs::core::async_task::AsyncTask;
-
-struct RenderTarget {
-    name: String,
-}
 
 struct Pass {
     name: String,
@@ -15,9 +11,15 @@ struct Pass {
     }*/
 }
 
+pub struct FrameTarget {
+    name: String,
+    description: RenderTargetDescriptor,
+    render_target: CompiledRenderTarget,
+}
+
 pub struct FrameGraphBuffer {
     frame_output: Option<FrameOutput>,
-    targets: Vec<RenderTarget>,
+    targets: Vec<FrameTarget>,
     passes: Vec<Pass>,
 }
 
@@ -30,7 +32,7 @@ impl FrameGraphBuffer {
         }
     }
 
-    pub fn from_descriptor(_descriptor: FrameGraphDescriptor, frame_output: Option<FrameOutput>) -> FrameGraphBuffer {
+    pub fn from_descriptor(descriptor: FrameGraphDescriptor, frame_output: Option<FrameOutput>) -> FrameGraphBuffer {
         FrameGraphBuffer {
             frame_output,
             targets: Vec::new(),

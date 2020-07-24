@@ -1,4 +1,5 @@
 #![feature(async_closure)]
+#![feature(clamp)]
 
 pub mod assets;
 pub mod components;

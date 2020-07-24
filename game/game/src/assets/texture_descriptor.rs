@@ -14,15 +14,15 @@ pub enum ImageEncoding {
 
 /// Texture data descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ImageDescriptor {
+pub struct Image {
     pub encoding: ImageEncoding,
     pub format: wgpu::TextureFormat,
     pub size: (u32, u32),
 }
 
-impl ImageDescriptor {
-    pub fn new() -> ImageDescriptor {
-        ImageDescriptor {
+impl Image {
+    pub fn new() -> Image {
+        Image {
             encoding: ImageEncoding::Png,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             size: (0, 0),
@@ -30,7 +30,7 @@ impl ImageDescriptor {
     }
 }
 
-impl Default for ImageDescriptor {
+impl Default for Image {
     fn default() -> Self {
         Self::new()
     }
@@ -41,9 +41,9 @@ pub enum RenderTargetSize {
     /// Size matching the frame output
     Matching,
     /// Size propotional to the render target
-    Propotional(f32,f32),
+    Propotional(f32, f32),
     /// Fixed sized
-    Fixed(u32,u32)
+    Fixed(u32, u32),
 }
 
 /// Render target descriptor
@@ -51,6 +51,20 @@ pub enum RenderTargetSize {
 pub struct RenderTargetDescriptor {
     pub format: wgpu::TextureFormat,
     pub size: RenderTargetSize,
+}
+
+impl RenderTargetDescriptor {
+    pub fn get_target_size(&self, frame_size: (u32, u32)) -> (u32, u32) {
+        match &self.size {
+            RenderTargetSize::Matching => frame_size,
+            RenderTargetSize::Fixed(w, h) => (*w, *h),
+            RenderTargetSize::Propotional(sw, sh) => {
+                let w = ((frame_size.0 as f32) * sw).clamp(4., 65536.) as u32;
+                let h = ((frame_size.1 as f32) * sh).clamp(4., 65536.) as u32;
+                (w, h)
+            }
+        }
+    }
 }
 
 /// Sampler descriptor
@@ -88,14 +102,14 @@ impl SamplerDescriptor {
 /// Texture and sampler descriptor
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TextureDescriptor {
-    pub image: ImageDescriptor,
+    pub image: Image,
     pub sampler: SamplerDescriptor,
 }
 
 impl TextureDescriptor {
     pub fn new() -> TextureDescriptor {
         TextureDescriptor {
-            image: ImageDescriptor::new(),
+            image: Image::new(),
             sampler: SamplerDescriptor::new(),
         }
     }
@@ -111,7 +125,7 @@ impl Default for TextureDescriptor {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TextureImage {
     pub data: Vec<u8>,
-    pub image: ImageDescriptor,
+    pub image: Image,
     pub sampler: SamplerDescriptor,
 }
 

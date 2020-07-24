@@ -1,0 +1,1 @@
+//type CompileExtra<'a, F> = (wgpu::TextureFormat, &'a [VertexBufferLayout], F);

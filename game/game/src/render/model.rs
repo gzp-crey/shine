@@ -1,5 +1,5 @@
 use crate::assets::{gltf, AssetError, AssetIO, ModelData, Url, UrlError};
-use crate::render::{Compile, Context, ModelBuffer};
+use crate::render::{Compile, CompiledModel, Context};
 use shine_ecs::core::store::{
     AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
@@ -8,15 +8,12 @@ use std::pin::Pin;
 /// Unique key for a model
 pub type ModelKey = String;
 
-pub enum CompiledModel {
-    None,
-    Error,
-    Compiled(ModelBuffer),
-}
+#[derive(Debug, Clone)]
+pub struct ModelError;
 
 pub struct Model {
     id: String,
-    model: CompiledModel,
+    model: Result<Option<CompiledModel>, ModelError>,
 }
 
 impl Model {
@@ -24,12 +21,16 @@ impl Model {
         &self.id
     }
 
-    pub fn model(&self) -> &CompiledModel {
-        &self.model
+    pub fn model(&self) -> Result<Option<&CompiledModel>, ModelError> {
+        match &self.model {
+            Err(_) => Err(ModelError),
+            Ok(None) => Ok(None),
+            Ok(Some(model)) => Ok(Some(model)),
+        }
     }
 
-    pub fn model_module(&self) -> Option<&ModelBuffer> {
-        if let CompiledModel::Compiled(model) = &self.model {
+    pub fn model_module(&self) -> Option<&CompiledModel> {
+        if let Ok(Some(model)) = &self.model {
             Some(model)
         } else {
             None
@@ -45,7 +46,7 @@ impl FromKey for Model {
     fn from_key(key: &ModelKey) -> Self {
         Model {
             id: key.to_owned(),
-            model: CompiledModel::None,
+            model: Ok(None),
         }
     }
 }
@@ -73,13 +74,13 @@ impl OnLoad for Model {
         let (context,) = (load_context.0,);
         match load_response.0 {
             Err(err) => {
-                self.model = CompiledModel::Error;
+                self.model = Err(ModelError);
                 //self.listeners.notify_all();
                 log::warn!("[{:?}] Model compilation failed: {:?}", load_token, err);
             }
 
             Ok(model_data) => {
-                self.model = CompiledModel::Compiled(model_data.compile(context.device(), ()));
+                self.model = Ok(Some(model_data.compile(context.device(), ())));
                 //self.listeners.notify_all();
                 log::debug!("[{:?}] Model compilation completed", load_token);
             }

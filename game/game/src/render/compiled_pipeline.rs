@@ -10,12 +10,12 @@ pub const GLOBAL_UNIFORMS: u32 = 0;
 pub const LOCAL_UNIFORMS: u32 = 1;
 
 /// Compiled pipeline with related binding information
-pub struct PipelineBuffer {
+pub struct CompiledPipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub uniforms: [Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>; MAX_UNIFORM_GROUP_COUNT],
 }
 
-impl PipelineBuffer {
+impl CompiledPipeline {
     fn get_uniform_buffer_size(&self, group: u32) -> usize {
         self.uniforms[group as usize]
             .as_ref()
@@ -172,7 +172,7 @@ impl<'a, F> Compile<CompileExtra<'a, F>> for PipelineDescriptor
 where
     F: FnMut(ShaderType) -> Result<&'a wgpu::ShaderModule, AssetError>,
 {
-    type Compiled = Result<PipelineBuffer, AssetError>;
+    type Compiled = Result<CompiledPipeline, AssetError>;
 
     fn compile(
         &self,
@@ -253,13 +253,13 @@ where
             alpha_to_coverage_enabled: false,
         });
 
-        Ok(PipelineBuffer { pipeline, uniforms })
+        Ok(CompiledPipeline { pipeline, uniforms })
     }
 }
 
 /// Pipeline rendering context (render pass)
 pub struct BoundPipeline<'a: 'pass, 'pass> {
-    pub(crate) pipeline: &'a PipelineBuffer,
+    pub(crate) pipeline: &'a CompiledPipeline,
     pub(crate) render_pass: wgpu::RenderPass<'pass>,
 }
 

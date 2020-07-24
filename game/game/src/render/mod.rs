@@ -1,5 +1,3 @@
-mod compile;
-pub use self::compile::*;
 mod surface;
 pub use self::surface::*;
 mod context;
@@ -8,22 +6,32 @@ mod system;
 pub use self::system::*;
 mod frame;
 pub use self::frame::*;
+
+mod compile;
+pub use self::compile::*;
+mod compiled_shader;
+pub use self::compiled_shader::*;
+mod compiled_texture;
+pub use self::compiled_texture::*;
+mod compiled_pipeline;
+pub use self::compiled_pipeline::*;
+mod compiled_model;
+pub use self::compiled_model::*;
+
 mod shader;
-pub use self::shader::{Shader, ShaderDependency, ShaderIndex, ShaderKey, ShaderStore, ShaderStoreRead};
-mod texture_buffer;
-pub use self::texture_buffer::*;
+pub use self::shader::{Shader, ShaderDependency, ShaderError, ShaderIndex, ShaderKey, ShaderStore, ShaderStoreRead};
 mod texture;
-pub use self::texture::{Texture, TextureIndex, TextureKey, TextureNamedId, TextureStore, TextureStoreRead};
-mod pipeline_buffer;
-pub use self::pipeline_buffer::*;
+pub use self::texture::{
+    Texture, TextureError, TextureIndex, TextureKey, TextureNamedId, TextureStore, TextureStoreRead,
+};
 mod pipeline;
-pub use self::pipeline::{Pipeline, PipelineIndex, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
+pub use self::pipeline::{
+    Pipeline, PipelineError, PipelineIndex, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead,
+};
 mod frame_graph;
 pub use self::frame_graph::FrameGraph;
-mod model_buffer;
-pub use self::model_buffer::*;
 mod model;
-pub use self::model::{Model, ModelIndex, ModelKey, ModelStore, ModelStoreRead};
+pub use self::model::{Model, ModelError, ModelIndex, ModelKey, ModelStore, ModelStoreRead};
 
 pub mod systems {
     //pub use super::frame_graph::systems::*;
