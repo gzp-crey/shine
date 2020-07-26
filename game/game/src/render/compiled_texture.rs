@@ -1,4 +1,4 @@
-use crate::assets::{AssetError, Image, RenderTargetDescriptor, RenderTargetSize, SamplerDescriptor, TextureImage};
+use crate::assets::{AssetError, Image, RenderTargetDescriptor, SamplerDescriptor, TextureImage};
 use crate::render::Compile;
 
 fn create_sampler_descriptor(descriptor: &SamplerDescriptor) -> wgpu::SamplerDescriptor {
@@ -140,6 +140,6 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
             label: None,
         });
 
-        Ok(CompiledRenderTarget { texture, size })
+        CompiledRenderTarget { texture, size }
     }
 }

@@ -84,7 +84,7 @@ impl Context {
         });
 
         let frame = sc
-            .get_next_frame()
+            .get_current_frame()
             .map_err(|err| GameError::Render(format!("Frame request error: {:?}", err)))?
             .output;
         Ok(FrameOutput {

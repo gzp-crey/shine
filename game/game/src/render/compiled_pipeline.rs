@@ -1,9 +1,11 @@
-use crate::assets::{
-    AssetError, PipelineDescriptor, PipelineUniform, PipelineUniformLayout, ShaderType, Uniform, VertexBufferLayout,
-    VertexStage,
+use crate::{
+    assets::{
+        AssetError, PipelineDescriptor, PipelineUniform, PipelineUniformLayout, ShaderType, Uniform,
+        VertexBufferLayout, VertexStage,
+    },
+    render::Compile,
 };
-use crate::render::Compile;
-use std::ops::{Deref, DerefMut};
+use std::borrow::Cow;
 
 pub const MAX_UNIFORM_GROUP_COUNT: usize = 2;
 pub const GLOBAL_UNIFORMS: u32 = 0;
@@ -68,24 +70,24 @@ impl CompiledPipeline {
             Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
                 layout: bind_group_layout,
-                entries: &bindings,
+                entries: Cow::Borrowed(&bindings),
             }))
         } else {
             None
         }
     }
 
-    pub fn bind<'a: 'pass, 'pass>(
-        &'a self,
+    pub fn render<'a, 'b, F>(
+        &self,
         encoder: &'a mut wgpu::CommandEncoder,
-        pass_descriptor: &wgpu::RenderPassDescriptor<'pass, 'pass>,
-    ) -> BoundPipeline<'a, 'pass> {
-        let mut b = BoundPipeline {
-            pipeline: self,
-            render_pass: encoder.begin_render_pass(pass_descriptor),
-        };
-        b.bind_pipeline();
-        b
+        pass_descriptor: &wgpu::RenderPassDescriptor<'a, 'b>,
+        render: F,
+    ) where
+        F: FnOnce(&mut wgpu::RenderPass),
+    {
+        let mut pass = encoder.begin_render_pass(pass_descriptor);
+        pass.set_pipeline(&self.pipeline);
+        render(&mut pass);
     }
 }
 
@@ -132,7 +134,7 @@ fn create_bind_group_layout(
         Ok(Some((
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: &bindings,
+                entries: Cow::Borrowed(&bindings),
             }),
             uniforms,
         )))
@@ -185,12 +187,12 @@ where
             .map(|(stride, attributes)| wgpu::VertexBufferDescriptor {
                 stride: *stride,
                 step_mode: wgpu::InputStepMode::Vertex,
-                attributes: &attributes,
+                attributes: Cow::Borrowed(&attributes),
             })
             .collect();
         let vertex_state = wgpu::VertexStateDescriptor {
             index_format: wgpu::IndexFormat::Uint16,
-            vertex_buffers: &vertex_buffers,
+            vertex_buffers: Cow::Borrowed(&vertex_buffers),
         };
         log::trace!("Vertex state: {:#?}", vertex_state);
 
@@ -216,8 +218,8 @@ where
                 }
             }
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                bind_group_layouts: &bind_group_layouts,
-                push_constant_ranges: &[],
+                bind_group_layouts: Cow::Borrowed(&bind_group_layouts),
+                push_constant_ranges: Cow::Borrowed(&[]),
             })
         };
 
@@ -227,22 +229,22 @@ where
 
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: get_shader(ShaderType::Vertex)?,
-                entry_point: "main",
+                entry_point: Cow::Borrowed("main"),
             },
 
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: get_shader(ShaderType::Fragment)?,
-                entry_point: "main",
+                entry_point: Cow::Borrowed("main"),
             }),
 
             rasterization_state: None,
 
-            color_states: &[wgpu::ColorStateDescriptor {
+            color_states: Cow::Borrowed(&[wgpu::ColorStateDescriptor {
                 format: color_state_format,
                 color_blend: wgpu::BlendDescriptor::REPLACE,
                 alpha_blend: wgpu::BlendDescriptor::REPLACE,
                 write_mask: wgpu::ColorWrite::ALL,
-            }],
+            }]),
 
             depth_stencil_state: None,
 
@@ -254,31 +256,5 @@ where
         });
 
         Ok(CompiledPipeline { pipeline, uniforms })
-    }
-}
-
-/// Pipeline rendering context (render pass)
-pub struct BoundPipeline<'a: 'pass, 'pass> {
-    pub(crate) pipeline: &'a CompiledPipeline,
-    pub(crate) render_pass: wgpu::RenderPass<'pass>,
-}
-
-impl<'a: 'pass, 'pass> BoundPipeline<'a, 'pass> {
-    #[inline]
-    pub(crate) fn bind_pipeline(&mut self) {
-        self.render_pass.set_pipeline(&self.pipeline.pipeline);
-    }
-}
-
-impl<'a: 'pass, 'pass> Deref for BoundPipeline<'a, 'pass> {
-    type Target = wgpu::RenderPass<'pass>;
-    fn deref(&self) -> &Self::Target {
-        &self.render_pass
-    }
-}
-
-impl<'a: 'pass, 'pass> DerefMut for BoundPipeline<'a, 'pass> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.render_pass
     }
 }

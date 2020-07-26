@@ -1,12 +1,15 @@
-use crate::assets::vertex::{self, Pos3fCol4f};
-use crate::render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
-use crate::world::{GameLoadWorld, GameUnloadWorld};
-use crate::{GameError, GameView};
+use crate::{
+    assets::vertex::{self, Pos3fCol4f},
+    render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead},
+    world::{GameLoadWorld, GameUnloadWorld},
+    GameError, GameView,
+};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use std::borrow::Cow;
 
 const VERTICES: &[Pos3fCol4f] = &[
     Pos3fCol4f {
@@ -95,21 +98,25 @@ impl TestScene {
         });
     }
 
-    fn render(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
-        pipelines: &mut PipelineStoreRead<'_>,
-    ) {
-        let pipeline = self.pipeline.get(pipelines);
+    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &mut PipelineStoreRead<'_>) {
+        if let (Some(buffers), Some(pipeline)) = (self.buffers.as_ref(), self.pipeline.get(pipelines).pipeline_buffer())
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
+                    attachment: &frame.output().frame.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                        store: true,
+                    },
+                }]),
+                depth_stencil_attachment: None,
+            });
 
-        if let Some(ref buffers) = self.buffers {
-            if let Some(pipeline) = pipeline.pipeline_buffer() {
-                let mut pass = pipeline.bind(encoder, pass_descriptor);
-                pass.set_vertex_buffer(0, buffers.0.slice(..));
-                pass.set_index_buffer(buffers.1.slice(..));
-                pass.draw_indexed(0..buffers.2, 0, 0..1);
-            }
+            pass.set_pipeline(&pipeline.pipeline);
+            pass.set_vertex_buffer(0, buffers.0.slice(..));
+            pass.set_index_buffer(buffers.1.slice(..));
+            pass.draw_indexed(0..buffers.2, 0, 0..1);
         }
     }
 }
@@ -121,33 +128,12 @@ fn render_test() -> Box<dyn Schedulable> {
         .read_resource::<PipelineStore>()
         .write_resource::<TestScene>()
         .build(move |_, _, (context, frame, pipelines, scene), _| {
-            let mut pipelines = pipelines.read();
-
-            {
-                scene.prepare(&context.device());
-            }
+            scene.prepare(&context.device());
 
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-            {
-                let pass_descriptor = wgpu::RenderPassDescriptor {
-                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &frame.output().frame.view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                            store: true,
-                        },
-                    }],
-                    depth_stencil_attachment: None,
-                };
-
-                //log::info!("render pass");
-                //let mut render_pass = encoder.begin_render_pass(&pass_descriptor);
-                scene.render(&mut encoder, &pass_descriptor, &mut pipelines);
-            }
+            scene.render(&mut encoder, &*frame, &mut pipelines.read());
 
             frame.add_command(encoder.finish());
         })

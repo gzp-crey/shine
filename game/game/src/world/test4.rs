@@ -1,21 +1,24 @@
-use crate::assets::{
-    uniform::ViewProj,
-    vertex::{self, Pos3fTex2f},
-    TextureSemantic, Uniform, UniformSemantic,
+use crate::{
+    assets::{
+        uniform::ViewProj,
+        vertex::{self, Pos3fTex2f},
+        TextureSemantic, Uniform, UniformSemantic,
+    },
+    components::camera::{Camera, FirstPerson, Projection},
+    input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputSystem},
+    render::{
+        Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
+        TextureStoreRead, GLOBAL_UNIFORMS,
+    },
+    world::{GameLoadWorld, GameUnloadWorld},
+    GameError, GameView,
 };
-use crate::components::camera::{Camera, FirstPerson, Projection};
-use crate::input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputSystem};
-use crate::render::{
-    Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
-    TextureStoreRead, GLOBAL_UNIFORMS,
-};
-use crate::world::{GameLoadWorld, GameUnloadWorld};
-use crate::{GameError, GameView};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use std::borrow::Cow;
 
 const VERTICES: &[Pos3fTex2f] = &[
     Pos3fTex2f {
@@ -158,18 +161,15 @@ impl TestScene {
         &mut self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
-        pass_descriptor: &wgpu::RenderPassDescriptor<'_, '_>,
+        frame: &Frame,
         pipelines: &mut PipelineStoreRead<'_>,
         textures: &mut TextureStoreRead<'_>,
     ) {
-        let pipeline = self.pipeline.get(pipelines);
-        let texture = self.texture.get(textures);
-
         if let (Some(ref geometry), Some(ref uniforms), Some(pipeline), Some(texture)) = (
             self.geometry.as_ref(),
             self.uniforms.as_ref(),
-            pipeline.pipeline_buffer(),
-            texture.texture_buffer(),
+            self.pipeline.get(pipelines).pipeline_buffer(),
+            self.texture.get(textures).texture_buffer(),
         ) {
             let bind_group = self.bind_group.get_or_insert_with(|| {
                 pipeline
@@ -183,12 +183,25 @@ impl TestScene {
                     })
                     .unwrap()
             });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
+                        attachment: &frame.output().frame.view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                            store: true,
+                        },
+                    }]),
+                    depth_stencil_attachment: None,
+                });
 
-            let mut pass = pipeline.bind(encoder, pass_descriptor);
-            pass.set_vertex_buffer(0, geometry.0.slice(..));
-            pass.set_index_buffer(geometry.1.slice(..));
-            pass.set_bind_group(GLOBAL_UNIFORMS, bind_group, &[]);
-            pass.draw_indexed(0..geometry.2, 0, 0..1);
+                pass.set_pipeline(&pipeline.pipeline);
+                pass.set_vertex_buffer(0, geometry.0.slice(..));
+                pass.set_index_buffer(geometry.1.slice(..));
+                pass.set_bind_group(GLOBAL_UNIFORMS, bind_group, &[]);
+                pass.draw_indexed(0..geometry.2, 0, 0..1);
+            }
         }
     }
 }
@@ -248,35 +261,16 @@ fn render() -> Box<dyn Schedulable> {
         .read_resource::<TextureStore>()
         .write_resource::<TestScene>()
         .build(move |_, _, (context, frame, pipelines, textures, scene), _| {
-            let mut pipelines = pipelines.read();
-            let mut textures = textures.read();
-
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-            {
-                let pass_descriptor = wgpu::RenderPassDescriptor {
-                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &frame.output().frame.view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                            store: true,
-                        },
-                    }],
-                    depth_stencil_attachment: None,
-                };
-
-                scene.render(
-                    context.device(),
-                    &mut encoder,
-                    &pass_descriptor,
-                    &mut pipelines,
-                    &mut textures,
-                );
-            }
-
+            scene.render(
+                context.device(),
+                &mut encoder,
+                &frame,
+                &mut pipelines.read(),
+                &mut textures.read(),
+            );
             frame.add_command(encoder.finish());
         })
 }
