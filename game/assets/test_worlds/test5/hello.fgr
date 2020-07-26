@@ -2,47 +2,82 @@
 	"targets": {
 		"frame_color": {
 			"format": "Rgba8UnormSrgb",
-			"size_scale": [
-				0.5,
-				0.5
-			]
+			"size": {
+				"Propotional": [
+					0.25,
+					0.25
+				]
+			}
 		},
 		"frame_depth": {
 			"format": "Depth32Float",
-			"size_scale": [
-				0.5,
-				0.5
-			]
+			"size": {
+				"Propotional": [
+					0.25,
+					0.25
+				]
+			}
 		}
 	},
-	
 	"passes": {
 		"scene": {
-			"input": {},
-			"output": [
-				{ "frame_color",
-				},
-				{"frame_depth",
+			"input": [],
+			"output": {
+				"color": [
+					{
+						"texture": "frame_color",
+						"operation": {
+							"load": {
+								"Clear": [
+									0.0,
+									1.0,
+									0.0,
+									1.0
+								]
+							},
+							"store": true
+						}
+					}
+				],
+				"depth": {
+					"texture": "frame_depth"
+				}
+			}
+		},
+		"present": {
+			"input": [
+				{
+					"texture": "frame_color",
+					"sampler": {
+						"address_mode_u": "ClampToEdge",
+						"address_mode_v": "ClampToEdge",
+						"address_mode_w": "ClampToEdge",
+						"mag_filter": "Nearest",
+						"min_filter": "Nearest",
+						"mipmap_filter": "Nearest",
+						"lod_min_clamp": 0.0,
+						"lod_max_clamp": 100.0
+					}
 				}
 			],
-		},
-
-		"present": {
-			"input": {
-				"frame_color": {
-					"address_mode_u": "ClampToEdge",
-					"address_mode_v": "ClampToEdge",
-					"address_mode_w": "ClampToEdge",
-					"mag_filter": "Linear",
-					"min_filter": "Linear",
-					"mipmap_filter": "Nearest",
-					"lod_min_clamp": 0.0,
-					"lod_max_clamp": 100.0
-				}
-			},
-			"output": [
-				"PRESENT"
-			],			
+			"output": {
+				"color": [
+					{
+						"texture": "FRAME",
+						"operation": {
+							"load": {
+								"Clear": [
+									0.0,
+									1.0,
+									0.0,
+									1.0
+								]
+							},
+							"store": true
+						}
+					}
+				],
+			}
 		}
 	}
 }

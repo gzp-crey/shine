@@ -68,7 +68,7 @@ pub enum FramePassMethod {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FramePassDescriptor {
     pub input: Vec<RenderSourceDescriptor>,
-    pub output: Vec<RenderAttachementDescriptor>,
+    pub output: RenderAttachementDescriptor,
     //pub method: FramePassMethod,
 }
 
