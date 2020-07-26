@@ -1,9 +1,9 @@
 use crate::{
-    assets::{AssetError, AssetIO, FrameGraphDescriptor, RenderTargetDescriptor, Url, UrlError},
-    render::{Compile, CompiledRenderTarget, PipelineStore, PipelineStoreRead},
+    assets::{AssetError, AssetIO, FrameGraphDescriptor, Url, UrlError},
+    render::CompiledRenderTarget,
 };
 use shine_ecs::core::async_task::AsyncTask;
-use std::sync::Mutex;
+use std::{borrow::Cow, sync::Mutex};
 
 struct Pass {
     name: String,
@@ -17,6 +17,10 @@ pub struct FrameOutput {
 pub struct FrameTarget {
     name: String,
     render_target: CompiledRenderTarget,
+}
+
+pub struct FrameTextures<'t> {
+    textures: Vec<&'t FrameTarget>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +95,32 @@ impl Frame {
 
     pub fn frame_output(&self) -> Option<&FrameOutput> {
         self.frame_output.as_ref()
+    }
+
+    pub fn create_pass<'e>(
+        &'e self,
+        encoder: &'e mut wgpu::CommandEncoder,
+        pass: &str,
+    ) -> (wgpu::RenderPass<'e>, FrameTextures<'e>) {
+        if pass == "DEBUG" {
+            let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
+                    attachment: &self.frame_output().unwrap().frame.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                        store: true,
+                    },
+                }]),
+                depth_stencil_attachment: None,
+            });
+
+            let textures = FrameTextures { textures: Vec::new() };
+
+            (pass, textures)
+        } else {
+            unimplemented!()
+        }
     }
 
     pub fn add_command(&self, commands: wgpu::CommandBuffer) {

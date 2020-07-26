@@ -11,6 +11,8 @@ mod compiled_shader;
 pub use self::compiled_shader::*;
 mod compiled_texture;
 pub use self::compiled_texture::*;
+mod compiled_render_target;
+pub use self::compiled_render_target::*;
 mod compiled_pipeline;
 pub use self::compiled_pipeline::*;
 mod compiled_model;

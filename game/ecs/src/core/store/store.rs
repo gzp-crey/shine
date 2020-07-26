@@ -601,7 +601,7 @@ where
 {
     /// Try to get an item or create it from the key if not found.
     /// This operation may block but it ensures, an item is created (and stored) exactly once.
-    pub fn get_or_add(&mut self, k: &D::Key) -> Index<D> {
+    pub fn get_or_add(&self, k: &D::Key) -> Index<D> {
         let shared = &self.shared;
         let exclusive = &self.exclusive;
 
@@ -621,7 +621,7 @@ where
 {
     /// Try to get an item or create it from the key and trigger loading if not found.
     /// This operation may block but it ensures, an item is created (and stored) exactly once.
-    pub fn get_or_load(&mut self, k: &D::Key) -> Index<D> {
+    pub fn get_or_load(&self, k: &D::Key) -> Index<D> {
         let shared = &self.shared;
         let exclusive = &self.exclusive;
 

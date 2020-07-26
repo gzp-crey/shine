@@ -9,7 +9,6 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
-use std::borrow::Cow;
 
 /// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,20 +57,9 @@ impl TestScene {
         }
     }
 
-    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &mut PipelineStoreRead<'_>) {
+    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
         if let Some(pipeline) = self.pipeline.get(pipelines).pipeline_buffer() {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &frame.frame_output().unwrap().frame.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                        store: true,
-                    },
-                }]),
-                depth_stencil_attachment: None,
-            });
-
+            let (mut pass, _) = frame.create_pass(encoder, "DEBUG");
             pass.set_pipeline(&pipeline.pipeline);
             pass.draw(0..3, 0..1);
         }
@@ -88,7 +76,7 @@ fn render_test() -> Box<dyn Schedulable> {
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(&mut encoder, &*frame, &mut pipelines.read());
+            scene.render(&mut encoder, &*frame, &pipelines.read());
 
             frame.add_command(encoder.finish());
         })

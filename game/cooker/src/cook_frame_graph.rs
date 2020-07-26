@@ -29,11 +29,11 @@ pub async fn cook_frame_graph(
     let mut frame_graph = serde_json::from_slice::<FrameGraphDescriptor>(&data)?;
     log::trace!("[{}] Frame graph:\n{:#?}", frame_graph_url.as_str(), frame_graph);
 
-    let mut dependnecies = Vec::new();
+    let dependnecies = Vec::new();
     let frame_graph_base = frame_graph_url.to_folder()?;
 
     log::debug!("[{}] Cooking frame graph content...", frame_graph_url.as_str());
-    for ref mut pass in frame_graph.passes.values_mut() {
+    /*for ref mut pass in frame_graph.passes.values_mut() {
         match pass.method {
             FramePassMethod::FullScreenQuad(ref mut pipeline) => {
                 log::debug!("[{}] Cooking FullScreenQuad pipeline...", frame_graph_url.as_str());
@@ -44,7 +44,7 @@ pub async fn cook_frame_graph(
             }
             FramePassMethod::Scene(_) => {}
         }
-    }
+    }*/
 
     log::trace!("[{}] Cooked frame graph:\n{:#?}", frame_graph_url.as_str(), frame_graph);
 

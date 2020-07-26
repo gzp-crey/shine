@@ -20,12 +20,11 @@
 		"scene": {
 			"input": {},
 			"output": [
-				"frame_color",
-				"frame_depth"
+				{ "frame_color",
+				},
+				{"frame_depth",
+				}
 			],
-			"method": {
-				"Scene": "scene"
-			}
 		},
 
 		"present": {
@@ -43,10 +42,7 @@
 			},
 			"output": [
 				"PRESENT"
-			],
-			"method": {
-				"FullScreenQuad": "present.pl"
-			}
+			],			
 		}
 	}
 }

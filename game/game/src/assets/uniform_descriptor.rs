@@ -6,7 +6,7 @@ use std::mem;
 pub enum TextureSemantic {
     Diffuse,
     Normal,
-    RenderTarget(String),
+    Frame(String),
     Custom(String),
 }
 

@@ -68,10 +68,10 @@ fn main() {
     let mut rt = Runtime::new().unwrap();
 
     let assets = [
-        "test_worlds/test1/test.wrld",
+        /*"test_worlds/test1/test.wrld",
         "test_worlds/test2/test.wrld",
         "test_worlds/test3/test.wrld",
-        "test_worlds/test4/test.wrld",
+        "test_worlds/test4/test.wrld",*/
         "test_worlds/test5/test.wrld",
     ]
     .iter()

@@ -17,8 +17,8 @@
         "shader": "./present.fs",
 		"uniforms": [
             [
-                [2, {"Texture": {"RenderTarget":"frame_color"}}],
-                [3, {"Sampler": {"RenderTarget":"frame_color"}}]
+                [2, {"Texture": {"Frame":"frame_color"}}],
+                [3, {"Sampler": {"Frame":"frame_color"}}]
             ],
             []
         ]

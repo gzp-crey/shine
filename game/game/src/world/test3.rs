@@ -15,7 +15,6 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
-use std::borrow::Cow;
 
 const VERTICES: &[Pos3fTex2f] = &[
     Pos3fTex2f {
@@ -114,13 +113,13 @@ impl TestScene {
         });
     }
 
-    pub fn render<'a, 'b>(
+    pub fn render(
         &mut self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         frame: &Frame,
-        pipelines: &mut PipelineStoreRead<'_>,
-        textures: &mut TextureStoreRead<'_>,
+        pipelines: &PipelineStoreRead<'_>,
+        textures: &TextureStoreRead<'_>,
     ) {
         if let (Some(ref buffers), Some(pipeline), Some(texture)) = (
             &self.buffers,
@@ -138,18 +137,7 @@ impl TestScene {
             });
 
             {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &frame.frame_output().unwrap().frame.view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                            store: true,
-                        },
-                    }]),
-                    depth_stencil_attachment: None,
-                });
-
+                let (mut pass, _) = frame.create_pass(encoder, "DEBUG");
                 pass.set_pipeline(&pipeline.pipeline);
                 pass.set_vertex_buffer(0, buffers.0.slice(..));
                 pass.set_index_buffer(buffers.1.slice(..));
@@ -186,8 +174,8 @@ fn render() -> Box<dyn Schedulable> {
                 context.device(),
                 &mut encoder,
                 &frame,
-                &mut pipelines.read(),
-                &mut textures.read(),
+                &pipelines.read(),
+                &textures.read(),
             );
 
             frame.add_command(encoder.finish());

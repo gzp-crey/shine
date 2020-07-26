@@ -50,7 +50,7 @@ fn simple_single_threaded() {
 
     log::debug!("request 0,1");
     {
-        let mut store = store.try_read().unwrap();
+        let store = store.try_read().unwrap();
         assert!(store.try_get(&TestDataId(0)) == None);
 
         //r0 = store.get_or_load(&TestDataId(0)); // shall not compile as TestData is not OnLoad
@@ -73,7 +73,7 @@ fn simple_single_threaded() {
 
     log::debug!("check 0,1, request 2");
     {
-        let mut store = store.try_read().unwrap();
+        let store = store.try_read().unwrap();
         assert!(store.at(&r0).0 == format!("id: {}", 0));
         assert!(store.try_get(&TestDataId(0)).unwrap() == r0);
         assert!(store.at(&r1).0 == format!("id: {}", 1));
@@ -138,7 +138,7 @@ fn simple_multi_threaded() {
         for i in 0..ITER {
             let store = store.clone();
             tp.push(thread::spawn(move || {
-                let mut store = store.try_read().unwrap();
+                let store = store.try_read().unwrap();
                 assert!(store.try_get(&TestDataId(0)) == None);
 
                 // request 1

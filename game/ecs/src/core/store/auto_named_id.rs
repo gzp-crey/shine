@@ -25,7 +25,7 @@ where
     D: FromKey + OnLoad<LoadHandler = L>,
     L: 'static + LoadHandler<D>,
 {
-    pub fn get<'a, 's>(&'a mut self, store: &'a mut ReadGuard<'s, D, L>) -> &'a D {
+    pub fn get<'a, 's>(&'a mut self, store: &'a ReadGuard<'s, D, L>) -> &'a D {
         if let AutoNamedId::Name(name) = self {
             let idx = store.get_or_load(name);
             *self = AutoNamedId::Index(idx);

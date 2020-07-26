@@ -7,13 +7,13 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
-use std::borrow::Cow;
 
 /// Serialized test
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Test5 {
     pub frame_graph: String,
-    pub pipeline: String,
+    pub scene_pipeline: String,
+    pub present_pipeline: String,
 }
 
 /// Manage the lifecycle of the test
@@ -47,32 +47,34 @@ impl GameUnloadWorld for Test5World {
 
 /// Resources for the test
 struct TestScene {
-    pipeline: PipelineNamedId,
+    scene_pipeline: PipelineNamedId,
+    present_pipeline: PipelineNamedId,
 }
 
 impl TestScene {
     fn new(test: Test5) -> TestScene {
         TestScene {
-            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Null>(&test.pipeline)),
+            scene_pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Null>(&test.scene_pipeline)),
+            present_pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Null>(&test.present_pipeline)),
         }
     }
 
-    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &mut PipelineStoreRead<'_>) {
-        if let Some(pipeline) = self.pipeline.get(pipelines).pipeline_buffer() {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &frame.frame_output().unwrap().frame.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                        store: true,
-                    },
-                }]),
-                depth_stencil_attachment: None,
-            });
+    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
+        if let (Some(scene_pipeline), Some(present_pipeline)) = (
+            self.scene_pipeline.get(pipelines).pipeline_buffer(),
+            self.present_pipeline.get(pipelines).pipeline_buffer(),
+        ) {
+            {
+                let (mut pass, _) = frame.create_pass(encoder, "scene");
+                pass.set_pipeline(&scene_pipeline.pipeline);
+                pass.draw(0..3, 0..1);
+            }
 
-            pass.set_pipeline(&pipeline.pipeline);
-            pass.draw(0..3, 0..1);
+            {
+                let (mut pass, _) = frame.create_pass(encoder, "present");
+                pass.set_pipeline(&present_pipeline.pipeline);
+                pass.draw(0..3, 0..1);
+            }
         }
     }
 }
@@ -87,7 +89,7 @@ fn render_test() -> Box<dyn Schedulable> {
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(&mut encoder, &frame, &mut pipelines.read());
+            scene.render(&mut encoder, &frame, &pipelines.read());
             frame.add_command(encoder.finish());
         })
 }

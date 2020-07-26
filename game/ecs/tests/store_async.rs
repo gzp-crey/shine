@@ -90,7 +90,7 @@ async fn simple() {
     {
         log::debug!("Creating item");
         let id = {
-            let mut store = store.try_read().unwrap();
+            let store = store.try_read().unwrap();
             //store.get_or_add(&"test".to_owned()) // shall not compile as store::L has a loader
             store.get_or_load(&"test".to_owned())
         };
