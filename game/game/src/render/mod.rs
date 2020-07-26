@@ -4,8 +4,6 @@ mod context;
 pub use self::context::*;
 mod system;
 pub use self::system::*;
-mod frame;
-pub use self::frame::*;
 
 mod compile;
 pub use self::compile::*;
@@ -28,10 +26,10 @@ mod pipeline;
 pub use self::pipeline::{
     Pipeline, PipelineError, PipelineIndex, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead,
 };
-mod frame_graph;
-pub use self::frame_graph::FrameGraph;
 mod model;
 pub use self::model::{Model, ModelError, ModelIndex, ModelKey, ModelStore, ModelStoreRead};
+mod frame;
+pub use self::frame::*;
 
 pub mod systems {
     //pub use super::frame_graph::systems::*;

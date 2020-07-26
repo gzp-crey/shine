@@ -104,7 +104,6 @@ impl Compile<()> for TextureImage {
 pub struct CompiledRenderTarget {
     pub texture: wgpu::Texture,
     pub size: (u32, u32),
-    //pub view: wgpu::TextureView,
 }
 
 pub struct RenderTargetCompileExtra {

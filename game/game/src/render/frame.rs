@@ -1,43 +1,96 @@
-use crate::render::FrameGraph;
+use crate::{
+    assets::{AssetError, AssetIO, FrameGraphDescriptor, RenderTargetDescriptor, Url, UrlError},
+    render::{Compile, CompiledRenderTarget, PipelineStore, PipelineStoreRead},
+};
+use shine_ecs::core::async_task::AsyncTask;
 use std::sync::Mutex;
+
+struct Pass {
+    name: String,
+}
 
 pub struct FrameOutput {
     pub frame: wgpu::SwapChainTexture,
     pub descriptor: wgpu::SwapChainDescriptor,
 }
 
+pub struct FrameTarget {
+    name: String,
+    render_target: CompiledRenderTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct FrameGraphError;
+
 pub struct Frame {
+    descriptor: Result<Option<FrameGraphDescriptor>, FrameGraphError>,
+    descriptor_loader: Option<AsyncTask<Result<FrameGraphDescriptor, FrameGraphLoadError>>>,
+
+    frame_output: Option<FrameOutput>,
+    targets: Vec<FrameTarget>,
+    passes: Vec<Pass>,
+
     buffers: Mutex<Vec<wgpu::CommandBuffer>>,
-    graph: FrameGraph,
 }
 
 impl Frame {
     pub fn new() -> Frame {
         Frame {
+            descriptor: Ok(None),
+            descriptor_loader: None,
+            frame_output: None,
+            targets: Vec::new(),
+            passes: Vec::new(),
             buffers: Mutex::new(Vec::new()),
-            graph: FrameGraph::default(),
         }
     }
 
-    pub fn set_frame_graph(&mut self, graph: FrameGraph) {
-        self.graph = graph;
+    pub fn load_graph(&mut self, assetio: AssetIO, descriptor: String) {
+        let task = async move { assetio.load_frame_graph(descriptor).await };
+        self.descriptor_loader = Some(AsyncTask::start(task));
     }
 
-    pub fn start(&mut self, frame_output: FrameOutput) {
-        self.graph.start_frame(Some(frame_output));
+    pub fn set_graph(&mut self, descriptor: Option<FrameGraphDescriptor>) {
+        self.set_frame_graph(Ok(descriptor));
     }
 
-    pub fn end(&mut self, queue: &wgpu::Queue) {
-        self.graph.postprocess_frame();
+    fn set_frame_graph(&mut self, descriptor: Result<Option<FrameGraphDescriptor>, FrameGraphError>) {
+        self.descriptor_loader = None;
+        self.descriptor = descriptor;
+        log::info!("rebuilding frame graph");
+        //todo: create targets
+    }
+
+    pub fn start_frame(&mut self, frame: FrameOutput) {
+        self.frame_output = Some(frame);
+
+        if let Some(loader) = self.descriptor_loader.as_mut() {
+            match loader.try_get() {
+                Err(_) => self.set_frame_graph(Err(FrameGraphError)),
+                Ok(Some(Ok(descriptor))) => self.set_frame_graph(Ok(Some(descriptor))),
+                Ok(Some(Err(err))) => {
+                    log::warn!("Frame graph load failed: {:?}", err);
+                    self.set_frame_graph(Err(FrameGraphError));
+                }
+                Ok(None) => {}
+            }
+        };
+
+        // check frame size, resize targets
+    }
+
+    pub fn postprocess_frame(&mut self) {}
+
+    pub fn end_frame(&mut self, queue: &wgpu::Queue) {
         {
             let mut buffers = self.buffers.lock().unwrap();
             queue.submit(buffers.drain(..));
         }
-        self.graph.end_frame();
+        self.frame_output = None;
     }
 
-    pub fn output(&self) -> &FrameOutput {
-        self.graph.frame_output().unwrap()
+    pub fn frame_output(&self) -> Option<&FrameOutput> {
+        self.frame_output.as_ref()
     }
 
     pub fn add_command(&self, commands: wgpu::CommandBuffer) {
@@ -47,7 +100,44 @@ impl Frame {
 }
 
 impl Default for Frame {
-    fn default() -> Frame {
-        Frame::new()
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Error during frame graph load
+#[derive(Debug)]
+pub enum FrameGraphLoadError {
+    Asset(AssetError),
+    Canceled,
+}
+
+impl From<UrlError> for FrameGraphLoadError {
+    fn from(err: UrlError) -> FrameGraphLoadError {
+        FrameGraphLoadError::Asset(AssetError::InvalidUrl(err))
+    }
+}
+
+impl From<AssetError> for FrameGraphLoadError {
+    fn from(err: AssetError) -> FrameGraphLoadError {
+        FrameGraphLoadError::Asset(err)
+    }
+}
+
+impl From<bincode::Error> for FrameGraphLoadError {
+    fn from(err: bincode::Error) -> FrameGraphLoadError {
+        FrameGraphLoadError::Asset(AssetError::ContentLoad(format!("Binary stream error: {}", err)))
+    }
+}
+
+impl AssetIO {
+    async fn load_frame_graph(&self, source_id: String) -> Result<FrameGraphDescriptor, FrameGraphLoadError> {
+        let url = Url::parse(&source_id)?;
+        log::debug!("[{:?}] Loading frame graph...", source_id);
+        let data = self.download_binary(&url).await?;
+
+        let descriptor = bincode::deserialize::<FrameGraphDescriptor>(&data)?;
+        log::trace!("Graph: {:#?}", descriptor);
+        Ok(descriptor)
     }
 }

@@ -61,7 +61,7 @@ impl TestScene {
         if let Some(pipeline) = self.pipeline.get(pipelines).pipeline_buffer() {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &frame.output().frame.view,
+                    attachment: &frame.frame_output().unwrap().frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),

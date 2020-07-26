@@ -1,4 +1,4 @@
-use crate::render::{Context, Frame, FrameGraph, Model, Pipeline, Shader, Texture};
+use crate::render::{Context, Frame, Model, Pipeline, Shader, Texture};
 use crate::{GameError, GameView};
 use shine_ecs::core::store;
 
@@ -19,7 +19,7 @@ impl GameView {
         };
 
         let mut frame = self.resources.get_mut::<Frame>().unwrap();
-        frame.start(output);
+        frame.start_frame(output);
 
         Ok(())
     }
@@ -27,7 +27,7 @@ impl GameView {
     fn end_frame(&mut self) -> Result<(), GameError> {
         let context = self.resources.get_mut::<Context>().unwrap();
         let mut frame = self.resources.get_mut::<Frame>().unwrap();
-        frame.end(context.queue());
+        frame.end_frame(context.queue());
         Ok(())
     }
 }
@@ -60,9 +60,9 @@ impl RenderSystem for GameView {
     fn set_frame_graph(&mut self, graph_id: Option<String>) {
         if let Some(mut frame) = self.resources.get_mut::<Frame>() {
             if let Some(graph_id) = graph_id {
-                frame.set_frame_graph(FrameGraph::load_from_url(self.assetio.clone(), graph_id))
+                frame.load_graph(self.assetio.clone(), graph_id)
             } else {
-                frame.set_frame_graph(FrameGraph::default());
+                frame.set_graph(None);
             }
         }
     }
