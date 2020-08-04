@@ -187,6 +187,7 @@ fn main() {
         .filter_module("shine_ecs", log::LevelFilter::Trace)
         .filter_module("shine_game", log::LevelFilter::Trace)
         .filter_module("shine_input", log::LevelFilter::Info)
+        .filter_module("gfx_backend_vulkan", log::LevelFilter::Trace)
         .try_init();
     let mut rt = Runtime::new().unwrap();
 

@@ -183,12 +183,13 @@ impl TestScene {
                     .unwrap()
             });
             {
-                let (mut pass, _) = frame.create_pass(encoder, "DEBUG");
-                pass.set_pipeline(&pipeline.pipeline);
-                pass.set_vertex_buffer(0, geometry.0.slice(..));
-                pass.set_index_buffer(geometry.1.slice(..));
-                pass.set_bind_group(GLOBAL_UNIFORMS, bind_group, &[]);
-                pass.draw_indexed(0..geometry.2, 0, 0..1);
+                if let Ok((mut pass, _)) = frame.create_pass(encoder, "DEBUG") {
+                    pass.set_pipeline(&pipeline.pipeline);
+                    pass.set_vertex_buffer(0, geometry.0.slice(..));
+                    pass.set_index_buffer(geometry.1.slice(..));
+                    pass.set_bind_group(GLOBAL_UNIFORMS, bind_group, &[]);
+                    pass.draw_indexed(0..geometry.2, 0, 0..1);
+                }
             }
         }
     }

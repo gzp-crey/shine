@@ -17,6 +17,14 @@ fn create_sampler_descriptor(descriptor: &SamplerDescriptor) -> wgpu::SamplerDes
     }
 }
 
+impl Compile<()> for SamplerDescriptor {
+    type Compiled = wgpu::Sampler;
+
+    fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
+        device.create_sampler(&create_sampler_descriptor(self))
+    }
+}
+
 fn get_texture_data_layout(descriptor: &Image) -> (wgpu::Extent3d, wgpu::TextureDataLayout) {
     let size = wgpu::Extent3d {
         width: descriptor.size.0,
@@ -94,7 +102,7 @@ impl Compile<()> for TextureImage {
             None
         };
 
-        let sampler = device.create_sampler(&create_sampler_descriptor(&self.sampler));
+        let sampler = self.sampler.compile(device, ());
         let view = texture.create_default_view();
 
         Ok((CompiledTexture { texture, view, sampler }, init_cmd_buffer))

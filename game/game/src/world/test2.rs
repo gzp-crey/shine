@@ -100,11 +100,12 @@ impl TestScene {
     fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
         if let (Some(buffers), Some(pipeline)) = (self.buffers.as_ref(), self.pipeline.get(pipelines).pipeline_buffer())
         {
-            let (mut pass, _) = frame.create_pass(encoder, "DEBUG");
-            pass.set_pipeline(&pipeline.pipeline);
-            pass.set_vertex_buffer(0, buffers.0.slice(..));
-            pass.set_index_buffer(buffers.1.slice(..));
-            pass.draw_indexed(0..buffers.2, 0, 0..1);
+            if let Ok((mut pass, _)) = frame.create_pass(encoder, "DEBUG") {
+                pass.set_pipeline(&pipeline.pipeline);
+                pass.set_vertex_buffer(0, buffers.0.slice(..));
+                pass.set_index_buffer(buffers.1.slice(..));
+                pass.draw_indexed(0..buffers.2, 0, 0..1);
+            }
         }
     }
 }

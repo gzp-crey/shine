@@ -35,25 +35,27 @@ impl RenderTargetDescriptor {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ColorAttachementDescriptor {
-    texture: String,
-    operation: wgpu::Operations<wgpu::Color>,
+    pub texture: String,
+    pub operation: wgpu::Operations<wgpu::Color>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DepthAttachementDescriptor {
-    texture: String,
+    pub texture: String,
+    pub depth_operation: Option<wgpu::Operations<f32>>,
+    pub stencil_operation: Option<wgpu::Operations<u32>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderAttachementDescriptor {
-    color: Vec<ColorAttachementDescriptor>,
-    depth: Option<DepthAttachementDescriptor>,
+    pub color: Vec<ColorAttachementDescriptor>,
+    pub depth: Option<DepthAttachementDescriptor>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderSourceDescriptor {
-    texture: String,
-    sampler: SamplerDescriptor,
+    pub texture: String,
+    pub sampler: SamplerDescriptor,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -76,4 +78,15 @@ pub struct FramePassDescriptor {
 pub struct FrameGraphDescriptor {
     pub targets: HashMap<String, RenderTargetDescriptor>,
     pub passes: HashMap<String, FramePassDescriptor>,
+}
+
+impl FrameGraphDescriptor {
+    pub fn is_sampled_target(&self, target: &str) -> bool {
+        for pass in self.passes.values() {
+            if pass.input.iter().any(|x| x.texture == target) {
+                return true;
+            }
+        }
+        false
+    }
 }

@@ -10,16 +10,12 @@ pub trait RenderSystem {
 
 impl GameView {
     fn start_frame(&mut self, size: (u32, u32)) -> Result<(), GameError> {
-        let output = {
-            let surface = &mut self.surface;
-            surface.set_size(size);
+        let surface = &mut self.surface;
+        surface.set_size(size);
 
-            let mut context = self.resources.get_mut::<Context>().unwrap();
-            context.create_frame(surface)?
-        };
-
+        let mut context = self.resources.get_mut::<Context>().unwrap();
         let mut frame = self.resources.get_mut::<Frame>().unwrap();
-        frame.start_frame(output);
+        frame.start_frame(surface, &mut context)?;
 
         Ok(())
     }
@@ -62,7 +58,8 @@ impl RenderSystem for GameView {
             if let Some(graph_id) = graph_id {
                 frame.load_graph(self.assetio.clone(), graph_id)
             } else {
-                frame.set_graph(None);
+                let context = self.resources.get_mut::<Context>().unwrap();
+                frame.set_graph(&*context, None);
             }
         }
     }

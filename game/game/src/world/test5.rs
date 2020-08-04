@@ -1,7 +1,11 @@
-use crate::assets::vertex;
-use crate::render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead};
-use crate::world::{GameLoadWorld, GameUnloadWorld};
-use crate::{GameError, GameView};
+use crate::{
+    assets::{vertex, TextureSemantic, Uniform},
+    render::{
+        Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, RenderSystem, GLOBAL_UNIFORMS,
+    },
+    world::{GameLoadWorld, GameUnloadWorld},
+    GameError, GameView,
+};
 use serde::{Deserialize, Serialize};
 use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
@@ -25,6 +29,7 @@ impl GameLoadWorld for Test5World {
     fn build(source: Test5, game: &mut GameView) -> Result<Test5World, GameError> {
         log::info!("Adding test5 scene to the world");
 
+        game.set_frame_graph(Some(source.frame_graph.clone()));
         game.resources.insert(TestScene::new(source));
 
         let render = Schedule::builder().add_system(render_test()).flush().build();
@@ -38,6 +43,7 @@ impl GameUnloadWorld for Test5World {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test5 scene from the world");
 
+        game.set_frame_graph(None);
         game.schedules.remove("render");
         let _ = game.resources.remove::<TestScene>();
 
@@ -59,21 +65,40 @@ impl TestScene {
         }
     }
 
-    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
+    fn render(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &Frame,
+        pipelines: &PipelineStoreRead<'_>,
+    ) {
         if let (Some(scene_pipeline), Some(present_pipeline)) = (
             self.scene_pipeline.get(pipelines).pipeline_buffer(),
             self.present_pipeline.get(pipelines).pipeline_buffer(),
         ) {
-            {
-                let (mut pass, _) = frame.create_pass(encoder, "scene");
+            if let Ok((mut pass, _)) = frame.create_pass(encoder, "scene") {
                 pass.set_pipeline(&scene_pipeline.pipeline);
                 pass.draw(0..3, 0..1);
             }
 
-            {
-                let (mut pass, _) = frame.create_pass(encoder, "present");
-                pass.set_pipeline(&present_pipeline.pipeline);
-                pass.draw(0..3, 0..1);
+            if let Ok(textures) = frame.pass_textures("present") {
+                let bind_group = present_pipeline
+                    .create_bind_group(GLOBAL_UNIFORMS, device, |u| match u {
+                        Uniform::Texture(TextureSemantic::Frame(name)) => {
+                            wgpu::BindingResource::TextureView(&textures.textures[0].0.render_target.view)
+                        }
+                        Uniform::Sampler(TextureSemantic::Frame(name)) => {
+                            wgpu::BindingResource::Sampler(&textures.textures[0].1)
+                        }
+                        _ => unreachable!(),
+                    })
+                    .unwrap();
+
+                if let Ok((mut pass, _)) = frame.create_pass(encoder, "present") {
+                    pass.set_pipeline(&present_pipeline.pipeline);
+                    pass.set_bind_group(GLOBAL_UNIFORMS, &bind_group, &[]);
+                    pass.draw(0..3, 0..1);
+                }
             }
         }
     }
@@ -89,7 +114,7 @@ fn render_test() -> Box<dyn Schedulable> {
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(&mut encoder, &frame, &pipelines.read());
+            scene.render(context.device(), &mut encoder, &frame, &pipelines.read());
             frame.add_command(encoder.finish());
         })
 }

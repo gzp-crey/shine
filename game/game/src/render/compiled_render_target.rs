@@ -3,12 +3,13 @@ use crate::render::Compile;
 
 pub struct CompiledRenderTarget {
     pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
     pub size: (u32, u32),
 }
 
 pub struct RenderTargetCompileExtra {
-    frame_size: (u32, u32),
-    is_sampled: bool,
+    pub frame_size: (u32, u32),
+    pub is_sampled: bool,
 }
 
 impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
@@ -29,6 +30,8 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
             wgpu::TextureUsage::OUTPUT_ATTACHMENT
         };
 
+        log::warn!("render target texture usage: {:?}", usage);
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             size: extent,
             mip_level_count: 1,
@@ -39,6 +42,8 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
             label: None,
         });
 
-        CompiledRenderTarget { texture, size }
+        let view = texture.create_default_view();
+
+        CompiledRenderTarget { texture, view, size }
     }
 }

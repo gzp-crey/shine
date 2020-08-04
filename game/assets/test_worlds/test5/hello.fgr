@@ -1,49 +1,29 @@
 {
 	"targets": {
 		"frame_color": {
-			"format": "Rgba8UnormSrgb",
-			"size": {
-				"Propotional": [
-					0.25,
-					0.25
-				]
-			}
+			"format": "Bgra8UnormSrgb",
+			"size": { "Propotional": [1.0, 1.0] }
 		},
 		"frame_depth": {
 			"format": "Depth32Float",
-			"size": {
-				"Propotional": [
-					0.25,
-					0.25
-				]
-			}
+			"size": { "Propotional": [0.25, 0.25] }
 		}
 	},
+
 	"passes": {
-		"scene": {
+		"scene": {			
 			"input": [],
 			"output": {
 				"color": [
 					{
 						"texture": "frame_color",
-						"operation": {
-							"load": {
-								"Clear": [
-									0.0,
-									1.0,
-									0.0,
-									1.0
-								]
-							},
-							"store": true
-						}
+						"operation": { "load": { "Clear": [0.0, 1.0, 1.0, 1.0]}, "store": true }
 					}
-				],
-				"depth": {
-					"texture": "frame_depth"
-				}
+				]
+				
 			}
 		},
+
 		"present": {
 			"input": [
 				{
@@ -64,19 +44,9 @@
 				"color": [
 					{
 						"texture": "FRAME",
-						"operation": {
-							"load": {
-								"Clear": [
-									0.0,
-									1.0,
-									0.0,
-									1.0
-								]
-							},
-							"store": true
-						}
+						"operation": { "load": { "Clear": [1.0, 1.0, 0.0, 1.0]}, "store": true }
 					}
-				],
+				]
 			}
 		}
 	}
