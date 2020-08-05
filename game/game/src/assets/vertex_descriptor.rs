@@ -33,7 +33,7 @@ impl VertexTypeId {
         VertexTypeId(bincode::serialize(layouts).unwrap())
     }
 
-    pub fn to_layout(&self) -> VertexBufferLayouts {
+    pub fn to_layouts(&self) -> VertexBufferLayouts {
         bincode::deserialize(&self.0).unwrap()
     }
 }

@@ -18,6 +18,10 @@
 
 * [ ] frame graph
 
+* [ ] pipeline color/depth stage should depend on the render target
+
+* [ ] AUTO_UNIFORM those are bound automaically during pipeline pass creation - no need for FrameTextures<'_>
+
 ### Native sample
 
 * [ ] fix prev/current state time and elapsed time for inputs

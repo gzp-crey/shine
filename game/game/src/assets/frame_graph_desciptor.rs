@@ -1,77 +1,57 @@
-use crate::assets::SamplerDescriptor;
+use crate::assets::{AssetError, RenderTargetDescriptor, SamplerDescriptor};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum RenderTargetSize {
-    /// Size matching the frame output
-    Matching,
-    /// Size propotional to the render target
-    Propotional(f32, f32),
-    /// Fixed sized
-    Fixed(u32, u32),
-}
-
-/// Render target descriptor
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RenderTargetDescriptor {
-    pub format: wgpu::TextureFormat,
-    pub size: RenderTargetSize,
-}
-
-impl RenderTargetDescriptor {
-    pub fn get_target_size(&self, frame_size: (u32, u32)) -> (u32, u32) {
-        match &self.size {
-            RenderTargetSize::Matching => frame_size,
-            RenderTargetSize::Fixed(w, h) => (*w, *h),
-            RenderTargetSize::Propotional(sw, sh) => {
-                let w = ((frame_size.0 as f32) * sw).clamp(4., 65536.) as u32;
-                let h = ((frame_size.1 as f32) * sh).clamp(4., 65536.) as u32;
-                (w, h)
-            }
-        }
-    }
-}
+pub const FRAME_TARGET_NAME: &str = "FRAME";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ColorAttachementDescriptor {
-    pub texture: String,
+    pub target: String,
     pub operation: wgpu::Operations<wgpu::Color>,
+    pub alpha_blend: wgpu::BlendDescriptor,
+    pub color_blend: wgpu::BlendDescriptor,
+    pub write_mask: wgpu::ColorWrite,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DepthAttachementOperation {
+    pub operation: wgpu::Operations<f32>,
+    pub write_enabled: bool,
+    pub compare: wgpu::CompareFunction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StencilAttachementOperation {
+    pub operation: wgpu::Operations<u32>,
+    pub front: wgpu::StencilStateFaceDescriptor,
+    pub back: wgpu::StencilStateFaceDescriptor,
+    pub read_mask: u32,
+    pub write_mask: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DepthAttachementDescriptor {
-    pub texture: String,
-    pub depth_operation: Option<wgpu::Operations<f32>>,
-    pub stencil_operation: Option<wgpu::Operations<u32>>,
+    pub target: String,
+    pub depth_operation: Option<DepthAttachementOperation>,
+    pub stencil_operation: Option<StencilAttachementOperation>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderAttachementDescriptor {
-    pub color: Vec<ColorAttachementDescriptor>,
+    pub colors: Vec<ColorAttachementDescriptor>,
     pub depth: Option<DepthAttachementDescriptor>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderSourceDescriptor {
-    pub texture: String,
+    pub target: String,
     pub sampler: SamplerDescriptor,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum FramePassMethod {
-    /// Execute the given logic
-    Scene(String),
-
-    /// Copy source into target using the given pipeline
-    FullScreenQuad(String),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FramePassDescriptor {
-    pub input: Vec<RenderSourceDescriptor>,
+    pub inputs: Vec<RenderSourceDescriptor>,
     pub output: RenderAttachementDescriptor,
-    //pub method: FramePassMethod,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -81,12 +61,48 @@ pub struct FrameGraphDescriptor {
 }
 
 impl FrameGraphDescriptor {
-    pub fn is_sampled_target(&self, target: &str) -> bool {
+    pub fn is_target_sampled(&self, target: &str) -> bool {
         for pass in self.passes.values() {
-            if pass.input.iter().any(|x| x.texture == target) {
+            if pass.inputs.iter().any(|x| x.target == target) {
                 return true;
             }
         }
         false
+    }
+
+    /// Check if target - pass references are correct
+    pub fn check_target_references(&self) -> Result<(), AssetError> {
+        for (pass_name, pass) in self.passes.iter() {
+            for input in pass.inputs.iter() {
+                if self.targets.get(&input.target).is_none() {
+                    return Err(AssetError::Content(format!(
+                        "Pass {} references an unknown input: {}",
+                        pass_name, input.target
+                    )));
+                }
+            }
+
+            if let Some(depth) = &pass.output.depth {
+                if self.targets.get(&depth.target).is_none()
+                /* && depth.target != FRAME_TARGET_NAME*/
+                {
+                    return Err(AssetError::Content(format!(
+                        "Pass {} references an unknown depth target: {}",
+                        pass_name, depth.target
+                    )));
+                }
+            }
+
+            for color in pass.output.colors.iter() {
+                if self.targets.get(&color.target).is_none() && color.target != FRAME_TARGET_NAME {
+                    return Err(AssetError::Content(format!(
+                        "Pass {} references an unknown color target: {}",
+                        pass_name, color.target
+                    )));
+                }
+            }
+        }
+
+        Ok(())
     }
 }

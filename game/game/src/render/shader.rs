@@ -245,7 +245,14 @@ impl ShaderDependencyInner {
 pub struct ShaderDependencyError;
 
 /// Helper to manage dependency on a shader
-pub struct ShaderDependency(ShaderDependencyInner);
+pub struct ShaderDependency{
+    ty: Option<ShaderType>,
+    id: Option<String>,    
+    index: Result<ShaderIndex, ShaderDependencyError>,
+
+    /// an operation to perfom on first request
+    on_subscribe: Option<Box<dyn FnOnce(&AsyncLoadListeners)>>, 
+}
 
 impl ShaderDependency {
     pub fn unknown() -> ShaderDependency {

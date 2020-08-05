@@ -1,7 +1,11 @@
 use crate::assets::{AssetError, Uniform, VertexBufferLayout, VertexSemantic};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
+    fmt,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
 
 /// Supported shader types
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -158,19 +162,12 @@ pub struct FragmentStage {
     pub uniforms: Vec<Vec<PipelineUniform>>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum Blending {
-    Replace,
-}
-
 /// Deserialized pipeline data
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipelineDescriptor {
     pub primitive_topology: wgpu::PrimitiveTopology,
     pub vertex_stage: VertexStage,
     pub fragment_stage: FragmentStage,
-    pub color_stage: Blending,
-    //depth_stencile_stage:
 }
 
 impl PipelineDescriptor {
@@ -179,5 +176,32 @@ impl PipelineDescriptor {
             (&self.vertex_stage.uniforms[group], wgpu::ShaderStage::VERTEX),
             (&self.fragment_stage.uniforms[group], wgpu::ShaderStage::FRAGMENT),
         ])
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PipelineStateDescriptor {
+    color_states: Vec<wgpu::ColorStateDescriptor>,
+    depth_state: Option<wgpu::DepthStencilStateDescriptor>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct PipelineStateTypeId(Vec<u8>);
+
+impl fmt::Debug for PipelineStateTypeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut hasher = DefaultHasher::new();
+        self.0.hash(&mut hasher);
+        f.debug_tuple("PipelineStateTypeId").field(&hasher.finish()).finish()
+    }
+}
+
+impl PipelineStateTypeId {
+    pub fn from_descriptor(descriptor: &PipelineStateDescriptor) -> Self {
+        PipelineStateTypeId(bincode::serialize(descriptor).unwrap())
+    }
+
+    pub fn to_descriptor(&self) -> PipelineStateDescriptor {
+        bincode::deserialize(&self.0).unwrap()
     }
 }

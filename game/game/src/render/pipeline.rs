@@ -1,6 +1,6 @@
 use crate::assets::{
     AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, ShaderType, Url, UrlError, VertexBufferLayouts,
-    VertexTypeId,
+    VertexTypeId, PipelineStateTypeId, PipelineStateDescriptor
 };
 use crate::render::{Compile, CompiledPipeline, Context, ShaderDependency, ShaderStore, ShaderStoreRead};
 use shine_ecs::core::store::{
@@ -15,21 +15,22 @@ use std::pin::Pin;
 pub struct PipelineKey {
     pub name: String,
     pub vertex_type: VertexTypeId,
-    //pub render_target: RenderTargetId,
+    pub render_state: PipelineStateTypeId,
 }
 
 impl PipelineKey {
-    pub fn new<V: IntoVertexTypeId>(name: &str) -> PipelineKey {
+    pub fn new<V: IntoVertexTypeId>(name: &str, state: &PipelineStateDescriptor) -> PipelineKey {
         PipelineKey {
             name: name.to_owned(),
             vertex_type: <V as IntoVertexTypeId>::into_id(),
+            render_state: PipelineStateTypeId::from_descriptor(state),
         }
     }
 }
 
 impl fmt::Debug for PipelineKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("").field(&self.name).field(&self.vertex_type).finish()
+        f.debug_tuple("").field(&self.name).field(&self.vertex_type).field(&self.render_state).finish()
     }
 }
 
@@ -39,6 +40,7 @@ pub struct PipelineError;
 pub struct Pipeline {
     id: String,
     vertex_layouts: VertexBufferLayouts,
+    render_state: PipelineStateDescriptor,
     descriptor: Option<PipelineDescriptor>,
     vertex_shader: ShaderDependency,
     fragment_shader: ShaderDependency,
@@ -157,7 +159,8 @@ impl FromKey for Pipeline {
     fn from_key(key: &PipelineKey) -> Self {
         Pipeline {
             id: key.name.clone(),
-            vertex_layouts: key.vertex_type.to_layout(),
+            vertex_layouts: key.vertex_type.to_layouts(),
+            render_state: key.render_state.to_descriptor(),
             descriptor: None,
             vertex_shader: ShaderDependency::unknown(),
             fragment_shader: ShaderDependency::unknown(),
@@ -176,7 +179,7 @@ impl OnLoad for Pipeline {
     type LoadHandler = AsyncLoadHandler<Self>;
 
     fn on_load_request(&mut self, load_handler: &mut Self::LoadHandler, load_token: LoadToken<Self>) {
-        let request = PipelineLoadRequest(self.id.clone(), self.vertex_layouts.clone());
+        let request = PipelineLoadRequest(self.id.clone());
         load_handler.request(load_token, request);
     }
 
@@ -243,7 +246,7 @@ impl OnLoad for Pipeline {
     }
 }
 
-pub struct PipelineLoadRequest(String, VertexBufferLayouts);
+pub struct PipelineLoadRequest(String);
 
 enum PipelineLoadResponseInner {
     PipelineDescriptor(Box<PipelineDescriptor>),
@@ -294,17 +297,14 @@ impl AssetIO {
         &self,
         load_token: LoadToken<Pipeline>,
         source_id: String,
-        vertex_layouts: VertexBufferLayouts,
     ) -> Result<PipelineLoadResponseInner, PipelineLoadError> {
         let url = Url::parse(&source_id)?;
         log::debug!("[{:?}] Loading pipeline...", load_token);
-        log::trace!("Vertex attributes: {:#?}", vertex_layouts);
 
         let data = self.download_binary(&url).await?;
         let descriptor = bincode::deserialize::<PipelineDescriptor>(&data)?;
         log::trace!("pipeline: {:#?}", descriptor);
-
-        descriptor.vertex_stage.check_vertex_layouts(&vertex_layouts)?;
+        
         Ok(PipelineLoadResponseInner::PipelineDescriptor(Box::new(descriptor)))
     }
 }
@@ -316,7 +316,7 @@ impl AsyncLoader<Pipeline> for AssetIO {
         request: PipelineLoadRequest,
     ) -> Pin<Box<dyn 'l + std::future::Future<Output = Option<PipelineLoadResponse>>>> {
         Box::pin(async move {
-            match self.load_pipeline(load_token, request.0, request.1).await {
+            match self.load_pipeline(load_token, request.0).await {
                 Err(PipelineLoadError::Canceled) => None,
                 result => Some(PipelineLoadResponse(result)),
             }
@@ -350,5 +350,52 @@ pub mod systems {
             .build(move |_, _, pipelines, _| {
                 pipelines.drain_unused();
             })
+    }
+}
+
+/// Error indicating a failed pipeline dependency request.
+pub struct PipelineDependencyError;
+
+/// Helper to manage dependency on a shader
+pub struct PipelineDependency {
+    vertex_id: Option<VertexTypeId>,
+    state_id: Option<PipelineStateTypeId>,
+    id: Option<String>,
+    index: Option<PipelineIndex>,
+}
+
+impl PipelineDependency {
+    pub fn unknown() -> ShaderDependency {
+        ShaderDependency(ShaderDependencyInner::Unknown)
+    }
+
+    pub fn none() -> ShaderDependency {
+        ShaderDependency(ShaderDependencyInner::None)
+    }
+
+    pub fn from_key(ty: ShaderType, key: ShaderKey) -> ShaderDependency {
+        ShaderDependency(ShaderDependencyInner::ShaderKey(ty, key))
+    }
+
+    pub fn from_index(ty: ShaderType, id: ShaderIndex) -> ShaderDependency {
+        ShaderDependency(ShaderDependencyInner::Pending(ty, id))
+    }
+
+    pub fn request<F>(&mut self, shaders: &mut ShaderStoreRead<'_>, on_subscribe: F)
+    where
+        F: FnOnce(&AsyncLoadListeners),
+    {
+        self.0 = mem::replace(&mut self.0, ShaderDependencyInner::Failed).request(shaders, on_subscribe);
+    }
+
+    pub fn shader_module<'m, 'a: 'm, 's: 'm>(
+        &'s mut self,
+        shaders: &'a ShaderStoreRead<'m>,
+    ) -> Result<Option<&'m CompiledShader>, ShaderDependencyError> {
+        match &self.0 {
+            ShaderDependencyInner::Completed(_, id) => Ok(shaders.at(id).shader_module()),
+            ShaderDependencyInner::Failed => Err(ShaderDependencyError),
+            _ => Ok(None),
+        }
     }
 }

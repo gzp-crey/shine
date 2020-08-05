@@ -96,7 +96,7 @@ impl Frame {
                     log::trace!("Creating render target {}", name);
                     let compile_args = RenderTargetCompileExtra {
                         frame_size: self.frame_size(),
-                        is_sampled: desc.is_sampled_target(&name),
+                        is_sampled: desc.is_target_sampled(&name),
                     };
                     let render_target = target.compile(context.device(), compile_args);
                     self.targets.push(FrameTarget {
@@ -108,11 +108,11 @@ impl Frame {
                 for (name, pass) in &desc.passes {
                     log::trace!("Creating pass {}", name);
                     let inputs = pass
-                        .input
+                        .inputs
                         .iter()
                         .map(|input| {
                             Ok(PassInput {
-                                texture_index: self.find_target_index(&input.texture).ok_or(FrameGraphError)?,
+                                texture_index: self.find_target_index(&input.target).ok_or(FrameGraphError)?,
                                 sampler: input.sampler.compile(context.device(), ()),
                             })
                         })
@@ -125,19 +125,19 @@ impl Frame {
                             .as_ref()
                             .map(|depth| {
                                 Ok((
-                                    self.find_target_index(&depth.texture).ok_or(FrameGraphError)?,
-                                    depth.depth_operation,
-                                    depth.stencil_operation,
+                                    self.find_target_index(&depth.target).ok_or(FrameGraphError)?,
+                                    depth.depth_operation.as_ref().map(|op| op.operation),
+                                    depth.stencil_operation.as_ref().map(|op| op.operation),
                                 ))
                             })
                             .transpose()?,
                         colors: pass
                             .output
-                            .color
+                            .colors
                             .iter()
                             .map(|color| {
                                 Ok((
-                                    self.find_target_index(&color.texture).ok_or(FrameGraphError)?,
+                                    self.find_target_index(&color.target).ok_or(FrameGraphError)?,
                                     color.operation,
                                 ))
                             })
@@ -365,6 +365,8 @@ impl AssetIO {
 
         let descriptor = bincode::deserialize::<FrameGraphDescriptor>(&data)?;
         log::trace!("Graph: {:#?}", descriptor);
+        descriptor.check_target_references()?;
+
         Ok(descriptor)
     }
 }

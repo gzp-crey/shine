@@ -181,6 +181,8 @@ where
         device: &wgpu::Device,
         (color_state_format, vertex_layouts, mut get_shader): CompileExtra<'a, F>,
     ) -> Self::Compiled {
+        self.vertex_stage.check_vertex_layouts(&vertex_layouts)?;
+
         let vertex_buffers = create_attribute_descriptors(&self.vertex_stage, &vertex_layouts)?;
         let vertex_buffers: Vec<_> = vertex_buffers
             .iter()
