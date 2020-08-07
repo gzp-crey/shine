@@ -1,12 +1,15 @@
-use crate::assets::{AssetError, AssetIO, ShaderType, Url, UrlError};
-use crate::render::{Compile, CompiledShader, Context};
-use shine_ecs::core::store::{
-    AsyncLoadHandler, AsyncLoadListeners, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad,
-    OnLoading, ReadGuard, Store,
+use crate::{
+    assets::{AssetError, AssetIO, ShaderType, Url, UrlError},
+    render::{Compile, CompiledShader, Context},
 };
-use std::pin::Pin;
-use std::str::FromStr;
-use std::{io, mem};
+use shine_ecs::core::{
+    observer::{Observable, Observer, SyncObserveDispatcher},
+    store::{
+        AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
+        Store,
+    },
+};
+use std::{io, mem, pin::Pin, str::FromStr, sync::Arc};
 
 /// Unique key for a shader
 pub type ShaderKey = String;
@@ -14,10 +17,14 @@ pub type ShaderKey = String;
 #[derive(Debug, Clone)]
 pub struct ShaderError;
 
+pub enum ShaderEvent {
+    Loaded,
+}
+
 pub struct Shader {
     id: String,
     shader: Result<Option<CompiledShader>, ShaderError>,
-    listeners: AsyncLoadListeners,
+    dispatcher: SyncObserveDispatcher<ShaderEvent>,
 }
 
 impl Shader {
@@ -35,12 +42,14 @@ impl Shader {
 
     pub fn shader_module(&self) -> Option<&CompiledShader> {
         self.shader.as_ref().map(|u| u.as_ref()).unwrap_or(None)
-        /*if let Ok(Some(shader)) = &self.shader {
-            Ok(shader)
-        }
-        else {
-            None
-        }*/
+    }
+
+    pub fn subscribe(&self, observer: &Arc<dyn Observer<ShaderEvent>>) {
+        self.dispatcher.subscribe(observer)
+    }
+
+    pub fn unsubscribe(&self, observer: &Arc<dyn Observer<ShaderEvent>>) {
+        self.dispatcher.unsubscribe(observer);
     }
 }
 
@@ -53,7 +62,7 @@ impl FromKey for Shader {
         Shader {
             id: key.to_owned(),
             shader: Ok(None),
-            listeners: AsyncLoadListeners::default(),
+            dispatcher: Default::default(),
         }
     }
 }
@@ -84,14 +93,14 @@ impl OnLoad for Shader {
             Err(err) => {
                 self.shader = Err(ShaderError);
                 log::warn!("[{:?}] Shader compilation failed: {:?}", load_token, err);
-                self.listeners.notify_all();
+                self.dispatcher.notify_all(ShaderEvent::Loaded);
             }
 
             Ok((ty, spirv)) => {
                 let shader = (ty, &spirv[..]).compile(context.device(), ());
                 self.shader = Ok(Some(shader));
                 log::debug!("[{:?}] Shader compilation completed", load_token);
-                self.listeners.notify_all();
+                self.dispatcher.notify_all(ShaderEvent::Loaded);
             }
         };
     }
@@ -186,106 +195,115 @@ pub mod systems {
     }
 }
 
-enum ShaderDependencyInner {
-    Unknown,
-    None,
-    ShaderKey(ShaderType, ShaderKey),
-    Pending(ShaderType, ShaderIndex),
-    Subscribed(ShaderType, ShaderIndex),
-    Completed(ShaderType, ShaderIndex),
-    Failed,
-}
-
-impl ShaderDependencyInner {
-    fn from_shader_index<F>(
-        ty: ShaderType,
-        id: ShaderIndex,
-        shaders: &mut ShaderStoreRead<'_>,
-        on_subscribe: F,
-    ) -> ShaderDependencyInner
-    where
-        F: FnOnce(&AsyncLoadListeners),
-    {
-        let shader = shaders.at(&id);
-        match &shader.shader {
-            Err(_) => ShaderDependencyInner::Failed,
-            Ok(None) => {
-                on_subscribe(&shader.listeners);
-                ShaderDependencyInner::Subscribed(ty, id)
-            }
-            Ok(Some(st)) => {
-                if st.shader_type == ty {
-                    ShaderDependencyInner::Completed(ty, id)
-                } else {
-                    ShaderDependencyInner::Failed
-                }
-            }
-        }
-    }
-
-    fn request<F>(self, shaders: &mut ShaderStoreRead<'_>, on_subscribe: F) -> ShaderDependencyInner
-    where
-        F: FnOnce(&AsyncLoadListeners),
-    {
-        use ShaderDependencyInner::*;
-        match self {
-            s @ Completed(_, _) | s @ Failed | s @ Unknown | s @ None => s,
-            ShaderKey(ty, key) => {
-                log::trace!("Requesting shader: {:?}", key);
-                let id = shaders.get_or_load(&key);
-                ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe)
-            }
-            Pending(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, on_subscribe),
-            Subscribed(ty, id) => ShaderDependencyInner::from_shader_index(ty, id, shaders, |_| {}),
-        }
-    }
-}
-
-/// Error indicating a failed shader dependency request.
+#[derive(Debug, Clone)]
 pub struct ShaderDependencyError;
 
-/// Helper to manage dependency on a shader
-pub struct ShaderDependency{
-    ty: Option<ShaderType>,
-    id: Option<String>,    
-    index: Result<ShaderIndex, ShaderDependencyError>,
+enum ShaderDependencyIndex {
+    None,
+    Pending(ShaderIndex),
+    Completed(ShaderIndex),
+    Error(ShaderDependencyError),
+}
 
-    /// an operation to perfom on first request
-    on_subscribe: Option<Box<dyn FnOnce(&AsyncLoadListeners)>>, 
+pub struct ShaderDependency {
+    ty: Option<ShaderType>,
+    id: Option<String>,
+    index: ShaderDependencyIndex,
+    requested_subscription: Option<Arc<dyn Observer<ShaderEvent>>>,
+    active_subscription: Option<Arc<dyn Observer<ShaderEvent>>>,
 }
 
 impl ShaderDependency {
-    pub fn unknown() -> ShaderDependency {
-        ShaderDependency(ShaderDependencyInner::Unknown)
-    }
-
     pub fn none() -> ShaderDependency {
-        ShaderDependency(ShaderDependencyInner::None)
+        ShaderDependency {
+            ty: None,
+            id: None,
+            index: ShaderDependencyIndex::None,
+            requested_subscription: None,
+            active_subscription: None,
+        }
     }
 
-    pub fn from_key(ty: ShaderType, key: ShaderKey) -> ShaderDependency {
-        ShaderDependency(ShaderDependencyInner::ShaderKey(ty, key))
+    pub fn with_type(self, ty: ShaderType) -> ShaderDependency {
+        ShaderDependency {
+            ty: Some(ty),
+            index: ShaderDependencyIndex::None,
+            active_subscription: None,
+            ..self
+        }
     }
 
-    pub fn from_index(ty: ShaderType, id: ShaderIndex) -> ShaderDependency {
-        ShaderDependency(ShaderDependencyInner::Pending(ty, id))
+    pub fn with_id<S: ToString>(self, id: S) -> ShaderDependency {
+        ShaderDependency {
+            id: Some(id.to_string()),
+            index: ShaderDependencyIndex::None,
+            active_subscription: None,
+            ..self
+        }
     }
 
-    pub fn request<F>(&mut self, shaders: &mut ShaderStoreRead<'_>, on_subscribe: F)
+    pub fn with_subscription<O>(self, observer: O) -> ShaderDependency
     where
-        F: FnOnce(&AsyncLoadListeners),
+        O: 'static + Observer<ShaderEvent>,
     {
-        self.0 = mem::replace(&mut self.0, ShaderDependencyInner::Failed).request(shaders, on_subscribe);
+        ShaderDependency {
+            requested_subscription: Some(Arc::new(observer)),
+            active_subscription: None,
+            ..self
+        }
+    }
+
+    pub fn request(&mut self, shaders: &mut ShaderStoreRead<'_>) {
+        self.index = match mem::replace(&mut self.index, ShaderDependencyIndex::None) {
+            ShaderDependencyIndex::None => {
+                // create index from the shader key
+                if self.ty.is_none() {
+                    log::warn!("[{:?}] Missing shader type", self.id);
+                    ShaderDependencyIndex::Error(ShaderDependencyError)
+                } else if let Some(id) = &self.id {
+                    ShaderDependencyIndex::Pending(shaders.get_or_load(id))
+                } else {
+                    log::warn!("[{:?}] Missing shader id or type", self.id);
+                    ShaderDependencyIndex::Error(ShaderDependencyError)
+                }
+            }
+            ShaderDependencyIndex::Pending(idx) => {
+                // check if shader is loaded
+                let shader = shaders.at(&idx);
+                if let Some(sub) = self.requested_subscription.take() {
+                    shader.subscribe(&sub);
+                    self.active_subscription = Some(sub)
+                }
+
+                match shader.shader() {
+                    Err(_) => {
+                        log::warn!("[{:?}] Missing shader id or type", self.id);
+                        ShaderDependencyIndex::Error(ShaderDependencyError)
+                    }
+                    Ok(None) => ShaderDependencyIndex::Pending(idx),
+                    Ok(Some(st)) => {
+                        if st.shader_type != self.ty.unwrap() {
+                            ShaderDependencyIndex::Error(ShaderDependencyError)
+                        } else {
+                            log::info!("[{:?}] Shader dependency completed", self.id);
+                            ShaderDependencyIndex::Completed(idx)
+                        }
+                    }
+                }
+            }
+            ShaderDependencyIndex::Completed(idx) => ShaderDependencyIndex::Completed(idx),
+            ShaderDependencyIndex::Error(err) => ShaderDependencyIndex::Error(err),
+        }
     }
 
     pub fn shader_module<'m, 'a: 'm, 's: 'm>(
         &'s mut self,
         shaders: &'a ShaderStoreRead<'m>,
     ) -> Result<Option<&'m CompiledShader>, ShaderDependencyError> {
-        match &self.0 {
-            ShaderDependencyInner::Completed(_, id) => Ok(shaders.at(id).shader_module()),
-            ShaderDependencyInner::Failed => Err(ShaderDependencyError),
-            _ => Ok(None),
+        match &self.index {
+            ShaderDependencyIndex::None | ShaderDependencyIndex::Pending(_) => Ok(None),
+            ShaderDependencyIndex::Error(err) => Err(err.clone()),
+            ShaderDependencyIndex::Completed(idx) => Ok(shaders.at(idx).shader_module()),
         }
     }
 }

@@ -13,7 +13,6 @@ wasm = ["wasm-bindgen-futures"]
 log = "0.4"
 futures = "0.3"
 
-downcast-rs = "1.1"
 serde = "1.0"
 legion = {git = "https://github.com/TomGillen/legion.git", default-features = false}
 fxhash = "0.2"

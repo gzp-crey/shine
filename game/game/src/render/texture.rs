@@ -1,8 +1,7 @@
 use crate::assets::{AssetError, AssetIO, TextureImage, Url, UrlError};
 use crate::render::{Compile, CompiledTexture, Context};
 use shine_ecs::core::store::{
-    AsyncLoadHandler, AsyncLoader, AutoNamedId, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading,
-    ReadGuard, Store,
+    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
 use std::pin::Pin;
 
@@ -168,7 +167,6 @@ impl AsyncLoader<Texture> for AssetIO {
 pub type TextureStore = Store<Texture, AsyncLoadHandler<Texture>>;
 pub type TextureStoreRead<'a> = ReadGuard<'a, Texture, AsyncLoadHandler<Texture>>;
 pub type TextureIndex = Index<Texture>;
-pub type TextureNamedId = AutoNamedId<Texture>;
 
 pub mod systems {
     use super::*;

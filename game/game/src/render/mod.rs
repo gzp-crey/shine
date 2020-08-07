@@ -22,11 +22,12 @@ mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderError, ShaderIndex, ShaderKey, ShaderStore, ShaderStoreRead};
 mod texture;
 pub use self::texture::{
-    Texture, TextureError, TextureIndex, TextureKey, TextureNamedId, TextureStore, TextureStoreRead,
+    Texture, TextureError, TextureIndex, TextureKey, /*, TextureDependency*/
+    TextureStore, TextureStoreRead,
 };
 mod pipeline;
 pub use self::pipeline::{
-    Pipeline, PipelineError, PipelineIndex, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead,
+    Pipeline, PipelineDependency, PipelineError, PipelineIndex, PipelineKey, PipelineStore, PipelineStoreRead,
 };
 mod model;
 pub use self::model::{Model, ModelError, ModelIndex, ModelKey, ModelStore, ModelStoreRead};

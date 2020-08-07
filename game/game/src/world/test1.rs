@@ -1,6 +1,6 @@
 use crate::{
     assets::vertex,
-    render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead},
+    render::{Context, Frame, PipelineDependency, PipelineKey, PipelineStore, PipelineStoreRead},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -47,7 +47,7 @@ impl GameUnloadWorld for Test1World {
 
 /// Resources for the test
 struct TestScene {
-    pipeline: PipelineNamedId,
+    pipeline: PipelineDependency,
 }
 
 impl TestScene {
