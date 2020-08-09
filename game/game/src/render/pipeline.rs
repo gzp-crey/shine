@@ -1,3 +1,4 @@
+use super::shader::ShaderEvent;
 use crate::{
     assets::{
         AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, PipelineStateDescriptor, PipelineStateTypeId,
@@ -183,11 +184,11 @@ impl OnLoad for Pipeline {
     ) {
         let (context, shaders) = (load_context.0, &mut load_context.1.read());
         match load_response.0 {
-            Err(err) => {
+            PipelineLoadResponseInner::Error(err) => {
                 log::warn!("[{:?}] Pipeline compilation failed: {:?}", load_token, err);
                 self.pipeline = Err(PipelineError);
             }
-            Ok(PipelineLoadResponseInner::PipelineDescriptor(desc)) => {
+            PipelineLoadResponseInner::PipelineDescriptor(desc) => {
                 if self
                     .descriptor
                     .as_ref()
@@ -202,10 +203,10 @@ impl OnLoad for Pipeline {
                     self.vertex_shader = ShaderDependency::none()
                         .with_type(ShaderType::Vertex)
                         .with_id(desc.vertex_stage.shader.clone())
-                        .with_subscription(move |_| {
-                            //load_handler.send_response();
-                            ObserveResult::KeepObserving
-                        });
+                        .with_load_response(
+                            load_handler,
+                            PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ShaderType::Vertex))),
+                        );
                 }
                 if self
                     .descriptor
@@ -229,7 +230,7 @@ impl OnLoad for Pipeline {
                 self.descriptor = Some(*desc);
                 self.recompile(context, shaders, load_token);
             }
-            Ok(PipelineLoadResponseInner::ShaderReady(ty)) => match ty {
+            PipelineLoadResponseInner::ShaderReady(ty) => match ty {
                 ShaderType::Vertex => {
                     log::debug!("[{:?}] Pipeline vertex shader loaded", load_token);
                     self.recompile(context, shaders, load_token);
@@ -254,9 +255,11 @@ pub struct PipelineLoadRequest(String);
 enum PipelineLoadResponseInner {
     PipelineDescriptor(Box<PipelineDescriptor>),
     ShaderReady(ShaderType),
+    PipelineLoadError,
 }
 
-pub struct PipelineLoadResponse(Result<PipelineLoadResponseInner, PipelineLoadError>);
+//pub struct PipelineLoadResponse(Result<PipelineLoadResponseInner, PipelineLoadError>);
+pub struct PipelineLoadResponse(PipelineLoadResponseInner);
 
 impl PipelineLoadResponse {
     fn shader_loaded(ty: ShaderType) -> PipelineLoadResponse {
