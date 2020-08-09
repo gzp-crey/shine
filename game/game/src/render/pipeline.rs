@@ -1,4 +1,3 @@
-use super::shader::ShaderEvent;
 use crate::{
     assets::{
         AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, PipelineStateDescriptor, PipelineStateTypeId,
@@ -6,12 +5,8 @@ use crate::{
     },
     render::{Compile, CompiledPipeline, Context, ShaderDependency, ShaderStore, ShaderStoreRead},
 };
-use shine_ecs::core::{
-    observer::ObserveResult,
-    store::{
-        AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
-        Store,
-    },
+use shine_ecs::core::store::{
+    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
 };
 use std::fmt;
 use std::pin::Pin;
@@ -200,12 +195,13 @@ impl OnLoad for Pipeline {
                         load_token,
                         desc.vertex_stage.shader
                     );
-                    self.vertex_shader = ShaderDependency::none()
+                    self.vertex_shader = ShaderDependency::new()
                         .with_type(ShaderType::Vertex)
                         .with_id(desc.vertex_stage.shader.clone())
                         .with_load_response(
                             load_handler,
-                            PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ShaderType::Vertex))),
+                            &load_token,
+                            PipelineLoadResponse(PipelineLoadResponseInner::ShaderReady(ShaderType::Vertex)),
                         );
                 }
                 if self
@@ -219,13 +215,14 @@ impl OnLoad for Pipeline {
                         load_token,
                         desc.fragment_stage.shader
                     );
-                    self.fragment_shader = ShaderDependency::none()
+                    self.fragment_shader = ShaderDependency::new()
                         .with_type(ShaderType::Fragment)
                         .with_id(desc.fragment_stage.shader.clone())
-                        .with_subscription(move |_| {
-                            //load_handler.send_response();
-                            ObserveResult::KeepObserving
-                        });
+                        .with_load_response(
+                            load_handler,
+                            &load_token,
+                            PipelineLoadResponse(PipelineLoadResponseInner::ShaderReady(ShaderType::Fragment)),
+                        );
                 }
                 self.descriptor = Some(*desc);
                 self.recompile(context, shaders, load_token);
@@ -252,23 +249,18 @@ impl OnLoad for Pipeline {
 
 pub struct PipelineLoadRequest(String);
 
+#[derive(Clone)]
 enum PipelineLoadResponseInner {
     PipelineDescriptor(Box<PipelineDescriptor>),
     ShaderReady(ShaderType),
-    PipelineLoadError,
+    Error(PipelineLoadError),
 }
 
-//pub struct PipelineLoadResponse(Result<PipelineLoadResponseInner, PipelineLoadError>);
+#[derive(Clone)]
 pub struct PipelineLoadResponse(PipelineLoadResponseInner);
 
-impl PipelineLoadResponse {
-    fn shader_loaded(ty: ShaderType) -> PipelineLoadResponse {
-        PipelineLoadResponse(Ok(PipelineLoadResponseInner::ShaderReady(ty)))
-    }
-}
-
 /// Error during pipeline load
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PipelineLoadError {
     Asset(AssetError),
     Canceled,
@@ -324,7 +316,8 @@ impl AsyncLoader<Pipeline> for AssetIO {
         Box::pin(async move {
             match self.load_pipeline(load_token, request.0).await {
                 Err(PipelineLoadError::Canceled) => None,
-                result => Some(PipelineLoadResponse(result)),
+                Err(err) => Some(PipelineLoadResponse(PipelineLoadResponseInner::Error(err))),
+                Ok(result) => Some(PipelineLoadResponse(result)),
             }
         })
     }

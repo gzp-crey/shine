@@ -3,7 +3,7 @@ use crate::{
     render::{Compile, CompiledShader, Context},
 };
 use shine_ecs::core::{
-    observer::{Observable, Observer, SyncObserveDispatcher},
+    observer::{ObserveResult, Observer, ObserverFn, SyncObserveDispatcher},
     store::{
         AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
         Store,
@@ -200,17 +200,23 @@ pub struct ShaderDependencyError;
 
 enum ShaderDependencyIndex {
     None,
+    Incomplete,
     Pending(ShaderIndex),
     Completed(ShaderIndex),
     Error(ShaderDependencyError),
+}
+
+enum ShaderSubscription {
+    None,
+    Request(Arc<dyn Observer<ShaderEvent>>),
+    Active(Arc<dyn Observer<ShaderEvent>>),
 }
 
 pub struct ShaderDependency {
     ty: Option<ShaderType>,
     id: Option<String>,
     index: ShaderDependencyIndex,
-    requested_subscription: Option<Arc<dyn Observer<ShaderEvent>>>,
-    active_subscription: Option<Arc<dyn Observer<ShaderEvent>>>,
+    subscription: ShaderSubscription,
 }
 
 impl ShaderDependency {
@@ -219,43 +225,83 @@ impl ShaderDependency {
             ty: None,
             id: None,
             index: ShaderDependencyIndex::None,
-            requested_subscription: None,
-            active_subscription: None,
+            subscription: ShaderSubscription::None,
+        }
+    }
+
+    pub fn new() -> ShaderDependency {
+        ShaderDependency {
+            ty: None,
+            id: None,
+            index: ShaderDependencyIndex::Incomplete,
+            subscription: ShaderSubscription::None,
         }
     }
 
     pub fn with_type(self, ty: ShaderType) -> ShaderDependency {
+        assert!(self.is_none());
         ShaderDependency {
             ty: Some(ty),
-            index: ShaderDependencyIndex::None,
-            active_subscription: None,
+            index: ShaderDependencyIndex::Incomplete,
+            subscription: self.subscription.requested_or_none(),
             ..self
         }
     }
 
     pub fn with_id<S: ToString>(self, id: S) -> ShaderDependency {
+        assert!(self.is_none());
         ShaderDependency {
             id: Some(id.to_string()),
-            index: ShaderDependencyIndex::None,
-            active_subscription: None,
+            index: ShaderDependencyIndex::Incomplete,
+            subscription: self.subscription.requested_or_none(),
             ..self
         }
     }
 
-    pub fn with_subscription<O>(self, observer: O) -> ShaderDependency
+    pub fn with_observrer<O>(self, observer: O) -> ShaderDependency
     where
         O: 'static + Observer<ShaderEvent>,
     {
+        assert!(self.is_none());
         ShaderDependency {
-            requested_subscription: Some(Arc::new(observer)),
-            active_subscription: None,
+            subscription: ShaderSubscription::Request(Arc::new(observer)),
             ..self
+        }
+    }
+
+    pub fn with_load_response<D>(
+        self,
+        load_handler: &AsyncLoadHandler<D>,
+        load_token: &LoadToken<D>,
+        response: D::LoadResponse,
+    ) -> ShaderDependency
+    where
+        D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+        D::LoadResponse: Clone,
+    {
+        let responder = load_handler.responder();
+        let load_token = load_token.clone();
+        self.with_observrer(ObserverFn::from_fn(move |_e| {
+            responder.send_response(load_token.clone(), response.clone());
+            ObserveResult::KeepObserving
+        }))
+    }
+
+    pub fn is_none(&self) -> bool {
+        if let &ShaderDependencyIndex::None = &self.index {
+            true
+        } else {
+            false
         }
     }
 
     pub fn request(&mut self, shaders: &mut ShaderStoreRead<'_>) {
-        self.index = match mem::replace(&mut self.index, ShaderDependencyIndex::None) {
+        self.index = match mem::replace(&mut self.index, ShaderDependencyIndex::Incomplete) {
             ShaderDependencyIndex::None => {
+                // no dependency
+                ShaderDependencyIndex::None
+            }
+            ShaderDependencyIndex::Incomplete => {
                 // create index from the shader key
                 if self.ty.is_none() {
                     log::warn!("[{:?}] Missing shader type", self.id);
@@ -270,8 +316,9 @@ impl ShaderDependency {
             ShaderDependencyIndex::Pending(idx) => {
                 // check if shader is loaded
                 let shader = shaders.at(&idx);
-                if let Some(sub) = self.requested_subscription.take() {
+                if let ShaderSubscription::Request(observer) = self.subscription.take() {
                     shader.subscribe(&sub);
+                    ....
                     self.active_subscription = Some(sub)
                 }
 
@@ -301,7 +348,9 @@ impl ShaderDependency {
         shaders: &'a ShaderStoreRead<'m>,
     ) -> Result<Option<&'m CompiledShader>, ShaderDependencyError> {
         match &self.index {
-            ShaderDependencyIndex::None | ShaderDependencyIndex::Pending(_) => Ok(None),
+            ShaderDependencyIndex::None | ShaderDependencyIndex::Incomplete | ShaderDependencyIndex::Pending(_) => {
+                Ok(None)
+            }
             ShaderDependencyIndex::Error(err) => Err(err.clone()),
             ShaderDependencyIndex::Completed(idx) => Ok(shaders.at(idx).shader_module()),
         }

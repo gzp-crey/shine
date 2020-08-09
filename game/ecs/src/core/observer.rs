@@ -15,12 +15,33 @@ pub trait Observer<E> {
     fn on_event(&self, event: &E) -> ObserveResult;
 }
 
-impl<T, E> Observer<E> for T
+/// Wrap an function to start observing with
+pub struct ObserverFn<E, F>
 where
-    T: Fn(&E) -> ObserveResult,
+    F: Fn(&E) -> ObserveResult,
+{
+    function: F,
+    ph: std::marker::PhantomData<dyn Fn(&E)>,
+}
+
+impl<E, F> ObserverFn<E, F>
+where
+    F: Fn(&E) -> ObserveResult,
+{
+    pub fn from_fn(function: F) -> ObserverFn<E, F> {
+        ObserverFn {
+            function,
+            ph: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<E, F> Observer<E> for ObserverFn<E, F>
+where
+    F: Fn(&E) -> ObserveResult,
 {
     fn on_event(&self, event: &E) -> ObserveResult {
-        (self)(event)
+        (self.function)(event)
     }
 }
 

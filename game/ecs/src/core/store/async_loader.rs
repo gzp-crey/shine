@@ -5,6 +5,7 @@ use futures::{
 };
 use std::pin::Pin;
 
+/// Handle async load request-response channels. Storage side.
 pub struct AsyncLoadHandler<D>
 where
     D: OnLoad<LoadHandler = Self>,
@@ -25,10 +26,9 @@ where
         }
     }
 
-    pub fn send_response(&mut self, load_token: LoadToken<D>, response: D::LoadResponse) {
-        log::trace!("[{:?}] Sending load response", load_token);
-        if let Err(err) = self.response_sender.unbounded_send((load_token, response)) {
-            log::info!("Failed to notify store: {:?}", err);
+    pub fn responder(&self) -> AsyncLoadResponder<D> {
+        AsyncLoadResponder {
+            response_sender: self.response_sender.clone(),
         }
     }
 }
@@ -49,6 +49,7 @@ where
     }
 }
 
+/// Trait to create the loading future.
 pub trait AsyncLoader<D>: 'static + Send + Sync
 where
     D: OnLoad,
@@ -60,6 +61,27 @@ where
     ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>>;
 }
 
+/// Wrapper to send load responses.
+pub struct AsyncLoadResponder<D>
+where
+    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+{
+    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, D::LoadResponse)>,
+}
+
+impl<D> AsyncLoadResponder<D>
+where
+    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+{
+    pub fn send_response(&self, load_token: LoadToken<D>, response: D::LoadResponse) {
+        log::trace!("[{:?}] Sending load response", load_token);
+        if let Err(err) = self.response_sender.unbounded_send((load_token, response)) {
+            log::info!("Failed to notify store: {:?}", err);
+        }
+    }
+}
+
+/// Handle async load request-response channels. Loading side.
 pub struct AsyncLoadWorker<D>
 where
     D: OnLoad,

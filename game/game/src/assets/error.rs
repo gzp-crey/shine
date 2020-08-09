@@ -1,7 +1,7 @@
 use crate::assets::UrlError;
 use std::{error, fmt};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssetError {
     UnsupportedScheme(String),
     InvalidUrl(UrlError),
