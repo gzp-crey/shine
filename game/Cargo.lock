@@ -3309,7 +3309,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.5.0"
-source = "git+https://github.com/gfx-rs/wgpu-rs.git?branch=master#cc54e9dece91e7aed80571674a0b131c7c48b620"
+source = "git+https://github.com/gfx-rs/wgpu-rs.git#cc54e9dece91e7aed80571674a0b131c7c48b620"
 dependencies = [
  "arrayvec",
  "futures",

@@ -206,10 +206,39 @@ enum ShaderDependencyIndex {
     Error(ShaderDependencyError),
 }
 
+/// Keeps track of the active and requested subscription.
+/// The Arc observer is not exposed and ShaderDependency is not clonable,
+/// the only strong count of the observer is kept in this enum. Thus
+/// observer is valid while this reference is kept alive and no explicit unsubscribe is required.
 enum ShaderSubscription {
+    /// Cancel subscription.
     None,
+    /// Request a new subscription.
     Request(Arc<dyn Observer<ShaderEvent>>),
+    /// Keep the subscription alive.
     Active(Arc<dyn Observer<ShaderEvent>>),
+}
+
+impl ShaderSubscription {
+    /// Cancel active subscription by dropping the reference.
+    fn with_cancel_active(self) -> ShaderSubscription {
+        if let ShaderSubscription::Request(observer) = self {
+            ShaderSubscription::Request(observer)
+        } else {
+            ShaderSubscription::None
+        }
+    }
+
+    /// Replace subscription in the shader.
+    fn subscribe(&mut self, shader: &Shader) {
+        *self = match mem::replace(self, ShaderSubscription::None) {
+            ShaderSubscription::Request(observer) => {
+                shader.subscribe(&observer);
+                ShaderSubscription::Active(observer)
+            }
+            sub => sub,
+        };
+    }
 }
 
 pub struct ShaderDependency {
@@ -243,7 +272,7 @@ impl ShaderDependency {
         ShaderDependency {
             ty: Some(ty),
             index: ShaderDependencyIndex::Incomplete,
-            subscription: self.subscription.requested_or_none(),
+            subscription: self.subscription.with_cancel_active(),
             ..self
         }
     }
@@ -253,7 +282,7 @@ impl ShaderDependency {
         ShaderDependency {
             id: Some(id.to_string()),
             index: ShaderDependencyIndex::Incomplete,
-            subscription: self.subscription.requested_or_none(),
+            subscription: self.subscription.with_cancel_active(),
             ..self
         }
     }
@@ -316,11 +345,7 @@ impl ShaderDependency {
             ShaderDependencyIndex::Pending(idx) => {
                 // check if shader is loaded
                 let shader = shaders.at(&idx);
-                if let ShaderSubscription::Request(observer) = self.subscription.take() {
-                    shader.subscribe(&sub);
-                    ....
-                    self.active_subscription = Some(sub)
-                }
+                self.subscription.subscribe(shader);
 
                 match shader.shader() {
                     Err(_) => {
