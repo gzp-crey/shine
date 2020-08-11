@@ -1,6 +1,6 @@
 use crate::{
     assets::vertex::{self, Pos3fCol4f},
-    render::{Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead},
+    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -74,14 +74,16 @@ impl GameUnloadWorld for Test2World {
 
 /// Resources for the test
 struct TestScene {
-    pipeline: PipelineNamedId,
+    pipeline: PipelineDependency,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 impl TestScene {
     fn new(test: Test2) -> TestScene {
         TestScene {
-            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Pos3fCol4f>(&test.pipeline)),
+            pipeline: PipelineDependency::new()
+                .with_id(test.pipeline)
+                .with_vertex_layout::<vertex::Pos3fCol4f>(),
             buffers: None,
         }
     }

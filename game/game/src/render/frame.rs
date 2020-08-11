@@ -218,20 +218,18 @@ impl Frame {
                 frame: &self.frame_output().unwrap().frame,
                 textures: Vec::new(),
             })
+        } else if let Some(pass) = self.passes.iter().find(|x| x.name == pass) {
+            Ok(FrameTextures {
+                frame: &self.frame_output().unwrap().frame,
+                textures: pass
+                    .inputs
+                    .iter()
+                    .map(|texture| (&self.targets[texture.texture_index], &texture.sampler))
+                    .collect(),
+            })
         } else {
-            if let Some(pass) = self.passes.iter().filter(|x| x.name == pass).next() {
-                Ok(FrameTextures {
-                    frame: &self.frame_output().unwrap().frame,
-                    textures: pass
-                        .inputs
-                        .iter()
-                        .map(|texture| (&self.targets[texture.texture_index], &texture.sampler))
-                        .collect(),
-                })
-            } else {
-                //log::warn!("No [{}] pass was found", pass);
-                Err(GameError::Render(format!("No [{}] pass was found", pass)))
-            }
+            //log::warn!("No [{}] pass was found", pass);
+            Err(GameError::Render(format!("No [{}] pass was found", pass)))
         }
     }
 
@@ -259,64 +257,62 @@ impl Frame {
             };
 
             Ok((pass, textures))
-        } else {
-            if let Some(pass) = self.passes.iter().filter(|x| x.name == pass).next() {
-                let color_desc = pass
-                    .outputs
-                    .colors
-                    .iter()
-                    .map(|attachement| {
-                        if attachement.0 == usize::max_value() {
-                            log::warn!("render target: frame");
-                            // frame
-                            wgpu::RenderPassColorAttachmentDescriptor {
-                                attachment: &self.frame_output().unwrap().frame.view,
-                                resolve_target: None,
-                                ops: attachement.1,
-                            }
-                        } else {
-                            log::warn!(
-                                "render target: {} {:?}",
-                                self.targets[attachement.0].name,
-                                self.targets[attachement.0].render_target.size
-                            );
-                            wgpu::RenderPassColorAttachmentDescriptor {
-                                attachment: &self.targets[attachement.0].render_target.view,
-                                resolve_target: None,
-                                ops: attachement.1,
-                            }
+        } else if let Some(pass) = self.passes.iter().find(|x| x.name == pass) {
+            let color_desc = pass
+                .outputs
+                .colors
+                .iter()
+                .map(|attachement| {
+                    if attachement.0 == usize::max_value() {
+                        log::warn!("render target: frame");
+                        // frame
+                        wgpu::RenderPassColorAttachmentDescriptor {
+                            attachment: &self.frame_output().unwrap().frame.view,
+                            resolve_target: None,
+                            ops: attachement.1,
                         }
-                    })
-                    .collect::<Vec<_>>();
-                let depth_desc =
-                    pass.outputs
-                        .depth
-                        .as_ref()
-                        .map(|attachement| wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                    } else {
+                        log::warn!(
+                            "render target: {} {:?}",
+                            self.targets[attachement.0].name,
+                            self.targets[attachement.0].render_target.size
+                        );
+                        wgpu::RenderPassColorAttachmentDescriptor {
                             attachment: &self.targets[attachement.0].render_target.view,
-                            depth_ops: attachement.1.clone(),
-                            stencil_ops: attachement.2.clone(),
-                        });
-                let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: Cow::Borrowed(&color_desc[..]),
-                    depth_stencil_attachment: depth_desc,
-                });
+                            resolve_target: None,
+                            ops: attachement.1,
+                        }
+                    }
+                })
+                .collect::<Vec<_>>();
+            let depth_desc =
+                pass.outputs
+                    .depth
+                    .as_ref()
+                    .map(|attachement| wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                        attachment: &self.targets[attachement.0].render_target.view,
+                        depth_ops: attachement.1,
+                        stencil_ops: attachement.2,
+                    });
+            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: Cow::Borrowed(&color_desc[..]),
+                depth_stencil_attachment: depth_desc,
+            });
 
-                // todo: create a list of texture targets
-                let textures = FrameTextures {
-                    frame: &self.frame_output().unwrap().frame,
-                    textures: pass
-                        .inputs
-                        .iter()
-                        .map(|texture| (&self.targets[texture.texture_index], &texture.sampler))
-                        .collect(),
-                };
+            // todo: create a list of texture targets
+            let textures = FrameTextures {
+                frame: &self.frame_output().unwrap().frame,
+                textures: pass
+                    .inputs
+                    .iter()
+                    .map(|texture| (&self.targets[texture.texture_index], &texture.sampler))
+                    .collect(),
+            };
 
-                Ok((render_pass, textures))
-            } else {
-                //log::warn!("No [{}] pass was found", pass);
-                Err(GameError::Render(format!("No [{}] pass was found", pass)))
-            }
+            Ok((render_pass, textures))
+        } else {
+            //log::warn!("No [{}] pass was found", pass);
+            Err(GameError::Render(format!("No [{}] pass was found", pass)))
         }
     }
 

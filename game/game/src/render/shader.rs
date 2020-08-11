@@ -3,13 +3,13 @@ use crate::{
     render::{Compile, CompiledShader, Context},
 };
 use shine_ecs::core::{
-    observer::{ObserveResult, Observer, ObserverFn, SyncObserveDispatcher},
+    observer::{ObserveDispatcher, ObserveResult, Observer, SubscriptionRequest},
     store::{
         AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
         Store,
     },
 };
-use std::{io, mem, pin::Pin, str::FromStr, sync::Arc};
+use std::{io, mem, pin::Pin, str::FromStr};
 
 /// Unique key for a shader
 pub type ShaderKey = String;
@@ -24,12 +24,16 @@ pub enum ShaderEvent {
 pub struct Shader {
     id: String,
     shader: Result<Option<CompiledShader>, ShaderError>,
-    dispatcher: SyncObserveDispatcher<ShaderEvent>,
+    dispatcher: ObserveDispatcher<ShaderEvent>,
 }
 
 impl Shader {
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    pub fn dispatcher(&self) -> &ObserveDispatcher<ShaderEvent> {
+        &self.dispatcher
     }
 
     pub fn shader(&self) -> Result<Option<&CompiledShader>, ShaderError> {
@@ -42,14 +46,6 @@ impl Shader {
 
     pub fn shader_module(&self) -> Option<&CompiledShader> {
         self.shader.as_ref().map(|u| u.as_ref()).unwrap_or(None)
-    }
-
-    pub fn subscribe(&self, observer: &Arc<dyn Observer<ShaderEvent>>) {
-        self.dispatcher.subscribe(observer)
-    }
-
-    pub fn unsubscribe(&self, observer: &Arc<dyn Observer<ShaderEvent>>) {
-        self.dispatcher.unsubscribe(observer);
     }
 }
 
@@ -205,47 +201,11 @@ enum ShaderDependencyIndex {
     Completed(ShaderIndex),
     Error(ShaderDependencyError),
 }
-
-/// Keeps track of the active and requested subscription.
-/// The Arc observer is not exposed and ShaderDependency is not clonable,
-/// the only strong count of the observer is kept in this enum. Thus
-/// observer is valid while this reference is kept alive and no explicit unsubscribe is required.
-enum ShaderSubscription {
-    /// Cancel subscription.
-    None,
-    /// Request a new subscription.
-    Request(Arc<dyn Observer<ShaderEvent>>),
-    /// Keep the subscription alive.
-    Active(Arc<dyn Observer<ShaderEvent>>),
-}
-
-impl ShaderSubscription {
-    /// Cancel active subscription by dropping the reference.
-    fn with_cancel_active(self) -> ShaderSubscription {
-        if let ShaderSubscription::Request(observer) = self {
-            ShaderSubscription::Request(observer)
-        } else {
-            ShaderSubscription::None
-        }
-    }
-
-    /// Replace subscription in the shader.
-    fn subscribe(&mut self, shader: &Shader) {
-        *self = match mem::replace(self, ShaderSubscription::None) {
-            ShaderSubscription::Request(observer) => {
-                shader.subscribe(&observer);
-                ShaderSubscription::Active(observer)
-            }
-            sub => sub,
-        };
-    }
-}
-
 pub struct ShaderDependency {
     ty: Option<ShaderType>,
     id: Option<String>,
     index: ShaderDependencyIndex,
-    subscription: ShaderSubscription,
+    subscription: SubscriptionRequest<ShaderEvent>,
 }
 
 impl ShaderDependency {
@@ -254,7 +214,7 @@ impl ShaderDependency {
             ty: None,
             id: None,
             index: ShaderDependencyIndex::None,
-            subscription: ShaderSubscription::None,
+            subscription: SubscriptionRequest::None,
         }
     }
 
@@ -263,7 +223,7 @@ impl ShaderDependency {
             ty: None,
             id: None,
             index: ShaderDependencyIndex::Incomplete,
-            subscription: ShaderSubscription::None,
+            subscription: SubscriptionRequest::None,
         }
     }
 
@@ -287,15 +247,30 @@ impl ShaderDependency {
         }
     }
 
-    pub fn with_observrer<O>(self, observer: O) -> ShaderDependency
+    pub fn with_observer<O>(self, observer: O) -> ShaderDependency
     where
         O: 'static + Observer<ShaderEvent>,
     {
         assert!(self.is_none());
+        let observer: Box<dyn Observer<ShaderEvent>> = Box::new(observer);
+        self.with_observer_boxed(observer)
+    }
+
+    pub fn with_observer_boxed(self, observer: Box<dyn Observer<ShaderEvent>>) -> ShaderDependency {
+        assert!(self.is_none());
         ShaderDependency {
-            subscription: ShaderSubscription::Request(Arc::new(observer)),
+            subscription: SubscriptionRequest::Request(observer),
             ..self
         }
+    }
+
+    pub fn with_observer_fn<T>(self, observer: T) -> ShaderDependency
+    where
+        T: 'static + Send + Sync + Fn(&ShaderEvent) -> ObserveResult,
+    {
+        assert!(self.is_none());
+        let observer: Box<dyn Observer<ShaderEvent>> = Box::new(observer);
+        self.with_observer_boxed(observer)
     }
 
     pub fn with_load_response<D>(
@@ -310,59 +285,54 @@ impl ShaderDependency {
     {
         let responder = load_handler.responder();
         let load_token = load_token.clone();
-        self.with_observrer(ObserverFn::from_fn(move |_e| {
+        self.with_observer_fn(move |_e| {
             responder.send_response(load_token.clone(), response.clone());
             ObserveResult::KeepObserving
-        }))
+        })
     }
 
     pub fn is_none(&self) -> bool {
-        if let &ShaderDependencyIndex::None = &self.index {
+        if let ShaderDependencyIndex::None = self.index {
             true
         } else {
             false
         }
     }
 
+    pub fn key(&self) -> Result<ShaderKey, ShaderDependencyError> {
+        if self.id.is_none() {
+            log::warn!("Missing shader id");
+            Err(ShaderDependencyError)
+        } else if self.ty.is_none() {
+            log::warn!("Missing shader type");
+            Err(ShaderDependencyError)
+        } else {
+            Ok(self.id.clone().unwrap())
+        }
+    }
+
     pub fn request(&mut self, shaders: &mut ShaderStoreRead<'_>) {
         self.index = match mem::replace(&mut self.index, ShaderDependencyIndex::Incomplete) {
-            ShaderDependencyIndex::None => {
-                // no dependency
-                ShaderDependencyIndex::None
-            }
-            ShaderDependencyIndex::Incomplete => {
-                // create index from the shader key
-                if self.ty.is_none() {
-                    log::warn!("[{:?}] Missing shader type", self.id);
-                    ShaderDependencyIndex::Error(ShaderDependencyError)
-                } else if let Some(id) = &self.id {
-                    ShaderDependencyIndex::Pending(shaders.get_or_load(id))
-                } else {
-                    log::warn!("[{:?}] Missing shader id or type", self.id);
-                    ShaderDependencyIndex::Error(ShaderDependencyError)
-                }
-            }
+            ShaderDependencyIndex::Incomplete => match self.key() {
+                Err(err) => ShaderDependencyIndex::Error(err),
+                Ok(id) => ShaderDependencyIndex::Pending(shaders.get_or_load(&id)),
+            },
             ShaderDependencyIndex::Pending(idx) => {
-                // check if shader is loaded
                 let shader = shaders.at(&idx);
-                self.subscription.subscribe(shader);
-
+                self.subscription.subscribe(&shader.dispatcher);
                 match shader.shader() {
-                    Err(_) => {
-                        log::warn!("[{:?}] Missing shader id or type", self.id);
-                        ShaderDependencyIndex::Error(ShaderDependencyError)
-                    }
+                    Err(_) => ShaderDependencyIndex::Error(ShaderDependencyError),
                     Ok(None) => ShaderDependencyIndex::Pending(idx),
                     Ok(Some(st)) => {
                         if st.shader_type != self.ty.unwrap() {
                             ShaderDependencyIndex::Error(ShaderDependencyError)
                         } else {
-                            log::info!("[{:?}] Shader dependency completed", self.id);
                             ShaderDependencyIndex::Completed(idx)
                         }
                     }
                 }
             }
+            ShaderDependencyIndex::None => ShaderDependencyIndex::None,
             ShaderDependencyIndex::Completed(idx) => ShaderDependencyIndex::Completed(idx),
             ShaderDependencyIndex::Error(err) => ShaderDependencyIndex::Error(err),
         }
@@ -379,5 +349,11 @@ impl ShaderDependency {
             ShaderDependencyIndex::Error(err) => Err(err.clone()),
             ShaderDependencyIndex::Completed(idx) => Ok(shaders.at(idx).shader_module()),
         }
+    }
+}
+
+impl Default for ShaderDependency {
+    fn default() -> Self {
+        Self::new()
     }
 }

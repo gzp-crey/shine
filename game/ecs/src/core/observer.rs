@@ -1,93 +1,85 @@
-use std::sync::{Arc, Mutex, Weak};
-
-pub trait Observable {
-    type Event;
-
-    fn notify_all(&mut self, event: Self::Event);
-}
+use std::{
+    mem,
+    sync::{Arc, Mutex, Weak},
+};
 
 pub enum ObserveResult {
     KeepObserving,
     StopObserving,
 }
 
-pub trait Observer<E> {
+pub trait Observer<E>: 'static + Send + Sync {
     fn on_event(&self, event: &E) -> ObserveResult;
 }
 
-pub struct Subscription<E>(Option<Arc<dyn Observer<E>>>);
+pub struct Subscription<E>(Arc<dyn Observer<E>>);
 
-impl<E> Subscription<E>
-{
-    fn none() -> Subscription<E>{
-        Subscription(None)
-    }
-
-    /// Perform a lazy unsubscription. Observer won't be notified, by queue is updated only on the next notification requests.
-    pub fn cancel(&mut self) {
-        let _ = self.0.take();
-    }
-}
-
-/// Wrap an function to start observing with
-pub struct ObserverFn<E, F>
+impl<E, T> Observer<E> for T
 where
-    F: Fn(&E) -> ObserveResult,
-{
-    function: F,
-    ph: std::marker::PhantomData<dyn Fn(&E)>,
-}
-
-impl<E, F> ObserverFn<E, F>
-where
-    F: Fn(&E) -> ObserveResult,
-{
-    pub fn from_fn(function: F) -> ObserverFn<E, F> {
-        ObserverFn {
-            function,
-            ph: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<E, F> Observer<E> for ObserverFn<E, F>
-where
-    F: Fn(&E) -> ObserveResult,
+    T: 'static + Send + Sync + Fn(&E) -> ObserveResult,
 {
     fn on_event(&self, event: &E) -> ObserveResult {
-        (self.function)(event)
+        (self)(event)
     }
 }
-
 /// Thread aware handling of observers
-pub struct SyncObserveDispatcher<E> {
+pub struct ObserveDispatcher<E>
+where
+    E: 'static,
+{
     observers: Mutex<Vec<Weak<dyn Observer<E>>>>,
 }
 
-impl<E> SyncObserveDispatcher<E> {
-    pub fn new() -> SyncObserveDispatcher<E> {
-        SyncObserveDispatcher {
+impl<E> ObserveDispatcher<E>
+where
+    E: 'static,
+{
+    pub fn new() -> ObserveDispatcher<E> {
+        ObserveDispatcher {
             observers: Mutex::new(Vec::new()),
         }
     }
 
-    pub fn subscribe<O>(&self, observer: O) -> Subscription<E> 
-    where 
-        O : Observer<E>
-    {
+    #[must_use]
+    fn subscribe_arc(&self, observer: Arc<dyn Observer<E>>) -> Subscription<E> {
         let mut observers = self.observers.lock().unwrap();
-        let weak: Weak<dyn Observer<E>> = Arc::downgrade(observer);
+        let weak: Weak<dyn Observer<E>> = Arc::downgrade(&observer);
         if observers.iter().any(|o| o.ptr_eq(&weak)) {
             log::warn!("Observer already registered");
         } else {
             observers.push(weak);
         }
+        Subscription(observer)
+    }
+
+    #[must_use]
+    pub fn subscribe<O>(&self, observer: O) -> Subscription<E>
+    where
+        O: 'static + Observer<E>,
+    {
+        let observer: Arc<dyn Observer<E>> = Arc::new(observer);
+        self.subscribe_arc(observer)
+    }
+
+    #[must_use]
+    pub fn subscribe_boxed(&self, observer: Box<dyn Observer<E>>) -> Subscription<E> {
+        let observer: Arc<dyn Observer<E>> = Arc::from(observer);
+        self.subscribe_arc(observer)
+    }
+
+    #[must_use]
+    pub fn subscribe_fn<T>(&self, observer: T) -> Subscription<E>
+    where
+        T: 'static + Send + Sync + Fn(&E) -> ObserveResult,
+    {
+        let observer: Arc<dyn Observer<E>> = Arc::from(observer);
+        self.subscribe_arc(observer)
     }
 
     /// Perform a strict unsubscription and remove observer from the queue.
     pub fn unsubscribe(&self, subscription: Subscription<E>) {
         let mut observers = self.observers.lock().unwrap();
-        let weak = Arc::downgrade(observer);
+        let weak = Arc::downgrade(&subscription.0);
         let len_before = observers.len();
         observers.retain(|o| !o.ptr_eq(&weak));
         if len_before == observers.len() {
@@ -110,8 +102,37 @@ impl<E> SyncObserveDispatcher<E> {
     }
 }
 
-impl<E> Default for SyncObserveDispatcher<E> {
+impl<E> Default for ObserveDispatcher<E> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Keep track of the active and requested subscriptions.
+pub enum SubscriptionRequest<E> {
+    /// No subscription.
+    None,
+    /// Request a new subscription.
+    Request(Box<dyn Observer<E>>),
+    /// Keep the subscription alive.
+    Active(Subscription<E>),
+}
+
+impl<E> SubscriptionRequest<E> {
+    /// Cancel the active subscription by dropping the reference.
+    pub fn with_cancel_active(self) -> SubscriptionRequest<E> {
+        if let SubscriptionRequest::Request(observer) = self {
+            SubscriptionRequest::Request(observer)
+        } else {
+            SubscriptionRequest::None
+        }
+    }
+
+    /// Replace subscription in the shader.
+    pub fn subscribe(&mut self, dispatcher: &ObserveDispatcher<E>) {
+        *self = match mem::replace(self, SubscriptionRequest::None) {
+            SubscriptionRequest::Request(observer) => SubscriptionRequest::Active(dispatcher.subscribe_boxed(observer)),
+            sub => sub,
+        };
     }
 }

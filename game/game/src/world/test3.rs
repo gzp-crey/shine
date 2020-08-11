@@ -4,7 +4,7 @@ use crate::{
         TextureSemantic, Uniform,
     },
     render::{
-        Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
+        Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
         TextureStoreRead, GLOBAL_UNIFORMS,
     },
     world::{GameLoadWorld, GameUnloadWorld},
@@ -87,8 +87,8 @@ impl GameUnloadWorld for Test3World {
 
 /// Resources for the test
 struct TestScene {
-    pipeline: PipelineNamedId,
-    texture: TextureNamedId,
+    pipeline: PipelineDependency,
+    texture: TextureDependency,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
     bind_group: Option<wgpu::BindGroup>,
 }
@@ -96,8 +96,10 @@ struct TestScene {
 impl TestScene {
     fn new(test: Test3) -> TestScene {
         TestScene {
-            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Pos3fTex2f>(&test.pipeline)),
-            texture: TextureNamedId::from_key(test.texture),
+            pipeline: PipelineDependency::new()
+                .with_id(test.pipeline)
+                .with_vertex_layout::<vertex::Pos3fTex2f>(),
+            texture: TextureDependency::new().with_id(test.texture),
             buffers: None,
             bind_group: None,
         }

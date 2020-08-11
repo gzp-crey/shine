@@ -1,9 +1,15 @@
-use crate::assets::{AssetError, AssetIO, TextureImage, Url, UrlError};
-use crate::render::{Compile, CompiledTexture, Context};
-use shine_ecs::core::store::{
-    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
+use crate::{
+    assets::{AssetError, AssetIO, TextureImage, Url, UrlError},
+    render::{Compile, CompiledTexture, Context},
 };
-use std::pin::Pin;
+use shine_ecs::core::{
+    observer::{ObserveDispatcher, ObserveResult, Observer, SubscriptionRequest},
+    store::{
+        AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
+        Store,
+    },
+};
+use std::{mem, pin::Pin};
 
 /// Unique key for a texture
 pub type TextureKey = String;
@@ -11,14 +17,23 @@ pub type TextureKey = String;
 #[derive(Debug, Clone)]
 pub struct TextureError;
 
+pub enum TextureEvent {
+    Loaded,
+}
+
 pub struct Texture {
     id: String,
     texture: Result<Option<CompiledTexture>, TextureError>,
+    dispatcher: ObserveDispatcher<TextureEvent>,
 }
 
 impl Texture {
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    pub fn dispatcher(&self) -> &ObserveDispatcher<TextureEvent> {
+        &self.dispatcher
     }
 
     pub fn texture(&self) -> Result<Option<&CompiledTexture>, TextureError> {
@@ -47,6 +62,7 @@ impl FromKey for Texture {
         Texture {
             id: key.to_owned(),
             texture: Ok(None),
+            dispatcher: Default::default(),
         }
     }
 }
@@ -75,25 +91,23 @@ impl OnLoad for Texture {
         match load_response.0 {
             Err(err) => {
                 self.texture = Err(TextureError);
-                //listeners.notify_all();
+                self.dispatcher.notify_all(TextureEvent::Loaded);
                 log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
             }
 
-            Ok(texture_image) => {
-                match texture_image.compile(context.device(), ()) {
-                    Ok((texture, init_command)) => {
-                        context.queue().submit(init_command);
-                        self.texture = Ok(Some(texture));
-                        //listeners.notify_all();
-                        log::debug!("[{:?}] Texture compilation completed", load_token);
-                    }
-                    Err(err) => {
-                        self.texture = Err(TextureError);
-                        //listeners.notify_all();
-                        log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
-                    }
+            Ok(texture_image) => match texture_image.compile(context.device(), ()) {
+                Ok((texture, init_command)) => {
+                    context.queue().submit(init_command);
+                    self.texture = Ok(Some(texture));
+                    self.dispatcher.notify_all(TextureEvent::Loaded);
+                    log::debug!("[{:?}] Texture compilation completed", load_token);
                 }
-            }
+                Err(err) => {
+                    self.texture = Err(TextureError);
+                    self.dispatcher.notify_all(TextureEvent::Loaded);
+                    log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
+                }
+            },
         };
     }
 }
@@ -187,5 +201,150 @@ pub mod systems {
             .build(move |_, _, textures, _| {
                 textures.drain_unused();
             })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TextureDependencyError;
+
+enum TextureDependencyIndex {
+    None,
+    Incomplete,
+    Pending(TextureIndex),
+    Completed(TextureIndex),
+    Error(TextureDependencyError),
+}
+pub struct TextureDependency {
+    id: Option<String>,
+    index: TextureDependencyIndex,
+    subscription: SubscriptionRequest<TextureEvent>,
+}
+
+impl TextureDependency {
+    pub fn none() -> TextureDependency {
+        TextureDependency {
+            id: None,
+            index: TextureDependencyIndex::None,
+            subscription: SubscriptionRequest::None,
+        }
+    }
+
+    pub fn new() -> TextureDependency {
+        TextureDependency {
+            id: None,
+            index: TextureDependencyIndex::Incomplete,
+            subscription: SubscriptionRequest::None,
+        }
+    }
+
+    pub fn with_id<S: ToString>(self, id: S) -> TextureDependency {
+        assert!(self.is_none());
+        TextureDependency {
+            id: Some(id.to_string()),
+            index: TextureDependencyIndex::Incomplete,
+            subscription: self.subscription.with_cancel_active(),
+        }
+    }
+
+    pub fn with_observer<O>(self, observer: O) -> TextureDependency
+    where
+        O: 'static + Observer<TextureEvent>,
+    {
+        assert!(self.is_none());
+        let observer: Box<dyn Observer<TextureEvent>> = Box::new(observer);
+        self.with_observer_boxed(observer)
+    }
+
+    pub fn with_observer_boxed(self, observer: Box<dyn Observer<TextureEvent>>) -> TextureDependency {
+        assert!(self.is_none());
+        TextureDependency {
+            subscription: SubscriptionRequest::Request(observer),
+            ..self
+        }
+    }
+
+    pub fn with_observer_fn<T>(self, observer: T) -> TextureDependency
+    where
+        T: 'static + Send + Sync + Fn(&TextureEvent) -> ObserveResult,
+    {
+        assert!(self.is_none());
+        let observer: Box<dyn Observer<TextureEvent>> = Box::new(observer);
+        self.with_observer_boxed(observer)
+    }
+
+    pub fn with_load_response<D>(
+        self,
+        load_handler: &AsyncLoadHandler<D>,
+        load_token: &LoadToken<D>,
+        response: D::LoadResponse,
+    ) -> TextureDependency
+    where
+        D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+        D::LoadResponse: Clone,
+    {
+        let responder = load_handler.responder();
+        let load_token = load_token.clone();
+        self.with_observer_fn(move |_e| {
+            responder.send_response(load_token.clone(), response.clone());
+            ObserveResult::KeepObserving
+        })
+    }
+
+    pub fn is_none(&self) -> bool {
+        if let TextureDependencyIndex::None = self.index {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn key(&self) -> Result<TextureKey, TextureDependencyError> {
+        if self.id.is_none() {
+            log::warn!("Missing textur id");
+            Err(TextureDependencyError)
+        } else {
+            Ok(self.id.clone().unwrap())
+        }
+    }
+
+    pub fn request(&mut self, textures: &mut TextureStoreRead<'_>) {
+        self.index = match mem::replace(&mut self.index, TextureDependencyIndex::Incomplete) {
+            TextureDependencyIndex::Incomplete => match self.key() {
+                Err(err) => TextureDependencyIndex::Error(err),
+                Ok(id) => TextureDependencyIndex::Pending(textures.get_or_load(&id)),
+            },
+            TextureDependencyIndex::Pending(idx) => {
+                let texture = textures.at(&idx);
+                self.subscription.subscribe(&texture.dispatcher);
+
+                match texture.texture() {
+                    Err(_) => TextureDependencyIndex::Error(TextureDependencyError),
+                    Ok(None) => TextureDependencyIndex::Pending(idx),
+                    Ok(Some(_)) => TextureDependencyIndex::Completed(idx),
+                }
+            }
+            TextureDependencyIndex::None => TextureDependencyIndex::None,
+            TextureDependencyIndex::Completed(idx) => TextureDependencyIndex::Completed(idx),
+            TextureDependencyIndex::Error(err) => TextureDependencyIndex::Error(err),
+        }
+    }
+
+    pub fn texture_buffer<'m, 'a: 'm, 's: 'm>(
+        &'s mut self,
+        textures: &'a TextureStoreRead<'m>,
+    ) -> Result<Option<&'m CompiledTexture>, TextureDependencyError> {
+        match &self.index {
+            TextureDependencyIndex::None | TextureDependencyIndex::Incomplete | TextureDependencyIndex::Pending(_) => {
+                Ok(None)
+            }
+            TextureDependencyIndex::Error(err) => Err(err.clone()),
+            TextureDependencyIndex::Completed(idx) => Ok(textures.at(idx).texture_buffer()),
+        }
+    }
+}
+
+impl Default for TextureDependency {
+    fn default() -> Self {
+        Self::new()
     }
 }

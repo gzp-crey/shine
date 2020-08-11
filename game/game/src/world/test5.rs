@@ -1,8 +1,6 @@
 use crate::{
     assets::{vertex, TextureSemantic, Uniform},
-    render::{
-        Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, RenderSystem, GLOBAL_UNIFORMS,
-    },
+    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, RenderSystem, GLOBAL_UNIFORMS},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -53,15 +51,19 @@ impl GameUnloadWorld for Test5World {
 
 /// Resources for the test
 struct TestScene {
-    scene_pipeline: PipelineNamedId,
-    present_pipeline: PipelineNamedId,
+    scene_pipeline: PipelineDependency,
+    present_pipeline: PipelineDependency,
 }
 
 impl TestScene {
     fn new(test: Test5) -> TestScene {
         TestScene {
-            scene_pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Null>(&test.scene_pipeline)),
-            present_pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Null>(&test.present_pipeline)),
+            scene_pipeline: PipelineDependency::new()
+                .with_id(test.pipeline)
+                .with_vertex_layout::<vertex::Null>(),
+            present_pipeline: PipelineDependency::new()
+                .with_id(test.pipeline)
+                .with_vertex_layout::<vertex::Null>(),
         }
     }
 

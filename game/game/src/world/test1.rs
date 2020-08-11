@@ -1,6 +1,6 @@
 use crate::{
     assets::vertex,
-    render::{Context, Frame, PipelineDependency, PipelineKey, PipelineStore, PipelineStoreRead},
+    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -53,7 +53,9 @@ struct TestScene {
 impl TestScene {
     fn new(test: Test1) -> TestScene {
         TestScene {
-            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Null>(&test.pipeline)),
+            pipeline: PipelineDependency::new()
+                .with_id(test.pipeline)
+                .with_vertex_layout::<vertex::Null>(),
         }
     }
 

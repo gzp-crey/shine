@@ -5,11 +5,14 @@ use crate::{
     },
     render::{Compile, CompiledPipeline, Context, ShaderDependency, ShaderStore, ShaderStoreRead},
 };
-use shine_ecs::core::store::{
-    AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard, Store,
+use shine_ecs::core::{
+    observer::{ObserveDispatcher, SubscriptionRequest},
+    store::{
+        AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
+        Store,
+    },
 };
-use std::fmt;
-use std::pin::Pin;
+use std::{fmt, mem, pin::Pin};
 
 /// Unique key for a render pipeline.
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -42,6 +45,10 @@ impl fmt::Debug for PipelineKey {
 #[derive(Debug, Clone)]
 pub struct PipelineError;
 
+pub enum PipelineEvent {
+    Loaded,
+}
+
 pub struct Pipeline {
     id: String,
     vertex_layouts: VertexBufferLayouts,
@@ -50,11 +57,16 @@ pub struct Pipeline {
     vertex_shader: ShaderDependency,
     fragment_shader: ShaderDependency,
     pipeline: Result<Option<CompiledPipeline>, PipelineError>,
+    dispatcher: ObserveDispatcher<PipelineEvent>,
 }
 
 impl Pipeline {
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    pub fn dispatcher(&self) -> &ObserveDispatcher<PipelineEvent> {
+        &self.dispatcher
     }
 
     pub fn pipeline(&self) -> Result<Option<&CompiledPipeline>, PipelineError> {
@@ -125,10 +137,12 @@ impl Pipeline {
                 Ok(pipeline) => {
                     self.pipeline = Ok(Some(pipeline));
                     log::debug!("[{:?}] Pipeline compilation completed", load_token);
+                    self.dispatcher.notify_all(PipelineEvent::Loaded);
                 }
                 Err(err) => {
                     self.pipeline = Err(PipelineError);
                     log::warn!("[{:?}] Pipeline compilation failed: {:?}", load_token, err);
+                    self.dispatcher.notify_all(PipelineEvent::Loaded);
                 }
             };
         } else {
@@ -152,6 +166,7 @@ impl FromKey for Pipeline {
             vertex_shader: ShaderDependency::none(),
             fragment_shader: ShaderDependency::none(),
             pipeline: Ok(None),
+            dispatcher: Default::default(),
         }
     }
 }
@@ -182,6 +197,7 @@ impl OnLoad for Pipeline {
             PipelineLoadResponseInner::Error(err) => {
                 log::warn!("[{:?}] Pipeline compilation failed: {:?}", load_token, err);
                 self.pipeline = Err(PipelineError);
+                self.dispatcher.notify_all(PipelineEvent::Loaded);
             }
             PipelineLoadResponseInner::PipelineDescriptor(desc) => {
                 if self
@@ -239,6 +255,7 @@ impl OnLoad for Pipeline {
                 ty => {
                     log::warn!("[{:?}] Pipeline got invalid shader response: {:?}", load_token, ty);
                     self.pipeline = Err(PipelineError);
+                    self.dispatcher.notify_all(PipelineEvent::Loaded);
                 }
             },
         };
@@ -354,42 +371,125 @@ pub mod systems {
 /// Error indicating a failed pipeline dependency request.
 pub struct PipelineDependencyError;
 
-/// Helper to manage dependency on a shader
+enum PipelineDependencyIndex {
+    None,
+    Incomplete,
+    Pending(PipelineIndex),
+    Completed(PipelineIndex),
+    Error(PipelineDependencyError),
+}
+
+/// Helper to manage dependency on a pipeline
 pub struct PipelineDependency {
     vertex_id: Option<VertexTypeId>,
     state_id: Option<PipelineStateTypeId>,
     id: Option<String>,
-    index: Option<PipelineIndex>,
+    index: PipelineDependencyIndex,
+    subscription: SubscriptionRequest<PipelineEvent>,
 }
 
 impl PipelineDependency {
-    pub fn unknown() -> PipelineDependency {
+    pub fn none() -> PipelineDependency {
         PipelineDependency {
             vertex_id: None,
             state_id: None,
             id: None,
-            index: None,
+            index: PipelineDependencyIndex::None,
+            subscription: SubscriptionRequest::None,
         }
     }
-    /*
-    //pub fn with_vertex(self, ) -> ShaderDependency {
-    //}
 
-    pub fn request<F>(&mut self, pipelines: &PipelineStoreRead<'_>, on_subscribe: F)
-    where
-        F: FnOnce(&AsyncLoadListeners),
-    {
-        self.0 = mem::replace(&mut self.0, ShaderDependencyInner::Failed).request(shaders, on_subscribe);
+    pub fn new() -> PipelineDependency {
+        PipelineDependency {
+            vertex_id: None,
+            state_id: None,
+            id: None,
+            index: PipelineDependencyIndex::Incomplete,
+            subscription: SubscriptionRequest::None,
+        }
     }
 
-    pub fn shader_module<'m, 'a: 'm, 's: 'm>(
-        &'s mut self,
-        shaders: &'a ShaderStoreRead<'m>,
-    ) -> Result<Option<&'m CompiledShader>, ShaderDependencyError> {
-        match &self.0 {
-            ShaderDependencyInner::Completed(_, id) => Ok(shaders.at(id).shader_module()),
-            ShaderDependencyInner::Failed => Err(ShaderDependencyError),
-            _ => Ok(None),
+    pub fn with_vertex_layout<V: IntoVertexTypeId>(self) -> PipelineDependency {
+        assert!(self.is_none());
+        PipelineDependency {
+            vertex_id: Some(<V as IntoVertexTypeId>::into_id()),
+            index: PipelineDependencyIndex::Incomplete,
+            subscription: self.subscription.with_cancel_active(),
+            ..self
         }
-    }*/
+    }
+
+    pub fn with_state(self, state: &PipelineStateDescriptor) -> PipelineDependency {
+        assert!(self.is_none());
+        PipelineDependency {
+            state_id: Some(PipelineStateTypeId::from_descriptor(state)),
+            index: PipelineDependencyIndex::Incomplete,
+            subscription: self.subscription.with_cancel_active(),
+            ..self
+        }
+    }
+
+    pub fn with_id<S: ToString>(self, id: S) -> PipelineDependency {
+        assert!(self.is_none());
+        PipelineDependency {
+            id: Some(id.to_string()),
+            index: PipelineDependencyIndex::Incomplete,
+            subscription: self.subscription.with_cancel_active(),
+            ..self
+        }
+    }
+
+    pub fn key(&self) -> Result<PipelineKey, PipelineDependencyError> {
+        if self.id.is_none() {
+            log::warn!("Missing id");
+            Err(PipelineDependencyError)
+        } else if self.vertex_id.is_none() {
+            log::warn!("Missing vertex layout");
+            Err(PipelineDependencyError)
+        } else if self.state_id.is_none() {
+            log::warn!("Missing state");
+            Err(PipelineDependencyError)
+        } else {
+            Ok(PipelineKey {
+                name: self.id.clone().unwrap(),
+                vertex_type: self.vertex_id.clone().unwrap(),
+                render_state: self.state_id.clone().unwrap(),
+            })
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        if let PipelineDependencyIndex::None = self.index {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn request(&mut self, pipelines: &mut PipelineStoreRead<'_>) {
+        self.index = match mem::replace(&mut self.index, PipelineDependencyIndex::Incomplete) {
+            PipelineDependencyIndex::Incomplete => match self.key() {
+                Err(err) => PipelineDependencyIndex::Error(err),
+                Ok(id) => PipelineDependencyIndex::Pending(pipelines.get_or_load(&id)),
+            },
+            PipelineDependencyIndex::Pending(idx) => {
+                let pipeline = pipelines.at(&idx);
+                self.subscription.subscribe(&pipeline.dispatcher);
+                match pipeline.pipeline() {
+                    Err(_) => PipelineDependencyIndex::Error(PipelineDependencyError),
+                    Ok(None) => PipelineDependencyIndex::Pending(idx),
+                    Ok(Some(_)) => PipelineDependencyIndex::Completed(idx),
+                }
+            }
+            PipelineDependencyIndex::None => PipelineDependencyIndex::None,
+            PipelineDependencyIndex::Completed(idx) => PipelineDependencyIndex::Completed(idx),
+            PipelineDependencyIndex::Error(err) => PipelineDependencyIndex::Error(err),
+        }
+    }
+}
+
+impl Default for PipelineDependency {
+    fn default() -> Self {
+        Self::new()
+    }
 }

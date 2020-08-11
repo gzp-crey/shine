@@ -7,7 +7,7 @@ use crate::{
     components::camera::{Camera, FirstPerson, Projection},
     input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputSystem},
     render::{
-        Context, Frame, PipelineKey, PipelineNamedId, PipelineStore, PipelineStoreRead, TextureNamedId, TextureStore,
+        Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
         TextureStoreRead, GLOBAL_UNIFORMS,
     },
     world::{GameLoadWorld, GameUnloadWorld},
@@ -105,8 +105,8 @@ impl GameUnloadWorld for Test4World {
 
 /// Resources for the test
 struct TestScene {
-    pipeline: PipelineNamedId,
-    texture: TextureNamedId,
+    pipeline: PipelineDependency,
+    texture: TextureDependency,
     geometry: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
     uniforms: Option<wgpu::Buffer>,
     bind_group: Option<wgpu::BindGroup>,
@@ -115,8 +115,10 @@ struct TestScene {
 impl TestScene {
     fn new(test: Test4) -> TestScene {
         TestScene {
-            pipeline: PipelineNamedId::from_key(PipelineKey::new::<vertex::Pos3fTex2f>(&test.pipeline)),
-            texture: TextureNamedId::from_key(test.texture),
+            pipeline: PipelineDependency::new()
+                .with_id(test.pipeline)
+                .with_vertex_layout::<vertex::Pos3fTex2f>(),
+            texture: TextureDependency::new().with_id(test.texture),
             geometry: None,
             uniforms: None,
             bind_group: None,

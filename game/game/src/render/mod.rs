@@ -22,8 +22,7 @@ mod shader;
 pub use self::shader::{Shader, ShaderDependency, ShaderError, ShaderIndex, ShaderKey, ShaderStore, ShaderStoreRead};
 mod texture;
 pub use self::texture::{
-    Texture, TextureError, TextureIndex, TextureKey, /*, TextureDependency*/
-    TextureStore, TextureStoreRead,
+    Texture, TextureDependency, TextureError, TextureIndex, TextureKey, TextureStore, TextureStoreRead,
 };
 mod pipeline;
 pub use self::pipeline::{
