@@ -3,7 +3,7 @@ use crate::{
     render::{Compile, CompiledShader, Context},
 };
 use shine_ecs::core::{
-    observer::{ObserveDispatcher, ObserveResult, Observer, SubscriptionRequest},
+    observer::{ObserveDispatcher, Subscription},
     store::{
         AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
         Store,
@@ -197,15 +197,15 @@ pub struct ShaderDependencyError;
 enum ShaderDependencyIndex {
     None,
     Incomplete,
-    Pending(ShaderIndex),
-    Completed(ShaderIndex),
+    Pending(ShaderIndex, Option<Subscription<ShaderEvent>>),
+    Completed(ShaderIndex, Option<Subscription<ShaderEvent>>),
     Error(ShaderDependencyError),
 }
+
 pub struct ShaderDependency {
     ty: Option<ShaderType>,
     id: Option<String>,
     index: ShaderDependencyIndex,
-    subscription: SubscriptionRequest<ShaderEvent>,
 }
 
 impl ShaderDependency {
@@ -214,7 +214,6 @@ impl ShaderDependency {
             ty: None,
             id: None,
             index: ShaderDependencyIndex::None,
-            subscription: SubscriptionRequest::None,
         }
     }
 
@@ -223,7 +222,6 @@ impl ShaderDependency {
             ty: None,
             id: None,
             index: ShaderDependencyIndex::Incomplete,
-            subscription: SubscriptionRequest::None,
         }
     }
 
@@ -232,9 +230,17 @@ impl ShaderDependency {
         ShaderDependency {
             ty: Some(ty),
             index: ShaderDependencyIndex::Incomplete,
-            subscription: self.subscription.with_cancel_active(),
             ..self
         }
+    }
+
+    pub fn or_type(&mut self, ty: ShaderType) -> &mut ShaderDependency {
+        assert!(self.is_none());
+        if self.ty.is_none() {
+            self.ty = Some(ty);
+            self.index = ShaderDependencyIndex::Incomplete;
+        }
+        self
     }
 
     pub fn with_id<S: ToString>(self, id: S) -> ShaderDependency {
@@ -242,53 +248,17 @@ impl ShaderDependency {
         ShaderDependency {
             id: Some(id.to_string()),
             index: ShaderDependencyIndex::Incomplete,
-            subscription: self.subscription.with_cancel_active(),
             ..self
         }
     }
 
-    pub fn with_observer<O>(self, observer: O) -> ShaderDependency
-    where
-        O: 'static + Observer<ShaderEvent>,
-    {
+    pub fn or_id<S: ToString>(&mut self, id: S) -> &mut ShaderDependency {
         assert!(self.is_none());
-        let observer: Box<dyn Observer<ShaderEvent>> = Box::new(observer);
-        self.with_observer_boxed(observer)
-    }
-
-    pub fn with_observer_boxed(self, observer: Box<dyn Observer<ShaderEvent>>) -> ShaderDependency {
-        assert!(self.is_none());
-        ShaderDependency {
-            subscription: SubscriptionRequest::Request(observer),
-            ..self
+        if self.id.is_none() {
+            self.id = Some(id.to_string());
+            self.index = ShaderDependencyIndex::Incomplete;
         }
-    }
-
-    pub fn with_observer_fn<T>(self, observer: T) -> ShaderDependency
-    where
-        T: 'static + Send + Sync + Fn(&ShaderEvent) -> ObserveResult,
-    {
-        assert!(self.is_none());
-        let observer: Box<dyn Observer<ShaderEvent>> = Box::new(observer);
-        self.with_observer_boxed(observer)
-    }
-
-    pub fn with_load_response<D>(
-        self,
-        load_handler: &AsyncLoadHandler<D>,
-        load_token: &LoadToken<D>,
-        response: D::LoadResponse,
-    ) -> ShaderDependency
-    where
-        D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
-        D::LoadResponse: Clone,
-    {
-        let responder = load_handler.responder();
-        let load_token = load_token.clone();
-        self.with_observer_fn(move |_e| {
-            responder.send_response(load_token.clone(), response.clone());
-            ObserveResult::KeepObserving
-        })
+        self
     }
 
     pub fn is_none(&self) -> bool {
@@ -311,44 +281,62 @@ impl ShaderDependency {
         }
     }
 
-    pub fn request(&mut self, shaders: &mut ShaderStoreRead<'_>) {
+    pub fn compiled_shader<'s, 'c, 'r: 'c>(
+        &'s mut self,
+        shaders: &ShaderStoreRead<'s>,
+    ) -> Result<Option<&'c CompiledShader>, ShaderDependencyError> {
+        match &self.index {
+            ShaderDependencyIndex::None | ShaderDependencyIndex::Incomplete | ShaderDependencyIndex::Pending(_, _) => {
+                Ok(None)
+            }
+            ShaderDependencyIndex::Error(err) => Err(err.clone()),
+            ShaderDependencyIndex::Completed(idx, _) => Ok(shaders.at(idx).shader_module()),
+        }
+    }
+
+    pub fn request_with<'c, 's: 'c, S>(
+        &mut self,
+        shaders: &ShaderStoreRead<'s>,
+        subscription: S,
+    ) -> Result<Option<&'c CompiledShader>, ShaderDependencyError>
+    where
+        S: FnOnce(&Shader) -> Option<Subscription<ShaderEvent>>,
+    {
         self.index = match mem::replace(&mut self.index, ShaderDependencyIndex::Incomplete) {
             ShaderDependencyIndex::Incomplete => match self.key() {
                 Err(err) => ShaderDependencyIndex::Error(err),
-                Ok(id) => ShaderDependencyIndex::Pending(shaders.get_or_load(&id)),
+                Ok(id) => {
+                    let idx = shaders.get_or_load(&id);
+                    ShaderDependencyIndex::Pending(idx, subscription(&shaders.at(&idx)))
+                }
             },
-            ShaderDependencyIndex::Pending(idx) => {
+            ShaderDependencyIndex::Pending(idx, sub) => {
                 let shader = shaders.at(&idx);
-                self.subscription.subscribe(&shader.dispatcher);
                 match shader.shader() {
                     Err(_) => ShaderDependencyIndex::Error(ShaderDependencyError),
-                    Ok(None) => ShaderDependencyIndex::Pending(idx),
+                    Ok(None) => ShaderDependencyIndex::Pending(idx, sub),
                     Ok(Some(st)) => {
                         if st.shader_type != self.ty.unwrap() {
                             ShaderDependencyIndex::Error(ShaderDependencyError)
                         } else {
-                            ShaderDependencyIndex::Completed(idx)
+                            ShaderDependencyIndex::Completed(idx, sub)
                         }
                     }
                 }
             }
             ShaderDependencyIndex::None => ShaderDependencyIndex::None,
-            ShaderDependencyIndex::Completed(idx) => ShaderDependencyIndex::Completed(idx),
+            ShaderDependencyIndex::Completed(idx, sub) => ShaderDependencyIndex::Completed(idx, sub),
             ShaderDependencyIndex::Error(err) => ShaderDependencyIndex::Error(err),
-        }
+        };
+
+        self.compiled_shader(shaders)
     }
 
-    pub fn shader_module<'m, 'a: 'm, 's: 'm>(
-        &'s mut self,
-        shaders: &'a ShaderStoreRead<'m>,
-    ) -> Result<Option<&'m CompiledShader>, ShaderDependencyError> {
-        match &self.index {
-            ShaderDependencyIndex::None | ShaderDependencyIndex::Incomplete | ShaderDependencyIndex::Pending(_) => {
-                Ok(None)
-            }
-            ShaderDependencyIndex::Error(err) => Err(err.clone()),
-            ShaderDependencyIndex::Completed(idx) => Ok(shaders.at(idx).shader_module()),
-        }
+    pub fn request<'c, 's: 'c>(
+        &mut self,
+        shaders: &ShaderStoreRead<'s>,
+    ) -> Result<Option<&'c CompiledShader>, ShaderDependencyError> {
+        self.request_with(shaders, || None)
     }
 }
 

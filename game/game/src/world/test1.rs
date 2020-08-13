@@ -60,7 +60,8 @@ impl TestScene {
     }
 
     fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
-        if let Some(pipeline) = self.pipeline.get(pipelines).pipeline_buffer() {
+        //self.pipeline.or_state(frame.)
+        if let Some(pipeline) = self.pipeline.request(pipelines).compiled_pipeline() {
             if let Ok((mut pass, _)) = frame.create_pass(encoder, "DEBUG") {
                 pass.set_pipeline(&pipeline.pipeline);
                 pass.draw(0..3, 0..1);

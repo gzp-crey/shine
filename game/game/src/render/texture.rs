@@ -3,7 +3,7 @@ use crate::{
     render::{Compile, CompiledTexture, Context},
 };
 use shine_ecs::core::{
-    observer::{ObserveDispatcher, ObserveResult, Observer, SubscriptionRequest},
+    observer::{ObserveDispatcher, Subscription},
     store::{
         AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
         Store,
@@ -210,14 +210,13 @@ pub struct TextureDependencyError;
 enum TextureDependencyIndex {
     None,
     Incomplete,
-    Pending(TextureIndex),
-    Completed(TextureIndex),
+    Pending(TextureIndex, Option<Subscription<TextureEvent>>),
+    Completed(TextureIndex, Option<Subscription<TextureEvent>>),
     Error(TextureDependencyError),
 }
 pub struct TextureDependency {
     id: Option<String>,
     index: TextureDependencyIndex,
-    subscription: SubscriptionRequest<TextureEvent>,
 }
 
 impl TextureDependency {
@@ -225,7 +224,6 @@ impl TextureDependency {
         TextureDependency {
             id: None,
             index: TextureDependencyIndex::None,
-            subscription: SubscriptionRequest::None,
         }
     }
 
@@ -233,7 +231,6 @@ impl TextureDependency {
         TextureDependency {
             id: None,
             index: TextureDependencyIndex::Incomplete,
-            subscription: SubscriptionRequest::None,
         }
     }
 
@@ -242,52 +239,17 @@ impl TextureDependency {
         TextureDependency {
             id: Some(id.to_string()),
             index: TextureDependencyIndex::Incomplete,
-            subscription: self.subscription.with_cancel_active(),
-        }
-    }
-
-    pub fn with_observer<O>(self, observer: O) -> TextureDependency
-    where
-        O: 'static + Observer<TextureEvent>,
-    {
-        assert!(self.is_none());
-        let observer: Box<dyn Observer<TextureEvent>> = Box::new(observer);
-        self.with_observer_boxed(observer)
-    }
-
-    pub fn with_observer_boxed(self, observer: Box<dyn Observer<TextureEvent>>) -> TextureDependency {
-        assert!(self.is_none());
-        TextureDependency {
-            subscription: SubscriptionRequest::Request(observer),
             ..self
         }
     }
 
-    pub fn with_observer_fn<T>(self, observer: T) -> TextureDependency
-    where
-        T: 'static + Send + Sync + Fn(&TextureEvent) -> ObserveResult,
-    {
+    pub fn or_id<S: ToString>(&mut self, id: S) -> &mut TextureDependency {
         assert!(self.is_none());
-        let observer: Box<dyn Observer<TextureEvent>> = Box::new(observer);
-        self.with_observer_boxed(observer)
-    }
-
-    pub fn with_load_response<D>(
-        self,
-        load_handler: &AsyncLoadHandler<D>,
-        load_token: &LoadToken<D>,
-        response: D::LoadResponse,
-    ) -> TextureDependency
-    where
-        D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
-        D::LoadResponse: Clone,
-    {
-        let responder = load_handler.responder();
-        let load_token = load_token.clone();
-        self.with_observer_fn(move |_e| {
-            responder.send_response(load_token.clone(), response.clone());
-            ObserveResult::KeepObserving
-        })
+        if self.id.is_none() {
+            self.id = Some(id.to_string());
+            self.index = TextureDependencyIndex::Incomplete;
+        }
+        self
     }
 
     pub fn is_none(&self) -> bool {
@@ -307,40 +269,48 @@ impl TextureDependency {
         }
     }
 
-    pub fn request(&mut self, textures: &mut TextureStoreRead<'_>) {
+    pub fn texture_buffer<'c, 'store: 'c, 's: 'c>(
+        &'s mut self,
+        textures: &'store TextureStoreRead<'c>,
+    ) -> Result<Option<&'c CompiledTexture>, TextureDependencyError> {
+        match &self.index {
+            TextureDependencyIndex::None
+            | TextureDependencyIndex::Incomplete
+            | TextureDependencyIndex::Pending(_, _) => Ok(None),
+            TextureDependencyIndex::Error(err) => Err(err.clone()),
+            TextureDependencyIndex::Completed(idx, _) => Ok(textures.at(idx).texture_buffer()),
+        }
+    }
+
+    pub fn request_with<S>(&mut self, textures: &mut TextureStoreRead<'_>, subscription: S)
+    where
+        S: FnOnce(&Texture) -> Option<Subscription<TextureEvent>>,
+    {
         self.index = match mem::replace(&mut self.index, TextureDependencyIndex::Incomplete) {
             TextureDependencyIndex::Incomplete => match self.key() {
                 Err(err) => TextureDependencyIndex::Error(err),
-                Ok(id) => TextureDependencyIndex::Pending(textures.get_or_load(&id)),
+                Ok(id) => {
+                    let idx = textures.get_or_load(&id);
+                    TextureDependencyIndex::Pending(idx, subscription(&textures.at(&idx)))
+                }
             },
-            TextureDependencyIndex::Pending(idx) => {
+            TextureDependencyIndex::Pending(idx, sub) => {
                 let texture = textures.at(&idx);
-                self.subscription.subscribe(&texture.dispatcher);
+                //self.subscription.subscribe(&texture.dispatcher);
 
                 match texture.texture() {
                     Err(_) => TextureDependencyIndex::Error(TextureDependencyError),
-                    Ok(None) => TextureDependencyIndex::Pending(idx),
-                    Ok(Some(_)) => TextureDependencyIndex::Completed(idx),
+                    Ok(None) => TextureDependencyIndex::Pending(idx, sub),
+                    Ok(Some(_)) => TextureDependencyIndex::Completed(idx, sub),
                 }
             }
             TextureDependencyIndex::None => TextureDependencyIndex::None,
-            TextureDependencyIndex::Completed(idx) => TextureDependencyIndex::Completed(idx),
+            TextureDependencyIndex::Completed(idx, sub) => TextureDependencyIndex::Completed(idx, sub),
             TextureDependencyIndex::Error(err) => TextureDependencyIndex::Error(err),
         }
     }
 
-    pub fn texture_buffer<'m, 'a: 'm, 's: 'm>(
-        &'s mut self,
-        textures: &'a TextureStoreRead<'m>,
-    ) -> Result<Option<&'m CompiledTexture>, TextureDependencyError> {
-        match &self.index {
-            TextureDependencyIndex::None | TextureDependencyIndex::Incomplete | TextureDependencyIndex::Pending(_) => {
-                Ok(None)
-            }
-            TextureDependencyIndex::Error(err) => Err(err.clone()),
-            TextureDependencyIndex::Completed(idx) => Ok(textures.at(idx).texture_buffer()),
-        }
-    }
+    
 }
 
 impl Default for TextureDependency {
