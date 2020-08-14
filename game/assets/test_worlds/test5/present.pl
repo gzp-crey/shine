@@ -3,17 +3,18 @@
     "vertex_stage": {
         "shader": "./present.vs",
         "attributes": [],
-        "uniforms": [[],[]]
+        "auto_uniforms": [],
+        "global_uniforms": [],
+        "local_uniforms": []
     },
     "fragment_stage": {
         "shader": "./present.fs",
-        "uniforms": [
-            [
-                [1,{"Texture": {"Frame": "frame_color"}}],
-                [2,{"Sampler": {"Frame": "frame_color"}}]
-            ],
-            []
-        ]
+        "auto_uniforms": [
+            [1,{"Texture": {"Frame": "frame_color"}}],
+            [2,{"Sampler": {"Frame": "frame_color"}}]
+        ],
+        "global_uniforms": [],
+        "local_uniforms": []
     },
     "color_stage": "Replace"
 }

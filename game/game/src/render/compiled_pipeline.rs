@@ -1,15 +1,11 @@
 use crate::{
     assets::{
         AssetError, PipelineDescriptor, PipelineUniform, PipelineUniformLayout, ShaderType, Uniform,
-        VertexBufferLayout, VertexStage,
+        VertexBufferLayout, VertexStage, MAX_UNIFORM_GROUP_COUNT,
     },
     render::Compile,
 };
 use std::borrow::Cow;
-
-pub const MAX_UNIFORM_GROUP_COUNT: usize = 2;
-pub const GLOBAL_UNIFORMS: u32 = 0;
-pub const LOCAL_UNIFORMS: u32 = 1;
 
 /// Compiled pipeline with related binding information
 pub struct CompiledPipeline {
@@ -198,16 +194,16 @@ where
         };
         log::trace!("Vertex state: {:#?}", vertex_state);
 
-        let mut uniforms = [None, None];
-        if uniforms.len() > MAX_UNIFORM_GROUP_COUNT {
+        let mut uniforms = [None, None, None];
+        if uniforms.len() != MAX_UNIFORM_GROUP_COUNT {
             return Err(AssetError::Content(format!(
-                "Too many uniform groups: {}. Max allowed: {}",
+                "Invalid uniform group count: {}, expected: {}",
                 uniforms.len(),
                 MAX_UNIFORM_GROUP_COUNT,
             )));
         }
         for (i, uniform) in uniforms.iter_mut().enumerate() {
-            let layout = self.get_uniform_layout(i)?;
+            let layout = self.get_uniform_layout(i as u32)?;
             log::trace!("Bind group({}) layout {:#?}", i, layout);
             *uniform = create_bind_group_layout(&layout, device)?;
         }

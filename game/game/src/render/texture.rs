@@ -269,20 +269,23 @@ impl TextureDependency {
         }
     }
 
-    pub fn texture_buffer<'c, 'store: 'c, 's: 'c>(
+    pub fn compiled_texture<'c, 'r: 'c, 's: 'c>(
         &'s mut self,
-        textures: &'store TextureStoreRead<'c>,
+        textures: &'r TextureStoreRead<'c>,
     ) -> Result<Option<&'c CompiledTexture>, TextureDependencyError> {
         match &self.index {
-            TextureDependencyIndex::None
-            | TextureDependencyIndex::Incomplete
-            | TextureDependencyIndex::Pending(_, _) => Ok(None),
+            TextureDependencyIndex::None | TextureDependencyIndex::Incomplete => Ok(None),
+            TextureDependencyIndex::Pending(_, _) => Ok(None),
             TextureDependencyIndex::Error(err) => Err(err.clone()),
             TextureDependencyIndex::Completed(idx, _) => Ok(textures.at(idx).texture_buffer()),
         }
     }
 
-    pub fn request_with<S>(&mut self, textures: &mut TextureStoreRead<'_>, subscription: S)
+    pub fn request_with<'c, 'r: 'c, 's: 'c, S>(
+        &'s mut self,
+        textures: &'r TextureStoreRead<'c>,
+        subscription: S,
+    ) -> Result<Option<&'c CompiledTexture>, TextureDependencyError>
     where
         S: FnOnce(&Texture) -> Option<Subscription<TextureEvent>>,
     {
@@ -291,7 +294,8 @@ impl TextureDependency {
                 Err(err) => TextureDependencyIndex::Error(err),
                 Ok(id) => {
                     let idx = textures.get_or_load(&id);
-                    TextureDependencyIndex::Pending(idx, subscription(&textures.at(&idx)))
+                    let sub = subscription(&textures.at(&idx));
+                    TextureDependencyIndex::Pending(idx, sub)
                 }
             },
             TextureDependencyIndex::Pending(idx, sub) => {
@@ -307,10 +311,17 @@ impl TextureDependency {
             TextureDependencyIndex::None => TextureDependencyIndex::None,
             TextureDependencyIndex::Completed(idx, sub) => TextureDependencyIndex::Completed(idx, sub),
             TextureDependencyIndex::Error(err) => TextureDependencyIndex::Error(err),
-        }
+        };
+
+        self.compiled_texture(textures)
     }
 
-    
+    pub fn request<'c, 'r: 'c, 's: 'c>(
+        &'s mut self,
+        textures: &'r TextureStoreRead<'c>,
+    ) -> Result<Option<&'c CompiledTexture>, TextureDependencyError> {
+        self.request_with(textures, |_| None)
+    }
 }
 
 impl Default for TextureDependency {

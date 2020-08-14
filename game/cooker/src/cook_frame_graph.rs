@@ -1,5 +1,5 @@
 use crate::{cook_pipeline, cook_texture, AssetNaming, Context, CookingError, Dependency};
-use shine_game::assets::{AssetId, FrameGraphDescriptor, FramePassMethod, Url};
+use shine_game::assets::{AssetId, FrameGraphDescriptor, Url};
 
 async fn find_frame_graph_etag(context: &Context, frame_graph_url: &Url) -> Result<String, CookingError> {
     Ok(context.source_io.download_etag(&frame_graph_url).await?)
@@ -26,7 +26,7 @@ pub async fn cook_frame_graph(
 
     log::debug!("[{}] Downloading...", frame_graph_url.as_str());
     let data = context.source_io.download_binary(&frame_graph_url).await?;
-    let mut frame_graph = serde_json::from_slice::<FrameGraphDescriptor>(&data)?;
+    let frame_graph = serde_json::from_slice::<FrameGraphDescriptor>(&data)?;
     log::trace!("[{}] Frame graph:\n{:#?}", frame_graph_url.as_str(), frame_graph);
 
     let dependnecies = Vec::new();

@@ -2,13 +2,13 @@ use crate::{
     assets::{
         uniform::ViewProj,
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform, UniformSemantic,
+        TextureSemantic, Uniform, UniformSemantic, GLOBAL_UNIFORMS,
     },
     components::camera::{Camera, FirstPerson, Projection},
     input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputSystem},
     render::{
         Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead, GLOBAL_UNIFORMS,
+        TextureStoreRead,
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -166,11 +166,11 @@ impl TestScene {
         pipelines: &PipelineStoreRead<'_>,
         textures: &TextureStoreRead<'_>,
     ) {
-        if let (Some(ref geometry), Some(ref uniforms), Some(pipeline), Some(texture)) = (
+        if let (Some(ref geometry), Some(ref uniforms), Ok(Some(pipeline)), Ok(Some(texture))) = (
             self.geometry.as_ref(),
             self.uniforms.as_ref(),
-            self.pipeline.get(pipelines).pipeline_buffer(),
-            self.texture.get(textures).texture_buffer(),
+            self.pipeline.request(pipelines),
+            self.texture.request(textures),
         ) {
             let bind_group = self.bind_group.get_or_insert_with(|| {
                 pipeline
@@ -185,7 +185,7 @@ impl TestScene {
                     .unwrap()
             });
             {
-                if let Ok((mut pass, _)) = frame.create_pass(encoder, "DEBUG") {
+                if let Ok(mut pass) = frame.create_pass(encoder, None) {
                     pass.set_pipeline(&pipeline.pipeline);
                     pass.set_vertex_buffer(0, geometry.0.slice(..));
                     pass.set_index_buffer(geometry.1.slice(..));

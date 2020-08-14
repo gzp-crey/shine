@@ -7,6 +7,11 @@ use std::{
     str::FromStr,
 };
 
+pub const MAX_UNIFORM_GROUP_COUNT: usize = 3;
+pub const AUTO_UNIFORMS: u32 = 0;
+pub const GLOBAL_UNIFORMS: u32 = 1;
+pub const LOCAL_UNIFORMS: u32 = 2;
+
 /// Supported shader types
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ShaderType {
@@ -107,7 +112,9 @@ impl PipelineUniformLayout {
 pub struct VertexStage {
     pub shader: String,
     pub attributes: Vec<PipelineAttribute>,
-    pub uniforms: Vec<Vec<PipelineUniform>>,
+    pub auto_uniforms: Vec<PipelineUniform>,
+    pub global_uniforms: Vec<PipelineUniform>,
+    pub local_uniforms: Vec<PipelineUniform>,
 }
 
 impl VertexStage {
@@ -159,7 +166,9 @@ impl VertexStage {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FragmentStage {
     pub shader: String,
-    pub uniforms: Vec<Vec<PipelineUniform>>,
+    pub auto_uniforms: Vec<PipelineUniform>,
+    pub global_uniforms: Vec<PipelineUniform>,
+    pub local_uniforms: Vec<PipelineUniform>,
 }
 
 /// Deserialized pipeline data
@@ -171,10 +180,20 @@ pub struct PipelineDescriptor {
 }
 
 impl PipelineDescriptor {
-    pub fn get_uniform_layout(&self, group: usize) -> Result<PipelineUniformLayout, AssetError> {
+    pub fn get_uniform_layout(&self, group: u32) -> Result<PipelineUniformLayout, AssetError> {
+        let (vs_uniforms, fs_uniforms) = if group == AUTO_UNIFORMS {
+            (&self.vertex_stage.auto_uniforms, &self.fragment_stage.auto_uniforms)
+        } else if group == GLOBAL_UNIFORMS {
+            (&self.vertex_stage.global_uniforms, &self.fragment_stage.global_uniforms)
+        } else if group == LOCAL_UNIFORMS {
+            (&self.vertex_stage.local_uniforms, &self.fragment_stage.local_uniforms)
+        } else {
+            return Err(AssetError::Content(format!("Invalid uniform group: {}", group)));
+        };
+
         PipelineUniformLayout::merge_from_stages(&[
-            (&self.vertex_stage.uniforms[group], wgpu::ShaderStage::VERTEX),
-            (&self.fragment_stage.uniforms[group], wgpu::ShaderStage::FRAGMENT),
+            (vs_uniforms, wgpu::ShaderStage::VERTEX),
+            (fs_uniforms, wgpu::ShaderStage::FRAGMENT),
         ])
     }
 }

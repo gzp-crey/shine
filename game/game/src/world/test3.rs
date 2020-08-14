@@ -1,11 +1,11 @@
 use crate::{
     assets::{
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform,
+        TextureSemantic, Uniform, GLOBAL_UNIFORMS,
     },
     render::{
         Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead, GLOBAL_UNIFORMS,
+        TextureStoreRead,
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -123,10 +123,10 @@ impl TestScene {
         pipelines: &PipelineStoreRead<'_>,
         textures: &TextureStoreRead<'_>,
     ) {
-        if let (Some(ref buffers), Some(pipeline), Some(texture)) = (
+        if let (Some(ref buffers), Ok(Some(pipeline)), Ok(Some(texture))) = (
             &self.buffers,
-            self.pipeline.get(pipelines).pipeline_buffer(),
-            self.texture.get(textures).texture_buffer(),
+            self.pipeline.request(pipelines),
+            self.texture.request(textures),
         ) {
             let bind_group = self.bind_group.get_or_insert_with(|| {
                 pipeline
@@ -139,7 +139,7 @@ impl TestScene {
             });
 
             {
-                if let Ok((mut pass, _)) = frame.create_pass(encoder, "DEBUG") {
+                if let Ok(mut pass) = frame.create_pass(encoder, None) {
                     pass.set_pipeline(&pipeline.pipeline);
                     pass.set_vertex_buffer(0, buffers.0.slice(..));
                     pass.set_index_buffer(buffers.1.slice(..));

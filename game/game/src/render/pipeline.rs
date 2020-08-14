@@ -8,8 +8,8 @@ use crate::{
 use shine_ecs::core::{
     observer::{ObserveDispatcher, ObserverResult, Subscription},
     store::{
-        AsyncLoadHandler, AsyncLoadResponder, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad,
-        OnLoading, ReadGuard, Store,
+        AsyncLoadHandler, AsyncLoader, Data, FromKey, Index, LoadCanceled, LoadToken, OnLoad, OnLoading, ReadGuard,
+        Store,
     },
 };
 use std::{fmt, mem, pin::Pin};
@@ -87,67 +87,73 @@ impl Pipeline {
 
     fn recompile(
         &mut self,
-        load_responder: AsyncLoadResponder<Pipeline>,
+        load_handler: &AsyncLoadHandler<Pipeline>,
         load_token: LoadToken<Pipeline>,
         context: &Context,
         shaders: &ShaderStoreRead<'_>,
     ) {
-        // update dependencies
-        self.vertex_shader.request_with(shaders, move |shader| {
-            Some(shader.dispatcher().subscribe(move |_e| {
-                load_responder.send_response(
-                    load_token.clone(),
-                    PipelineLoadResponse::shader_ready(ShaderType::Vertex),
+        // check vertex shader dependency
+        let vs = match self.vertex_shader.request_with(shaders, {
+            let responder = load_handler.responder();
+            let load_token = load_token.clone();
+            move |shader| {
+                Some(shader.dispatcher().subscribe(move |_e| {
+                    responder.send_response(
+                        load_token.clone(),
+                        PipelineLoadResponse::shader_ready(ShaderType::Vertex),
+                    );
+                    ObserverResult::KeepObserving
+                }))
+            }
+        }) {
+            Err(_) => {
+                self.pipeline = Err(PipelineError);
+                log::warn!("[{:?}] Pipeline vertex shader dependency failed", load_token);
+                return;
+            }
+            Ok(None) => {
+                log::debug!(
+                    "[{:?}] Pipeline, (non-optional) vertex shader dependency is not ready yet",
+                    load_token
                 );
-                ObserverResult::KeepObserving
-            }))
-        });
-        self.fragment_shader.request_with(shaders, move |shader| {
-            Some(shader.dispatcher().subscribe(move |_e| {
-                load_responder.send_response(
-                    load_token.clone(),
-                    PipelineLoadResponse::shader_ready(ShaderType::Fragment),
-                );
-                ObserverResult::KeepObserving
-            }))
-        });
+                self.pipeline = Ok(None);
+                return;
+            }
+            Ok(Some(sh)) => sh,
+        };
 
-        // try to compile
+        // check fragment shader dependency
+        let fs = match self.fragment_shader.request_with(shaders, {
+            let responder = load_handler.responder();
+            let load_token = load_token.clone();
+            move |shader| {
+                Some(shader.dispatcher().subscribe(move |_e| {
+                    responder.send_response(
+                        load_token.clone(),
+                        PipelineLoadResponse::shader_ready(ShaderType::Fragment),
+                    );
+                    ObserverResult::KeepObserving
+                }))
+            }
+        }) {
+            Err(_) => {
+                self.pipeline = Err(PipelineError);
+                log::warn!("[{:?}] Pipeline fragment shader dependency failed", load_token);
+                return;
+            }
+            Ok(None) => {
+                log::debug!(
+                    "[{:?}] Pipeline, (non-optional) fragment shader dependency is not ready yet",
+                    load_token
+                );
+                self.pipeline = Ok(None);
+                return;
+            }
+            Ok(Some(sh)) => sh,
+        };
+
+        // all dependency is ready, try to compile
         if let Some(descriptor) = &self.descriptor {
-            let vs = match self.vertex_shader.compiled_shader(shaders) {
-                Err(_) => {
-                    self.pipeline = Err(PipelineError);
-                    log::warn!("[{:?}] Pipeline vertex shader dependency failed", load_token);
-                    return;
-                }
-                Ok(None) => {
-                    log::debug!(
-                        "[{:?}] Pipeline, missing (non-optional) vertex shader dependency",
-                        load_token
-                    );
-                    self.pipeline = Ok(None);
-                    return;
-                }
-                Ok(Some(sh)) => sh,
-            };
-
-            let fs = match self.fragment_shader.compiled_shader(shaders) {
-                Err(_) => {
-                    self.pipeline = Err(PipelineError);
-                    log::warn!("[{:?}] Pipeline fragment shader dependency failed", load_token);
-                    return;
-                }
-                Ok(None) => {
-                    log::debug!(
-                        "[{:?}] Pipeline, missing (non-optional) fragment shader dependency",
-                        load_token
-                    );
-                    self.pipeline = Ok(None);
-                    return;
-                }
-                Ok(Some(sh)) => sh,
-            };
-
             match descriptor.compile(
                 context.device(),
                 (context.swap_chain_format(), &self.vertex_layouts, |stage| match stage {
@@ -253,16 +259,16 @@ impl OnLoad for Pipeline {
                         .with_id(desc.fragment_stage.shader.clone());
                 }
                 self.descriptor = Some(*desc);
-                self.recompile(load_handler.responder(), load_token, context, shaders);
+                self.recompile(load_handler, load_token, context, shaders);
             }
             PipelineLoadResponseInner::ShaderReady(ty) => match ty {
                 ShaderType::Vertex => {
                     log::debug!("[{:?}] Pipeline vertex shader loaded", load_token);
-                    self.recompile(load_handler.responder(), load_token, context, shaders);
+                    self.recompile(load_handler, load_token, context, shaders);
                 }
                 ShaderType::Fragment => {
                     log::debug!("[{:?}] Pipeline fragment shader loaded", load_token);
-                    self.recompile(load_handler.responder(), load_token, context, shaders);
+                    self.recompile(load_handler, load_token, context, shaders);
                 }
                 ty => {
                     log::warn!("[{:?}] Pipeline got invalid shader response: {:?}", load_token, ty);
@@ -505,24 +511,23 @@ impl PipelineDependency {
         }
     }
 
-    pub fn compiled_pipeline(
-        &mut self,
-        pipelines: &PipelineStoreRead<'_>,
-    ) -> Result<Option<&CompiledPipeline>, PipelineDependencyError> {
+    pub fn compiled_pipeline<'c, 'r: 'c, 's: 'c>(
+        &'s mut self,
+        pipelines: &'r PipelineStoreRead<'c>,
+    ) -> Result<Option<&'c CompiledPipeline>, PipelineDependencyError> {
         match &self.index {
-            PipelineDependencyIndex::None
-            | PipelineDependencyIndex::Incomplete
-            | PipelineDependencyIndex::Pending(_, _) => Ok(None),
-            PipelineDependencyIndex::Error(err) => Err(err.clone()),
+            PipelineDependencyIndex::None | PipelineDependencyIndex::Incomplete => Ok(None),
+            PipelineDependencyIndex::Pending(_, _) => Ok(None),
+            PipelineDependencyIndex::Error(_) => Err(PipelineDependencyError),
             PipelineDependencyIndex::Completed(idx, _) => Ok(pipelines.at(idx).compiled_pipeline()),
         }
     }
 
-    pub fn request_with<S>(
-        &mut self,
-        pipelines: &mut PipelineStoreRead<'_>,
+    pub fn request_with<'c, 'r: 'c, 's: 'c, S>(
+        &'s mut self,
+        pipelines: &'r PipelineStoreRead<'c>,
         subscription: S,
-    ) -> Result<Option<&CompiledPipeline>, PipelineDependencyError>
+    ) -> Result<Option<&'c CompiledPipeline>, PipelineDependencyError>
     where
         S: FnOnce(&Pipeline) -> Option<Subscription<PipelineEvent>>,
     {
@@ -531,10 +536,9 @@ impl PipelineDependency {
                 Err(err) => PipelineDependencyIndex::Error(err),
                 Ok(id) => {
                     let idx = pipelines.get_or_load(&id);
-                    PipelineDependencyIndex::Pending(idx, subscription(&pipelines.at(&idx)))
+                    let sub = subscription(&pipelines.at(&idx));
+                    PipelineDependencyIndex::Pending(idx, sub)
                 }
-
-                Ok(id) => PipelineDependencyIndex::Pending(pipelines.get_or_load(&id), None),
             },
             PipelineDependencyIndex::Pending(idx, sub) => {
                 let pipeline = pipelines.at(&idx);
@@ -552,11 +556,11 @@ impl PipelineDependency {
         self.compiled_pipeline(pipelines)
     }
 
-    pub fn request<'c, 's: 'c>(
-        &mut self,
-        pipelines: &PipelineStoreRead<'s>,
+    pub fn request<'c, 'r: 'c, 's: 'c>(
+        &'s mut self,
+        pipelines: &'r PipelineStoreRead<'c>,
     ) -> Result<Option<&'c CompiledPipeline>, PipelineDependencyError> {
-        self.request_with(pipelines, || None)
+        self.request_with(pipelines, |_| None)
     }
 }
 

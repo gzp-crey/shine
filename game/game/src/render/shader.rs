@@ -281,22 +281,21 @@ impl ShaderDependency {
         }
     }
 
-    pub fn compiled_shader<'s, 'c, 'r: 'c>(
+    pub fn compiled_shader<'c, 'r: 'c, 's: 'c>(
         &'s mut self,
-        shaders: &ShaderStoreRead<'s>,
+        shaders: &'r ShaderStoreRead<'c>,
     ) -> Result<Option<&'c CompiledShader>, ShaderDependencyError> {
         match &self.index {
-            ShaderDependencyIndex::None | ShaderDependencyIndex::Incomplete | ShaderDependencyIndex::Pending(_, _) => {
-                Ok(None)
-            }
+            ShaderDependencyIndex::None | ShaderDependencyIndex::Incomplete => Ok(None),
+            ShaderDependencyIndex::Pending(_, _) => Ok(None),
             ShaderDependencyIndex::Error(err) => Err(err.clone()),
             ShaderDependencyIndex::Completed(idx, _) => Ok(shaders.at(idx).shader_module()),
         }
     }
 
-    pub fn request_with<'c, 's: 'c, S>(
-        &mut self,
-        shaders: &ShaderStoreRead<'s>,
+    pub fn request_with<'c, 'r: 'c, 's: 'c, S>(
+        &'s mut self,
+        shaders: &'r ShaderStoreRead<'c>,
         subscription: S,
     ) -> Result<Option<&'c CompiledShader>, ShaderDependencyError>
     where
@@ -307,7 +306,8 @@ impl ShaderDependency {
                 Err(err) => ShaderDependencyIndex::Error(err),
                 Ok(id) => {
                     let idx = shaders.get_or_load(&id);
-                    ShaderDependencyIndex::Pending(idx, subscription(&shaders.at(&idx)))
+                    let sub = subscription(&shaders.at(&idx));
+                    ShaderDependencyIndex::Pending(idx, sub)
                 }
             },
             ShaderDependencyIndex::Pending(idx, sub) => {
@@ -332,11 +332,11 @@ impl ShaderDependency {
         self.compiled_shader(shaders)
     }
 
-    pub fn request<'c, 's: 'c>(
-        &mut self,
-        shaders: &ShaderStoreRead<'s>,
+    pub fn request<'c, 'r: 'c, 's: 'c>(
+        &'s mut self,
+        shaders: &'r ShaderStoreRead<'c>,
     ) -> Result<Option<&'c CompiledShader>, ShaderDependencyError> {
-        self.request_with(shaders, || None)
+        self.request_with(shaders, |_| None)
     }
 }
 
