@@ -15,14 +15,14 @@ pub struct ColorAttachementDescriptor {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DepthAttachementOperation {
-    pub operation: wgpu::Operations<f32>,
+    pub operation: Option<wgpu::Operations<f32>>,
     pub write_enabled: bool,
     pub compare: wgpu::CompareFunction,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StencilAttachementOperation {
-    pub operation: wgpu::Operations<u32>,
+    pub operation: Option<wgpu::Operations<u32>>,
     pub front: wgpu::StencilStateFaceDescriptor,
     pub back: wgpu::StencilStateFaceDescriptor,
     pub read_mask: u32,
@@ -32,8 +32,8 @@ pub struct StencilAttachementOperation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DepthAttachementDescriptor {
     pub target: String,
-    pub depth_operation: Option<DepthAttachementOperation>,
-    pub stencil_operation: Option<StencilAttachementOperation>,
+    pub depth_operation: DepthAttachementOperation,
+    pub stencil_operation: StencilAttachementOperation,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -431,7 +431,7 @@ impl PipelineDependency {
     }
 
     pub fn with_vertex_layout<V: IntoVertexTypeId>(self) -> PipelineDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         PipelineDependency {
             vertex_id: Some(<V as IntoVertexTypeId>::into_id()),
             index: PipelineDependencyIndex::Incomplete,
@@ -440,7 +440,7 @@ impl PipelineDependency {
     }
 
     pub fn or_vertex_layout<V: IntoVertexTypeId>(&mut self) -> &mut PipelineDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         if self.vertex_id.is_none() {
             self.vertex_id = Some(<V as IntoVertexTypeId>::into_id());
             self.index = PipelineDependencyIndex::Incomplete;
@@ -449,7 +449,7 @@ impl PipelineDependency {
     }
 
     pub fn with_state(self, state: &PipelineStateDescriptor) -> PipelineDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         PipelineDependency {
             state_id: Some(PipelineStateTypeId::from_descriptor(state)),
             index: PipelineDependencyIndex::Incomplete,
@@ -458,7 +458,7 @@ impl PipelineDependency {
     }
 
     pub fn or_state(&mut self, state: &PipelineStateDescriptor) -> &mut PipelineDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         if self.state_id.is_none() {
             self.state_id = Some(PipelineStateTypeId::from_descriptor(state));
             self.index = PipelineDependencyIndex::Incomplete;
@@ -467,7 +467,7 @@ impl PipelineDependency {
     }
 
     pub fn with_id<S: ToString>(self, id: S) -> PipelineDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         PipelineDependency {
             id: Some(id.to_string()),
             index: PipelineDependencyIndex::Incomplete,
@@ -476,7 +476,7 @@ impl PipelineDependency {
     }
 
     pub fn or_id<S: ToString>(&mut self, id: S) -> &mut PipelineDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         if self.id.is_none() {
             self.id = Some(id.to_string());
             self.index = PipelineDependencyIndex::Incomplete;

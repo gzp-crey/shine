@@ -235,7 +235,7 @@ impl TextureDependency {
     }
 
     pub fn with_id<S: ToString>(self, id: S) -> TextureDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         TextureDependency {
             id: Some(id.to_string()),
             index: TextureDependencyIndex::Incomplete,
@@ -244,7 +244,7 @@ impl TextureDependency {
     }
 
     pub fn or_id<S: ToString>(&mut self, id: S) -> &mut TextureDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         if self.id.is_none() {
             self.id = Some(id.to_string());
             self.index = TextureDependencyIndex::Incomplete;

@@ -1,7 +1,7 @@
 use crate::{
     assets::{
-        AssetError, AssetIO, FrameGraphDescriptor, FramePassDescriptor, RenderAttachementDescriptor,
-        RenderSourceDescriptor, Url, UrlError,
+        AssetError, AssetIO, ColorAttachementDescriptor, FrameGraphDescriptor, FramePassDescriptor,
+        PipelineStateDescriptor, RenderAttachementDescriptor, RenderSourceDescriptor, Url, UrlError, FRAME_TARGET_NAME,
     },
     render::{Compile, CompiledRenderTarget, Context, RenderTargetCompileExtra, Surface},
     GameError,
@@ -9,6 +9,7 @@ use crate::{
 use shine_ecs::core::async_task::AsyncTask;
 use std::{borrow::Cow, sync::Mutex};
 
+pub const DEFAULT_PASS: &str = "$";
 const FRAME_TARGET_INDEX: usize = usize::max_value();
 
 pub struct FrameOutput {
@@ -34,10 +35,23 @@ impl FrameTargets {
         }
     }
 
+    pub fn get_texture_format(&self, target_index: usize) -> wgpu::TextureFormat {
+        if target_index == FRAME_TARGET_INDEX {
+            self.frame_output
+                .as_ref()
+                .map(|frame_output| frame_output.descriptor.format)
+                .unwrap()
+        } else {
+            self.targets[target_index].render_target.format
+        }
+    }
+
     pub fn get_view(&self, target_index: usize) -> &wgpu::TextureView {
         if target_index == FRAME_TARGET_INDEX {
-            let frame = &self.frame_output.as_ref().unwrap().frame;
-            &frame.view
+            self.frame_output
+                .as_ref()
+                .map(|frame_output| &frame_output.frame.view)
+                .unwrap()
         } else {
             &self.targets[target_index].render_target.view
         }
@@ -106,34 +120,57 @@ struct PassColorOutput {
 struct PassOutput {
     depth: Option<PassDepthOutput>,
     colors: Vec<PassColorOutput>,
+    pipeline_state: PipelineStateDescriptor,
 }
 
 impl PassOutput {
     fn create(targets: &FrameTargets, descriptor: &RenderAttachementDescriptor) -> Result<PassOutput, FrameGraphError> {
-        let depth = descriptor
-            .depth
-            .as_ref()
-            .map(|depth| {
-                Ok(PassDepthOutput {
+        let (output_depth, stage_depth) = match &descriptor.depth {
+            Some(depth) => {
+                let depth_output = PassDepthOutput {
                     target_index: targets.find_target_index(&depth.target).ok_or(FrameGraphError)?,
-                    depth_operation: depth.depth_operation.as_ref().map(|op| op.operation),
-                    stencil_operation: depth.stencil_operation.as_ref().map(|op| op.operation),
-                })
-            })
-            .transpose()?;
+                    depth_operation: depth.depth_operation.operation.clone(),
+                    stencil_operation: depth.stencil_operation.operation.clone(),
+                };
+                let stage_depth = wgpu::DepthStencilStateDescriptor {
+                    format: targets.get_texture_format(depth_output.target_index),
+                    depth_write_enabled: depth.depth_operation.write_enabled,
+                    depth_compare: depth.depth_operation.compare,
+                    stencil_front: depth.stencil_operation.front.clone(),
+                    stencil_back: depth.stencil_operation.back.clone(),
+                    stencil_read_mask: depth.stencil_operation.read_mask,
+                    stencil_write_mask: depth.stencil_operation.write_mask,
+                };
+                (Some(depth_output), Some(stage_depth))
+            }
+            None => (None, None),
+        };
 
-        let colors = descriptor
-            .colors
-            .iter()
-            .map(|color| {
-                Ok(PassColorOutput {
-                    target_index: targets.find_target_index(&color.target).ok_or(FrameGraphError)?,
-                    operation: color.operation,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut stage_colors = Vec::with_capacity(descriptor.colors.len());
+        let mut output_colors = Vec::with_capacity(descriptor.colors.len());
+        for color in descriptor.colors.iter() {
+            let output_color = PassColorOutput {
+                target_index: targets.find_target_index(&color.target).ok_or(FrameGraphError)?,
+                operation: color.operation,
+            };
+            let stage_color = wgpu::ColorStateDescriptor {
+                format: targets.get_texture_format(output_color.target_index),
+                alpha_blend: color.alpha_blend.clone(),
+                color_blend: color.color_blend.clone(),
+                write_mask: color.write_mask,
+            };
+            output_colors.push(output_color);
+            stage_colors.push(stage_color);
+        }
 
-        Ok(PassOutput { depth, colors })
+        Ok(PassOutput {
+            depth: output_depth,
+            colors: output_colors,
+            pipeline_state: PipelineStateDescriptor {
+                depth_state: stage_depth,
+                color_states: stage_colors,
+            },
+        })
     }
 }
 
@@ -159,7 +196,7 @@ impl PassInput {
 struct Pass {
     name: String,
     inputs: Vec<PassInput>,
-    outputs: PassOutput,
+    output: PassOutput,
 }
 
 impl Pass {
@@ -174,11 +211,11 @@ impl Pass {
             .iter()
             .map(|input| PassInput::create(device, targets, input))
             .collect::<Result<Vec<_>, _>>()?;
-        let outputs = PassOutput::create(targets, &descriptor.output)?;
+        let output = PassOutput::create(targets, &descriptor.output)?;
         Ok(Pass {
             name: name.to_owned(),
             inputs,
-            outputs,
+            output,
         })
     }
 }
@@ -228,6 +265,9 @@ impl Frame {
     }
 
     fn recompile_frame_graph(&mut self, context: &Context) -> Result<(), FrameGraphError> {
+        assert!(self.targets.targets.is_empty());
+        assert!(self.passes.is_empty());
+
         log::info!("Compiling frame graph");
         match &self.descriptor {
             Ok(Some(desc)) => {
@@ -242,7 +282,28 @@ impl Frame {
                 }
                 Ok(())
             }
-            Ok(None) => Ok(()),
+            Ok(None) => {
+                log::debug!("Creating default, single pass frame");
+                let pass_desc = FramePassDescriptor {
+                    inputs: Vec::new(),
+                    output: RenderAttachementDescriptor {
+                        colors: vec![ColorAttachementDescriptor {
+                            target: FRAME_TARGET_NAME.to_owned(),
+                            operation: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                                store: true,
+                            },
+                            alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                            color_blend: wgpu::BlendDescriptor::REPLACE,
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
+                        depth: None,
+                    },
+                };
+                let pass = Pass::create(context.device(), &self.targets, DEFAULT_PASS, &pass_desc)?;
+                self.passes.push(pass);
+                Ok(())
+            }
             Err(err) => Err(err.clone()),
         }
     }
@@ -326,62 +387,52 @@ impl Frame {
         }
     }*/
 
+    pub fn get_pipeline_state(&self, pass_name: &str) -> Result<&PipelineStateDescriptor, GameError> {
+        if let Some(pass) = self.passes.iter().find(|x| x.name == pass_name) {
+            Ok(&pass.output.pipeline_state)
+        } else {
+            //log::warn!("No [{}] pass was found", pass);
+            Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
+        }
+    }
+
     pub fn create_pass<'e, 'f: 'e>(
         &'f self,
         encoder: &'f mut wgpu::CommandEncoder,
-        pass: Option<&str>,
+        pass_name: &str,
     ) -> Result<wgpu::RenderPass<'e>, GameError> {
-        match pass {
-            None => {
-                // Pass is not given, use frame as output
-                let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: Cow::Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: self.targets.get_view(FRAME_TARGET_INDEX),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                            store: true,
-                        },
-                    }]),
-                    depth_stencil_attachment: None,
-                });
+        // Pass is given, use the attached output(s)
+        if let Some(pass) = self.passes.iter().find(|x| x.name == pass_name) {
+            let color_desc = pass
+                .output
+                .colors
+                .iter()
+                .map(|attachement| wgpu::RenderPassColorAttachmentDescriptor {
+                    attachment: self.targets.get_view(attachement.target_index),
+                    resolve_target: None,
+                    ops: attachement.operation,
+                })
+                .collect::<Vec<_>>();
 
-                Ok(pass)
-            }
-
-            Some(pass_name) => {
-                // Pass is given, use the attached output(s)
-                if let Some(pass) = self.passes.iter().find(|x| x.name == pass_name) {
-                    let color_desc = pass
-                        .outputs
-                        .colors
-                        .iter()
-                        .map(|attachement| wgpu::RenderPassColorAttachmentDescriptor {
-                            attachment: self.targets.get_view(attachement.target_index),
-                            resolve_target: None,
-                            ops: attachement.operation,
-                        })
-                        .collect::<Vec<_>>();
-
-                    let depth_desc = pass.outputs.depth.as_ref().map(|attachement| {
-                        wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                            attachment: self.targets.get_view(attachement.target_index),
-                            depth_ops: attachement.depth_operation,
-                            stencil_ops: attachement.stencil_operation,
-                        }
+            let depth_desc =
+                pass.output
+                    .depth
+                    .as_ref()
+                    .map(|attachement| wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                        attachment: self.targets.get_view(attachement.target_index),
+                        depth_ops: attachement.depth_operation,
+                        stencil_ops: attachement.stencil_operation,
                     });
 
-                    let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        color_attachments: Cow::Borrowed(&color_desc[..]),
-                        depth_stencil_attachment: depth_desc,
-                    });
+            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: Cow::Borrowed(&color_desc[..]),
+                depth_stencil_attachment: depth_desc,
+            });
 
-                    Ok(render_pass)
-                } else {
-                    //log::warn!("No [{}] pass was found", pass);
-                    Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
-                }
-            }
+            Ok(render_pass)
+        } else {
+            //log::warn!("No [{}] pass was found", pass);
+            Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
         }
     }
 

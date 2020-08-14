@@ -1,6 +1,6 @@
 use crate::{
-    assets::{vertex, TextureSemantic, Uniform},
-    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, RenderSystem, GLOBAL_UNIFORMS},
+    assets::{vertex, TextureSemantic, Uniform, GLOBAL_UNIFORMS},
+    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, RenderSystem},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -59,10 +59,10 @@ impl TestScene {
     fn new(test: Test5) -> TestScene {
         TestScene {
             scene_pipeline: PipelineDependency::new()
-                .with_id(test.pipeline)
+                .with_id(test.scene_pipeline)
                 .with_vertex_layout::<vertex::Null>(),
             present_pipeline: PipelineDependency::new()
-                .with_id(test.pipeline)
+                .with_id(test.present_pipeline)
                 .with_vertex_layout::<vertex::Null>(),
         }
     }
@@ -74,7 +74,8 @@ impl TestScene {
         frame: &Frame,
         pipelines: &PipelineStoreRead<'_>,
     ) {
-        if let (Some(scene_pipeline), Some(present_pipeline)) = (
+        unimplemented!()
+        /*if let (Some(scene_pipeline), Some(present_pipeline)) = (
             self.scene_pipeline.get(pipelines).pipeline_buffer(),
             self.present_pipeline.get(pipelines).pipeline_buffer(),
         ) {
@@ -102,7 +103,7 @@ impl TestScene {
                     pass.draw(0..3, 0..1);
                 }
             }
-        }
+        }*/
     }
 }
 

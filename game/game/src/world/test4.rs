@@ -8,7 +8,7 @@ use crate::{
     input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputSystem},
     render::{
         Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead,
+        TextureStoreRead, DEFAULT_PASS
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -185,7 +185,7 @@ impl TestScene {
                     .unwrap()
             });
             {
-                if let Ok(mut pass) = frame.create_pass(encoder, None) {
+                if let Ok(mut pass) = frame.create_pass(encoder, DEFAULT_PASS) {
                     pass.set_pipeline(&pipeline.pipeline);
                     pass.set_vertex_buffer(0, geometry.0.slice(..));
                     pass.set_index_buffer(geometry.1.slice(..));

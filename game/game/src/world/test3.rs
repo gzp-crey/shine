@@ -5,7 +5,7 @@ use crate::{
     },
     render::{
         Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead,
+        TextureStoreRead, DEFAULT_PASS
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -139,7 +139,7 @@ impl TestScene {
             });
 
             {
-                if let Ok(mut pass) = frame.create_pass(encoder, None) {
+                if let Ok(mut pass) = frame.create_pass(encoder, DEFAULT_PASS) {
                     pass.set_pipeline(&pipeline.pipeline);
                     pass.set_vertex_buffer(0, buffers.0.slice(..));
                     pass.set_index_buffer(buffers.1.slice(..));

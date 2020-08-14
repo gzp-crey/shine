@@ -2,9 +2,10 @@ use crate::assets::RenderTargetDescriptor;
 use crate::render::Compile;
 
 pub struct CompiledRenderTarget {
+    pub format: wgpu::TextureFormat,
+    pub size: (u32, u32),
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
-    pub size: (u32, u32),
 }
 
 pub struct RenderTargetCompileExtra {
@@ -44,6 +45,11 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
 
         let view = texture.create_default_view();
 
-        CompiledRenderTarget { texture, view, size }
+        CompiledRenderTarget {
+            format: self.format,
+            size,
+            texture,
+            view,
+        }
     }
 }

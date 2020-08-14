@@ -200,8 +200,8 @@ impl PipelineDescriptor {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PipelineStateDescriptor {
-    color_states: Vec<wgpu::ColorStateDescriptor>,
-    depth_state: Option<wgpu::DepthStencilStateDescriptor>,
+    pub color_states: Vec<wgpu::ColorStateDescriptor>,
+    pub depth_state: Option<wgpu::DepthStencilStateDescriptor>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

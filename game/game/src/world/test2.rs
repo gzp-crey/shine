@@ -1,6 +1,6 @@
 use crate::{
     assets::vertex::{self, Pos3fCol4f},
-    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead},
+    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, DEFAULT_PASS},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -102,7 +102,7 @@ impl TestScene {
     fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
         //self.pipeline.or_state(frame.)
         if let (Some(buffers), Ok(Some(pipeline))) = (self.buffers.as_ref(), self.pipeline.request(pipelines)) {
-            if let Ok(mut pass) = frame.create_pass(encoder, None) {
+            if let Ok(mut pass) = frame.create_pass(encoder, DEFAULT_PASS) {
                 pass.set_pipeline(&pipeline.pipeline);
                 pass.set_vertex_buffer(0, buffers.0.slice(..));
                 pass.set_index_buffer(buffers.1.slice(..));

@@ -226,7 +226,7 @@ impl ShaderDependency {
     }
 
     pub fn with_type(self, ty: ShaderType) -> ShaderDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         ShaderDependency {
             ty: Some(ty),
             index: ShaderDependencyIndex::Incomplete,
@@ -235,7 +235,7 @@ impl ShaderDependency {
     }
 
     pub fn or_type(&mut self, ty: ShaderType) -> &mut ShaderDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         if self.ty.is_none() {
             self.ty = Some(ty);
             self.index = ShaderDependencyIndex::Incomplete;
@@ -244,7 +244,7 @@ impl ShaderDependency {
     }
 
     pub fn with_id<S: ToString>(self, id: S) -> ShaderDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         ShaderDependency {
             id: Some(id.to_string()),
             index: ShaderDependencyIndex::Incomplete,
@@ -253,7 +253,7 @@ impl ShaderDependency {
     }
 
     pub fn or_id<S: ToString>(&mut self, id: S) -> &mut ShaderDependency {
-        assert!(self.is_none());
+        assert!(!self.is_none());
         if self.id.is_none() {
             self.id = Some(id.to_string());
             self.index = ShaderDependencyIndex::Incomplete;
