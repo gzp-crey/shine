@@ -1,5 +1,8 @@
-use crate::assets::{AssetError, Image, SamplerDescriptor, TextureImage};
-use crate::render::Compile;
+use crate::{
+    assets::{AssetError, Image, SamplerDescriptor, TextureImage},
+    render::Compile,
+};
+use wgpu::util::DeviceExt;
 
 fn create_sampler_descriptor(descriptor: &SamplerDescriptor) -> wgpu::SamplerDescriptor {
     wgpu::SamplerDescriptor {
@@ -83,7 +86,11 @@ impl Compile<()> for TextureImage {
 
         let init_cmd_buffer = if !self.data.is_empty() {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            let buffer = device.create_buffer_with_data(&self.data, wgpu::BufferUsage::COPY_SRC);
+            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: &self.data,
+                usage: wgpu::BufferUsage::COPY_SRC,
+            });
             let (size, texture_data_layout) = get_texture_data_layout(&self.image);
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
@@ -103,7 +110,7 @@ impl Compile<()> for TextureImage {
         };
 
         let sampler = self.sampler.compile(device, ());
-        let view = texture.create_default_view();
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         Ok((CompiledTexture { texture, view, sampler }, init_cmd_buffer))
     }

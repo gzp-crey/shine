@@ -1,7 +1,7 @@
 mod game_input;
 pub use self::game_input::*;
-mod system;
-pub use self::system::*;
+mod plugin;
+pub use self::plugin::*;
 
 pub mod mapper;
 pub mod systems;

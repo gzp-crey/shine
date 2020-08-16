@@ -3,7 +3,7 @@ use js_sys;
 use js_sys::Promise;
 use shine_game::{
     assets::Url,
-    render::{RenderSystem, Surface},
+    render::{RenderPlugin, Surface},
     wgpu,
     world::WorldSystem,
     Config, GameError, GameView,

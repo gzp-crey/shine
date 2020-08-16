@@ -80,7 +80,7 @@ impl InputHandler {
     }
 }
 
-pub trait InputSystem {
+pub trait InputPlugin {
     fn add_input_system(&mut self) -> Result<(), GameError>;
     fn remove_input_system(&mut self) -> Result<(), GameError>;
 
@@ -88,7 +88,7 @@ pub trait InputSystem {
     fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), GameError>;
 }
 
-impl InputSystem for GameView {
+impl InputPlugin for GameView {
     fn add_input_system(&mut self) -> Result<(), GameError> {
         log::info!("adding input system to the world");
         self.resources.insert(InputHandler::new());

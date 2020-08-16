@@ -61,6 +61,35 @@ pub struct FrameGraphDescriptor {
 }
 
 impl FrameGraphDescriptor {
+    /// Construct a descriptor with a single pass. Usually used for test cases.
+    pub fn single_pass() -> FrameGraphDescriptor {
+        FrameGraphDescriptor {
+            targets: HashMap::new(),
+            passes: [(
+                "$".to_owned(),
+                FramePassDescriptor {
+                    inputs: Vec::new(),
+                    output: RenderAttachementDescriptor {
+                        colors: vec![ColorAttachementDescriptor {
+                            target: FRAME_TARGET_NAME.to_owned(),
+                            operation: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                                store: true,
+                            },
+                            alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                            color_blend: wgpu::BlendDescriptor::REPLACE,
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
+                        depth: None,
+                    },
+                },
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        }
+    }
+
     pub fn is_target_sampled(&self, target: &str) -> bool {
         for pass in self.passes.values() {
             if pass.inputs.iter().any(|x| x.target == target) {

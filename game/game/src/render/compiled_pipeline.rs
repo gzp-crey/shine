@@ -5,7 +5,6 @@ use crate::{
     },
     render::Compile,
 };
-use std::borrow::Cow;
 
 /// Compiled pipeline with related binding information
 pub struct CompiledPipeline {
@@ -66,7 +65,7 @@ impl CompiledPipeline {
             Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
                 layout: bind_group_layout,
-                entries: Cow::Borrowed(&bindings),
+                entries: &bindings,
             }))
         } else {
             None
@@ -93,28 +92,31 @@ fn create_bind_group_layout_entries(
     let mut descriptor = Vec::new();
     for (uniform, stages) in layout.iter() {
         descriptor.push(match uniform.uniform() {
-            Uniform::Texture(_) => wgpu::BindGroupLayoutEntry::new(
-                uniform.location(),
-                *stages,
-                wgpu::BindingType::SampledTexture {
+            Uniform::Texture(_) => wgpu::BindGroupLayoutEntry {
+                binding: uniform.location(),
+                visibility: *stages,
+                ty: wgpu::BindingType::SampledTexture {
                     multisampled: false,
                     dimension: wgpu::TextureViewDimension::D2,
                     component_type: wgpu::TextureComponentType::Float,
                 },
-            ),
-            Uniform::Sampler(_) => wgpu::BindGroupLayoutEntry::new(
-                uniform.location(),
-                *stages,
-                wgpu::BindingType::Sampler { comparison: false },
-            ),
-            Uniform::UniformBuffer(sem) => wgpu::BindGroupLayoutEntry::new(
-                uniform.location(),
-                *stages,
-                wgpu::BindingType::UniformBuffer {
+                count: None,
+            },
+            Uniform::Sampler(_) => wgpu::BindGroupLayoutEntry {
+                binding: uniform.location(),
+                visibility: *stages,
+                ty: wgpu::BindingType::Sampler { comparison: false },
+                count: None,
+            },
+            Uniform::UniformBuffer(sem) => wgpu::BindGroupLayoutEntry {
+                binding: uniform.location(),
+                visibility: *stages,
+                ty: wgpu::BindingType::UniformBuffer {
                     dynamic: false,
                     min_binding_size: wgpu::BufferSize::new(sem.size() as u64),
                 },
-            ),
+                count: None,
+            },
         });
     }
     Ok(descriptor)
@@ -130,7 +132,7 @@ fn create_bind_group_layout(
         Ok(Some((
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: Cow::Borrowed(&bindings),
+                entries: &bindings,
             }),
             uniforms,
         )))
@@ -185,12 +187,12 @@ where
             .map(|(stride, attributes)| wgpu::VertexBufferDescriptor {
                 stride: *stride,
                 step_mode: wgpu::InputStepMode::Vertex,
-                attributes: Cow::Borrowed(&attributes),
+                attributes: &attributes,
             })
             .collect();
         let vertex_state = wgpu::VertexStateDescriptor {
             index_format: wgpu::IndexFormat::Uint16,
-            vertex_buffers: Cow::Borrowed(&vertex_buffers),
+            vertex_buffers: &vertex_buffers,
         };
         log::trace!("Vertex state: {:#?}", vertex_state);
 
@@ -216,33 +218,35 @@ where
                 }
             }
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                bind_group_layouts: Cow::Borrowed(&bind_group_layouts),
-                push_constant_ranges: Cow::Borrowed(&[]),
+                label: None,
+                bind_group_layouts: &bind_group_layouts,
+                push_constant_ranges: &[],
             })
         };
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            label: None,
+            layout: Some(&pipeline_layout),
             primitive_topology: self.primitive_topology,
 
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: get_shader(ShaderType::Vertex)?,
-                entry_point: Cow::Borrowed("main"),
+                entry_point: "main",
             },
 
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: get_shader(ShaderType::Fragment)?,
-                entry_point: Cow::Borrowed("main"),
+                entry_point: "main",
             }),
 
             rasterization_state: None,
 
-            color_states: Cow::Borrowed(&[wgpu::ColorStateDescriptor {
+            color_states: &[wgpu::ColorStateDescriptor {
                 format: color_state_format,
                 color_blend: wgpu::BlendDescriptor::REPLACE,
                 alpha_blend: wgpu::BlendDescriptor::REPLACE,
                 write_mask: wgpu::ColorWrite::ALL,
-            }]),
+            }],
 
             depth_stencil_state: None,
 

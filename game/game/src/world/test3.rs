@@ -5,7 +5,7 @@ use crate::{
     },
     render::{
         Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead, DEFAULT_PASS
+        TextureStoreRead, DEFAULT_PASS,
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -15,6 +15,7 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use wgpu::util::DeviceExt;
 
 const VERTICES: &[Pos3fTex2f] = &[
     Pos3fTex2f {
@@ -107,11 +108,20 @@ impl TestScene {
 
     pub fn prepare(&mut self, device: &wgpu::Device) {
         self.buffers.get_or_insert_with(|| {
-            (
-                device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
-                device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
-                INDEX_COUNT/*INDICES.len()*/ as u32,
-            )
+            log::trace!("creating buffers");
+            let v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsage::VERTEX,
+            });
+            log::trace!("creating buffers2");
+            let i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsage::INDEX,
+            });
+            log::trace!("creating buffers3");
+            (v, i, INDEX_COUNT/*INDICES.len()*/ as u32)
         });
     }
 

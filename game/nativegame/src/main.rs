@@ -2,7 +2,7 @@
 
 use shine_game::{
     assets::Url,
-    input::InputSystem,
+    input::InputPlugin,
     render::Surface,
     wgpu,
     world::{

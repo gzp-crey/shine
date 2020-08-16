@@ -1,7 +1,7 @@
 use crate::{
     assets::{
-        AssetError, AssetIO, ColorAttachementDescriptor, FrameGraphDescriptor, FramePassDescriptor,
-        PipelineStateDescriptor, RenderAttachementDescriptor, RenderSourceDescriptor, Url, UrlError, FRAME_TARGET_NAME,
+        AssetError, AssetIO, FrameGraphDescriptor, FramePassDescriptor, PipelineStateDescriptor,
+        RenderAttachementDescriptor, RenderSourceDescriptor, Url, UrlError,
     },
     render::{Compile, CompiledRenderTarget, Context, RenderTargetCompileExtra, Surface},
     GameError,
@@ -88,20 +88,23 @@ impl FrameTargets {
         device: &wgpu::Device,
         descriptor: &FrameGraphDescriptor,
     ) -> Result<(), FrameGraphError> {
-        assert!(self.targets.is_empty());
+        let mut targets = Vec::new();
+        let frame_size = self.frame_size();
+
         for (name, target_desc) in &descriptor.targets {
             log::trace!("Creating render target {}", name);
             let compile_args = RenderTargetCompileExtra {
-                frame_size: self.frame_size(),
+                frame_size: frame_size,
                 is_sampled: descriptor.is_target_sampled(name),
             };
             let render_target = target_desc.compile(device, compile_args);
-            self.targets.push(FrameTarget {
+            targets.push(FrameTarget {
                 name: name.clone(),
                 render_target,
             });
         }
 
+        self.targets = targets;
         Ok(())
     }
 }
@@ -136,10 +139,12 @@ impl PassOutput {
                     format: targets.get_texture_format(depth_output.target_index),
                     depth_write_enabled: depth.depth_operation.write_enabled,
                     depth_compare: depth.depth_operation.compare,
-                    stencil_front: depth.stencil_operation.front.clone(),
-                    stencil_back: depth.stencil_operation.back.clone(),
-                    stencil_read_mask: depth.stencil_operation.read_mask,
-                    stencil_write_mask: depth.stencil_operation.write_mask,
+                    stencil: wgpu::StencilStateDescriptor {
+                        front: depth.stencil_operation.front.clone(),
+                        back: depth.stencil_operation.back.clone(),
+                        read_mask: depth.stencil_operation.read_mask,
+                        write_mask: depth.stencil_operation.write_mask,
+                    },
                 };
                 (Some(depth_output), Some(stage_depth))
             }
@@ -228,12 +233,24 @@ pub struct FrameTextures<'t> {
 #[derive(Debug, Clone)]
 pub struct FrameGraphError;
 
+#[derive(Debug, Clone)]
+pub enum FrameStartError {
+    /// Failed to crate frame output
+    Output,
+
+    /// Frame Graph has some issue
+    Graph(FrameGraphError),
+
+    /// Frame is not ready
+    Pending,
+}
+
 pub struct Frame {
-    descriptor: Result<Option<FrameGraphDescriptor>, FrameGraphError>,
+    descriptor: Option<FrameGraphDescriptor>,
     descriptor_loader: Option<AsyncTask<Result<FrameGraphDescriptor, FrameGraphLoadError>>>,
 
     targets: FrameTargets,
-    passes: Vec<Pass>,
+    passes: Result<Vec<Pass>, FrameGraphError>,
 
     buffers: Mutex<Vec<wgpu::CommandBuffer>>,
 }
@@ -241,106 +258,111 @@ pub struct Frame {
 impl Frame {
     pub fn new() -> Frame {
         Frame {
-            descriptor: Ok(None),
+            descriptor: Some(FrameGraphDescriptor::single_pass()),
             descriptor_loader: None,
             targets: FrameTargets::new(),
-            passes: Vec::new(),
+            passes: Ok(Vec::new()),
             buffers: Mutex::new(Vec::new()),
         }
     }
 
-    pub fn load_graph(&mut self, assetio: AssetIO, descriptor: String) {
+    pub fn load_graph(&mut self, _context: &Context, assetio: AssetIO, descriptor: String) {
         let task = async move { assetio.load_frame_graph(descriptor).await };
+
+        // release graph and start async loading.
+        self.release_frame_graph();
+        self.descriptor = None;
         self.descriptor_loader = Some(AsyncTask::start(task));
     }
 
-    pub fn set_graph(&mut self, context: &Context, descriptor: Option<FrameGraphDescriptor>) {
-        self.set_frame_graph(context, Ok(descriptor));
+    pub fn set_graph(&mut self, context: &Context, descriptor: Result<FrameGraphDescriptor, FrameGraphError>) {
+        self.descriptor_loader = None;
+        self.release_frame_graph();
+        match descriptor {
+            Ok(descriptor) => {
+                self.descriptor = Some(descriptor);
+                self.recompile_frame_graph(context);
+            }
+            Err(err) => {
+                self.descriptor = None;
+                self.passes = Err(err);
+            }
+        };
     }
 
     fn release_frame_graph(&mut self) {
         log::info!("Releasing frame graph");
-        self.passes.clear();
+        self.passes = Ok(Vec::new());
         self.targets.clear_targets();
     }
 
-    fn recompile_frame_graph(&mut self, context: &Context) -> Result<(), FrameGraphError> {
-        assert!(self.targets.targets.is_empty());
-        assert!(self.passes.is_empty());
-
+    fn recompile_frame_graph(&mut self, context: &Context) {
         log::info!("Compiling frame graph");
         match &self.descriptor {
-            Ok(Some(desc)) => {
+            Some(desc) => {
                 log::debug!("Creating render targets");
-                self.targets.recompile_targets(context.device(), desc)?;
+                if let Err(err) = self.targets.recompile_targets(context.device(), desc) {
+                    log::warn!("Frame graph compilation failed: {:?}", err);
+                    self.passes = Err(FrameGraphError);
+                    return;
+                }
 
                 log::debug!("Creating passes");
+                let mut passes = Vec::new();
                 for (name, pass_desc) in &desc.passes {
                     log::trace!("Creating pass {}", name);
-                    let pass = Pass::create(context.device(), &self.targets, name, pass_desc)?;
-                    self.passes.push(pass);
+                    let pass = match Pass::create(context.device(), &self.targets, name, pass_desc) {
+                        Err(err) => {
+                            log::warn!("Frame graph compilation failed: {:?}", err);
+                            self.passes = Err(FrameGraphError);
+                            return;
+                        }
+                        Ok(pass) => {
+                            passes.push(pass);
+                        }
+                    };
                 }
-                Ok(())
+                self.passes = Ok(passes);
             }
-            Ok(None) => {
-                log::debug!("Creating default, single pass frame");
-                let pass_desc = FramePassDescriptor {
-                    inputs: Vec::new(),
-                    output: RenderAttachementDescriptor {
-                        colors: vec![ColorAttachementDescriptor {
-                            target: FRAME_TARGET_NAME.to_owned(),
-                            operation: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                                store: true,
-                            },
-                            alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                            color_blend: wgpu::BlendDescriptor::REPLACE,
-                            write_mask: wgpu::ColorWrite::ALL,
-                        }],
-                        depth: None,
-                    },
-                };
-                let pass = Pass::create(context.device(), &self.targets, DEFAULT_PASS, &pass_desc)?;
-                self.passes.push(pass);
-                Ok(())
+            None => {
+                // for explicit setting, descriptor is always some
+                // for async loaded, recompile should not be called until desc's been loaded
+                unreachable!("Missing frame graph descriptor");
             }
-            Err(err) => Err(err.clone()),
         }
     }
 
-    fn set_frame_graph(
-        &mut self,
-        context: &Context,
-        descriptor: Result<Option<FrameGraphDescriptor>, FrameGraphError>,
-    ) {
-        self.descriptor_loader = None;
-        self.descriptor = descriptor;
-
-        self.release_frame_graph();
-        if let Err(err) = self.recompile_frame_graph(context) {
-            self.descriptor = Err(err)
-        }
-    }
-
-    pub fn start_frame(&mut self, surface: &Surface, context: &mut Context) -> Result<(), GameError> {
-        let frame = context.create_frame(surface)?;
+    pub fn start_frame(&mut self, surface: &Surface, context: &mut Context) -> Result<(), FrameStartError> {
+        let frame = context.create_frame(surface).map_err(|err| FrameStartError::Output)?;
         self.targets.set_frame_output(Some(frame));
 
         if let Some(loader) = self.descriptor_loader.as_mut() {
             log::error!("Checking loader");
-            match loader.try_get() {
-                Err(_) => self.set_frame_graph(context, Err(FrameGraphError)),
-                Ok(Some(Ok(descriptor))) => self.set_frame_graph(context, Ok(Some(descriptor))),
+            let descriptor = match loader.try_get() {
+                Err(err) => {
+                    log::warn!("Frame graph load failed error");
+                    Some(Err(FrameGraphError))
+                }
                 Ok(Some(Err(err))) => {
                     log::warn!("Frame graph load failed: {:?}", err);
-                    self.set_frame_graph(context, Err(FrameGraphError));
+                    Some(Err(FrameGraphError))
                 }
-                Ok(None) => {}
+                Ok(Some(Ok(descriptor))) => Some(Ok(descriptor)),
+                Ok(None) => None,
+            };
+
+            if let Some(descriptor) = descriptor {
+                self.set_graph(context, descriptor);
             }
         };
 
         // check frame size, resize targets
-        Ok(())
+
+        match &self.passes {
+            Err(err) => Err(FrameStartError::Graph(err.clone())),
+            Ok(pass) if pass.is_empty() => Err(FrameStartError::Pending),
+            Ok(_) => Ok(()),
+        }
     }
 
     pub fn postprocess_frame(&mut self) {}
@@ -388,11 +410,15 @@ impl Frame {
     }*/
 
     pub fn get_pipeline_state(&self, pass_name: &str) -> Result<&PipelineStateDescriptor, GameError> {
-        if let Some(pass) = self.passes.iter().find(|x| x.name == pass_name) {
-            Ok(&pass.output.pipeline_state)
+        if let Ok(passes) = &self.passes {
+            if let Some(pass) = passes.iter().find(|x| x.name == pass_name) {
+                Ok(&pass.output.pipeline_state)
+            } else {
+                //log::warn!("No [{}] pass was found", pass);
+                Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
+            }
         } else {
-            //log::warn!("No [{}] pass was found", pass);
-            Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
+            Err(GameError::Render(format!("graph error")))
         }
     }
 
@@ -402,37 +428,41 @@ impl Frame {
         pass_name: &str,
     ) -> Result<wgpu::RenderPass<'e>, GameError> {
         // Pass is given, use the attached output(s)
-        if let Some(pass) = self.passes.iter().find(|x| x.name == pass_name) {
-            let color_desc = pass
-                .output
-                .colors
-                .iter()
-                .map(|attachement| wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: self.targets.get_view(attachement.target_index),
-                    resolve_target: None,
-                    ops: attachement.operation,
-                })
-                .collect::<Vec<_>>();
-
-            let depth_desc =
-                pass.output
-                    .depth
-                    .as_ref()
-                    .map(|attachement| wgpu::RenderPassDepthStencilAttachmentDescriptor {
+        if let Ok(passes) = &self.passes {
+            if let Some(pass) = passes.iter().find(|x| x.name == pass_name) {
+                let color_desc = pass
+                    .output
+                    .colors
+                    .iter()
+                    .map(|attachement| wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: self.targets.get_view(attachement.target_index),
-                        depth_ops: attachement.depth_operation,
-                        stencil_ops: attachement.stencil_operation,
-                    });
+                        resolve_target: None,
+                        ops: attachement.operation,
+                    })
+                    .collect::<Vec<_>>();
 
-            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: Cow::Borrowed(&color_desc[..]),
-                depth_stencil_attachment: depth_desc,
-            });
+                let depth_desc =
+                    pass.output
+                        .depth
+                        .as_ref()
+                        .map(|attachement| wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                            attachment: self.targets.get_view(attachement.target_index),
+                            depth_ops: attachement.depth_operation,
+                            stencil_ops: attachement.stencil_operation,
+                        });
 
-            Ok(render_pass)
+                let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &color_desc[..],
+                    depth_stencil_attachment: depth_desc,
+                });
+
+                Ok(render_pass)
+            } else {
+                //log::warn!("No [{}] pass was found", pass);
+                Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
+            }
         } else {
-            //log::warn!("No [{}] pass was found", pass);
-            Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
+            Err(GameError::Render(format!("graph error")))
         }
     }
 

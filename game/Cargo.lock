@@ -1274,7 +1274,7 @@ checksum = "b294d6fa9ee409a054354afc4352b0b9ef7ca222c69b8812cbea9e7d2bf3783f"
 [[package]]
 name = "legion"
 version = "0.2.4"
-source = "git+https://github.com/TomGillen/legion.git#80a3d15c2dbb293052f10d196fdfb656cbb54f68"
+source = "git+https://github.com/TomGillen/legion.git?rev=80a3d15c2dbb293052f10d196fdfb656cbb54f68#80a3d15c2dbb293052f10d196fdfb656cbb54f68"
 dependencies = [
  "legion-core",
  "legion-systems",
@@ -1283,7 +1283,7 @@ dependencies = [
 [[package]]
 name = "legion-core"
 version = "0.2.4"
-source = "git+https://github.com/TomGillen/legion.git#80a3d15c2dbb293052f10d196fdfb656cbb54f68"
+source = "git+https://github.com/TomGillen/legion.git?rev=80a3d15c2dbb293052f10d196fdfb656cbb54f68#80a3d15c2dbb293052f10d196fdfb656cbb54f68"
 dependencies = [
  "bit-set",
  "crossbeam-channel",
@@ -1301,7 +1301,7 @@ dependencies = [
 [[package]]
 name = "legion-systems"
 version = "0.2.4"
-source = "git+https://github.com/TomGillen/legion.git#80a3d15c2dbb293052f10d196fdfb656cbb54f68"
+source = "git+https://github.com/TomGillen/legion.git?rev=80a3d15c2dbb293052f10d196fdfb656cbb54f68#80a3d15c2dbb293052f10d196fdfb656cbb54f68"
 dependencies = [
  "bit-set",
  "crossbeam-channel",
@@ -1597,7 +1597,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "0.1.0"
-source = "git+https://github.com/gfx-rs/naga?rev=94802078c3bc5d138f497419ea3e7a869f10916d#94802078c3bc5d138f497419ea3e7a869f10916d"
+source = "git+https://github.com/gfx-rs/naga?rev=1eb637038dd15fc1dad770eca8e6943424dbc122#1eb637038dd15fc1dad770eca8e6943424dbc122"
 dependencies = [
  "bitflags",
  "fxhash",
@@ -3309,7 +3309,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.5.0"
-source = "git+https://github.com/gfx-rs/wgpu-rs.git#cc54e9dece91e7aed80571674a0b131c7c48b620"
+source = "git+https://github.com/gfx-rs/wgpu-rs.git?branch=master#b0e1f055c693cee9075a04f007978ab9da1dc54b"
 dependencies = [
  "arrayvec",
  "futures",
@@ -3332,7 +3332,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.5.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=0591c48fd234b4faa4c60346454568548ecbe507#0591c48fd234b4faa4c60346454568548ecbe507"
+source = "git+https://github.com/gfx-rs/wgpu?rev=7e8b51b4286bd9452567eb1a56edb8e9b7c7f684#7e8b51b4286bd9452567eb1a56edb8e9b7c7f684"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -3346,7 +3346,6 @@ dependencies = [
  "gfx-descriptor",
  "gfx-hal",
  "gfx-memory",
- "log",
  "naga",
  "parking_lot 0.10.2",
  "raw-window-handle",
@@ -3361,7 +3360,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.5.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=0591c48fd234b4faa4c60346454568548ecbe507#0591c48fd234b4faa4c60346454568548ecbe507"
+source = "git+https://github.com/gfx-rs/wgpu?rev=7e8b51b4286bd9452567eb1a56edb8e9b7c7f684#7e8b51b4286bd9452567eb1a56edb8e9b7c7f684"
 dependencies = [
  "bitflags",
  "serde 1.0.114",

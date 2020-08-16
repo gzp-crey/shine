@@ -1,6 +1,6 @@
 use crate::assets::AssetIO;
-use crate::input::{self, InputSystem};
-use crate::render::{self, Context, RenderSystem, Surface};
+use crate::input::{self, InputPlugin};
+use crate::render::{self, Context, RenderPlugin, Surface};
 use crate::{Config, GameError, ScheduleSet};
 use shine_ecs::legion::{
     systems::{resource::Resources, schedule::Schedule},

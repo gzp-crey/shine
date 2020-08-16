@@ -43,7 +43,7 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
             label: None,
         });
 
-        let view = texture.create_default_view();
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         CompiledRenderTarget {
             format: self.format,

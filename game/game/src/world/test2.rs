@@ -9,6 +9,7 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use wgpu::util::DeviceExt;
 
 const VERTICES: &[Pos3fCol4f] = &[
     Pos3fCol4f {
@@ -91,9 +92,17 @@ impl TestScene {
     fn prepare(&mut self, device: &wgpu::Device) {
         self.buffers.get_or_insert_with(|| {
             log::trace!("creating buffers");
-            let v = device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX);
+            let v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsage::VERTEX,
+            });
             log::trace!("creating buffers2");
-            let i = device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX);
+            let i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsage::INDEX,
+            });
             log::trace!("creating buffers3");
             (v, i, INDEX_COUNT/*INDICES.len()*/ as u32)
         });

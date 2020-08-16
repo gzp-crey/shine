@@ -14,7 +14,7 @@ log = "0.4"
 futures = "0.3"
 
 serde = "1.0"
-legion = {git = "https://github.com/TomGillen/legion.git", default-features = false}
+legion = {git = "https://github.com/TomGillen/legion.git", rev="80a3d15c2dbb293052f10d196fdfb656cbb54f68", default-features = false}
 fxhash = "0.2"
 
 # native

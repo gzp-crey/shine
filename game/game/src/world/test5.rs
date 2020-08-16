@@ -1,6 +1,6 @@
 use crate::{
     assets::{vertex, TextureSemantic, Uniform, GLOBAL_UNIFORMS},
-    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, RenderSystem},
+    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, RenderPlugin},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };

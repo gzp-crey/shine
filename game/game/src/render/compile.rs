@@ -1,5 +1,6 @@
 use crate::assets::IndexData;
 use crate::assets::VertexData;
+use wgpu::util::DeviceExt;
 
 pub trait Compile<E> {
     type Compiled;
@@ -11,7 +12,11 @@ impl Compile<()> for IndexData {
     type Compiled = wgpu::Buffer;
 
     fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
-        device.create_buffer_with_data(self.get_raw_buffer(), wgpu::BufferUsage::INDEX)
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: self.get_raw_buffer(),
+            usage: wgpu::BufferUsage::INDEX,
+        })
     }
 }
 
@@ -19,6 +24,10 @@ impl Compile<()> for VertexData {
     type Compiled = wgpu::Buffer;
 
     fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
-        device.create_buffer_with_data(self.get_raw_buffer(), wgpu::BufferUsage::VERTEX)
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: self.get_raw_buffer(),
+            usage: wgpu::BufferUsage::VERTEX,
+        })
     }
 }

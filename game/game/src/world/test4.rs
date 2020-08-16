@@ -5,10 +5,10 @@ use crate::{
         TextureSemantic, Uniform, UniformSemantic, GLOBAL_UNIFORMS,
     },
     components::camera::{Camera, FirstPerson, Projection},
-    input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputSystem},
+    input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputPlugin},
     render::{
         Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead, DEFAULT_PASS
+        TextureStoreRead, DEFAULT_PASS,
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -18,6 +18,7 @@ use shine_ecs::legion::{
     systems::schedule::{Schedulable, Schedule},
     systems::SystemBuilder,
 };
+use wgpu::util::DeviceExt;
 
 const VERTICES: &[Pos3fTex2f] = &[
     Pos3fTex2f {
@@ -127,25 +128,38 @@ impl TestScene {
 
     pub fn prepare(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, projection: &Projection) {
         self.geometry.get_or_insert_with(|| {
-            (
-                device.create_buffer_with_data(bytemuck::cast_slice(VERTICES), wgpu::BufferUsage::VERTEX),
-                device.create_buffer_with_data(bytemuck::cast_slice(INDICES), wgpu::BufferUsage::INDEX),
-                INDEX_COUNT/*INDICES.len()*/ as u32,
-            )
+            log::trace!("creating buffers");
+            let v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsage::VERTEX,
+            });
+            log::trace!("creating buffers2");
+            let i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsage::INDEX,
+            });
+            log::trace!("creating buffers3");
+            (v, i, INDEX_COUNT/*INDICES.len()*/ as u32)
         });
 
         let uniforms = ViewProj::from(projection);
 
         match &self.uniforms {
             None => {
-                self.uniforms = Some(device.create_buffer_with_data(
-                    bytemuck::cast_slice(&[uniforms]),
-                    wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-                ))
+                self.uniforms = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&[uniforms]),
+                    usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                }));
             }
             Some(buffer) => {
-                let staging_buffer =
-                    device.create_buffer_with_data(bytemuck::cast_slice(&[uniforms]), wgpu::BufferUsage::COPY_SRC);
+                let staging_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::cast_slice(&[uniforms]),
+                    usage: wgpu::BufferUsage::COPY_SRC,
+                });
 
                 encoder.copy_buffer_to_buffer(
                     &staging_buffer,

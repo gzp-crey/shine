@@ -1,6 +1,7 @@
 use crate::assets::AssetError;
 use image::ColorType;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU8;
 
 /// The encoding for the texture image
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -48,7 +49,7 @@ pub struct SamplerDescriptor {
     pub lod_min_clamp: f32,
     pub lod_max_clamp: f32,
     pub compare: Option<wgpu::CompareFunction>,
-    pub anisotropy_clamp: Option<u8>,
+    pub anisotropy_clamp: Option<NonZeroU8>,
 }
 
 impl SamplerDescriptor {
