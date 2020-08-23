@@ -133,6 +133,8 @@ impl TestScene {
         pipelines: &PipelineStoreRead<'_>,
         textures: &TextureStoreRead<'_>,
     ) {
+        self.pipeline.or_state(frame.get_pipeline_state(DEFAULT_PASS).unwrap());
+        
         if let (Some(ref buffers), Ok(Some(pipeline)), Ok(Some(texture))) = (
             &self.buffers,
             self.pipeline.request(pipelines),

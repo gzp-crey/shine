@@ -180,6 +180,8 @@ impl TestScene {
         pipelines: &PipelineStoreRead<'_>,
         textures: &TextureStoreRead<'_>,
     ) {
+        self.pipeline.or_state(frame.get_pipeline_state(DEFAULT_PASS).unwrap());
+        
         if let (Some(ref geometry), Some(ref uniforms), Ok(Some(pipeline)), Ok(Some(texture))) = (
             self.geometry.as_ref(),
             self.uniforms.as_ref(),

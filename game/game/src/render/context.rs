@@ -1,5 +1,7 @@
-use crate::render::{FrameOutput, Surface};
-use crate::{Config, GameError};
+use crate::{
+    render::{FrameOutput, RenderError, Surface},
+    Config,
+};
 
 /// Thread safe rendering context.
 pub struct Context {
@@ -11,14 +13,14 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn new(instance: wgpu::Instance, surface: &Surface, config: &Config) -> Result<Context, GameError> {
+    pub async fn new(instance: wgpu::Instance, surface: &Surface, config: &Config) -> Result<Context, RenderError> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::Default,
                 compatible_surface: Some(surface.surface()),
             })
             .await
-            .ok_or_else(|| GameError::Render("Adapter not found".to_owned()))?;
+            .ok_or_else(|| RenderError::Driver("Adapter not found".to_owned()))?;
 
         //log::info!("Graphics adapter: {:?}", adapter.get_info());
 
@@ -32,7 +34,7 @@ impl Context {
                 config.wgpu_trace.as_ref().map(std::path::Path::new),
             )
             .await
-            .map_err(|err| GameError::Render(format!("Failed to create device: {:?}", err)))?;
+            .map_err(|err| RenderError::Driver(format!("Failed to create device: {:?}", err)))?;
 
         Ok(Context {
             //instance,
@@ -55,7 +57,7 @@ impl Context {
         self.swap_chain_format
     }
 
-    pub fn create_frame(&mut self, surface: &Surface) -> Result<FrameOutput, GameError> {
+    pub fn create_frame(&mut self, surface: &Surface) -> Result<FrameOutput, RenderError> {
         let device = &self.device;
 
         let format = self.swap_chain_format;
@@ -83,10 +85,7 @@ impl Context {
             (sc, sd)
         });
 
-        let frame = sc
-            .get_current_frame()
-            .map_err(|err| GameError::Render(format!("Frame request error: {:?}", err)))?
-            .output;
+        let frame = sc.get_current_frame().map_err(|err| RenderError::Output)?.output;
         Ok(FrameOutput {
             frame,
             descriptor: sd.clone(),

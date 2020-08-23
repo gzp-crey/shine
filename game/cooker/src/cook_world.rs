@@ -60,25 +60,26 @@ pub async fn cook_world(context: &Context, asset_base: &Url, world_id: &AssetId)
             let texture_dependency = cook_texture::cook_texture(context, asset_base, &texture_id).await?;
             test.texture = texture_dependency.url().as_str().to_owned();
             dependnecies.push(texture_dependency);
-        } /*WorldData::Test5(ref mut test) => {
-              let frame_graph_id = AssetId::new(&test.frame_graph)?.to_absolute_id(asset_base, &world_base)?;
-              let frame_graph_dependency =
-                  cook_frame_graph::cook_frame_graph(context, asset_base, &frame_graph_id).await?;
-              test.frame_graph = frame_graph_dependency.url().as_str().to_owned();
-              dependnecies.push(frame_graph_dependency);
+        }
+        WorldData::Test5(ref mut test) => {
+            let frame_graph_id = AssetId::new(&test.frame_graph)?.to_absolute_id(asset_base, &world_base)?;
+            let frame_graph_dependency =
+                cook_frame_graph::cook_frame_graph(context, asset_base, &frame_graph_id).await?;
+            test.frame_graph = frame_graph_dependency.url().as_str().to_owned();
+            dependnecies.push(frame_graph_dependency);
 
-              let scene_pipeline_id = AssetId::new(&test.scene_pipeline)?.to_absolute_id(asset_base, &world_base)?;
-              let scene_pipeline_dependency =
-                  cook_pipeline::cook_pipeline(context, asset_base, &scene_pipeline_id).await?;
-              test.scene_pipeline = scene_pipeline_dependency.url().as_str().to_owned();
-              dependnecies.push(scene_pipeline_dependency);
+            let scene_pipeline_id = AssetId::new(&test.scene_pipeline)?.to_absolute_id(asset_base, &world_base)?;
+            let scene_pipeline_dependency =
+                cook_pipeline::cook_pipeline(context, asset_base, &scene_pipeline_id).await?;
+            test.scene_pipeline = scene_pipeline_dependency.url().as_str().to_owned();
+            dependnecies.push(scene_pipeline_dependency);
 
-              let present_pipeline_id = AssetId::new(&test.present_pipeline)?.to_absolute_id(asset_base, &world_base)?;
-              let present_pipeline_dependency =
-                  cook_pipeline::cook_pipeline(context, asset_base, &present_pipeline_id).await?;
-              test.present_pipeline = present_pipeline_dependency.url().as_str().to_owned();
-              dependnecies.push(present_pipeline_dependency);
-          }*/
+            let present_pipeline_id = AssetId::new(&test.present_pipeline)?.to_absolute_id(asset_base, &world_base)?;
+            let present_pipeline_dependency =
+                cook_pipeline::cook_pipeline(context, asset_base, &present_pipeline_id).await?;
+            test.present_pipeline = present_pipeline_dependency.url().as_str().to_owned();
+            dependnecies.push(present_pipeline_dependency);
+        }
     }
     log::trace!("[{}] Cooked world:\n{:#?}", world_url.as_str(), world);
 

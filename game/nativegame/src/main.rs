@@ -41,7 +41,7 @@ fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url, gc: bool) -> R
     use shine_game::world::WorldData;
     let world_data = rt
         .block_on(WorldData::from_url(&game.assetio, url))
-        .map_err(|err| GameError::Setup(format!("Failed to load world: {}", err)))?;
+        .map_err(|err| GameError::Config(format!("Failed to load world: {}", err)))?;
     match world_data {
         WorldData::Test1(test) => game.load_world::<Test1World>(test)?,
         WorldData::Test2(test) => game.load_world::<Test2World>(test)?,

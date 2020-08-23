@@ -19,7 +19,6 @@ impl GameView {
     pub async fn new(config: Config, wgpu_instance: wgpu::Instance, surface: Surface) -> Result<GameView, GameError> {
         let assetio = AssetIO::new(config.virtual_schemes.clone())
             .map_err(|err| GameError::Config(format!("Failed to init assetio: {:?}", err)))?;
-        let context = Context::new(wgpu_instance, &surface, &config).await?;
 
         let mut view = GameView {
             assetio,
@@ -29,8 +28,14 @@ impl GameView {
             schedules: ScheduleSet::new(),
         };
 
-        view.add_render_system(context)?;
-        view.add_input_system()?;
+        let context = Context::new(wgpu_instance, &view.surface, &config)
+            .await
+            .map_err(|err| GameError::Config(format!("Failed to create context: {:?}", err)))?;
+        view.add_render_plugin(context)
+            .map_err(|err| GameError::Config(format!("Failed to configure render plugin: {:?}", err)))?;
+
+        view.add_input_plugin()
+            .map_err(|err| GameError::Config(format!("Failed to configure input plugin: {:?}", err)))?;
 
         view.schedules.insert(
             "prepare_update",

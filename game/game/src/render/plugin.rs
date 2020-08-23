@@ -1,18 +1,28 @@
 use crate::{
     assets::FrameGraphDescriptor,
-    render::{Context, Frame, FrameStartError, Model, Pipeline, Shader, Texture},
-    GameError, GameView,
+    render::{Context, Frame, Model, Pipeline, Shader, Texture},
+    GameView,
 };
 use shine_ecs::core::store;
 
+#[derive(Debug)]
+pub enum RenderError {
+    Driver(String),
+    Output,
+    GraphNotReady,
+    GraphError,
+    MissinPass(String),
+}
+
 pub trait RenderPlugin {
-    fn add_render_system(&mut self, context: Context) -> Result<(), GameError>;
+    fn add_render_plugin(&mut self, context: Context) -> Result<(), RenderError>;
+    //fn remove_render_plugin(&mut self) -> Result<(), RenderError>;
     fn set_frame_graph(&mut self, graph_id: Option<String>);
-    fn render(&mut self, size: (u32, u32)) -> Result<(), GameError>;
+    fn render(&mut self, size: (u32, u32)) -> Result<(), RenderError>;
 }
 
 impl GameView {
-    fn start_frame(&mut self, size: (u32, u32)) -> Result<(), FrameStartError> {
+    fn start_frame(&mut self, size: (u32, u32)) -> Result<(), RenderError> {
         let surface = &mut self.surface;
         surface.set_size(size);
 
@@ -31,8 +41,8 @@ impl GameView {
 }
 
 impl RenderPlugin for GameView {
-    fn add_render_system(&mut self, context: Context) -> Result<(), GameError> {
-        log::info!("adding render system to the world");
+    fn add_render_plugin(&mut self, context: Context) -> Result<(), RenderError> {
+        log::info!("Adding render plugin");
 
         self.resources.insert(context);
         self.resources.insert(Frame::new());
@@ -49,20 +59,20 @@ impl RenderPlugin for GameView {
         Ok(())
     }
 
+    //fn remove_render_plugin(&mut self) -> Result<(), RenderError> {}
+
     fn set_frame_graph(&mut self, graph_id: Option<String>) {
-        let context = self.resources.get_mut::<Context>().unwrap();
         if let Some(mut frame) = self.resources.get_mut::<Frame>() {
             if let Some(graph_id) = graph_id {
-                frame.load_graph(&*context, self.assetio.clone(), graph_id)
+                frame.load_graph(self.assetio.clone(), graph_id)
             } else {
-                frame.set_graph(&*context, Ok(FrameGraphDescriptor::single_pass()));
+                frame.set_graph(Ok(FrameGraphDescriptor::single_pass()));
             }
         }
     }
 
-    fn render(&mut self, size: (u32, u32)) -> Result<(), GameError> {
-        self.start_frame(size)
-            .map_err(|err| GameError::Render(format!("Start frame failed: {:?}", err)))?;
+    fn render(&mut self, size: (u32, u32)) -> Result<(), RenderError> {
+        self.start_frame(size)?;
         self.run_logic("render");
         self.end_frame();
         Ok(())

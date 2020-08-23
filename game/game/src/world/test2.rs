@@ -109,7 +109,7 @@ impl TestScene {
     }
 
     fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
-        //self.pipeline.or_state(frame.)
+        self.pipeline.or_state(frame.get_pipeline_state(DEFAULT_PASS).unwrap());
         if let (Some(buffers), Ok(Some(pipeline))) = (self.buffers.as_ref(), self.pipeline.request(pipelines)) {
             if let Ok(mut pass) = frame.create_pass(encoder, DEFAULT_PASS) {
                 pass.set_pipeline(&pipeline.pipeline);

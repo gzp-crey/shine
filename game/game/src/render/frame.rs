@@ -3,11 +3,10 @@ use crate::{
         AssetError, AssetIO, FrameGraphDescriptor, FramePassDescriptor, PipelineStateDescriptor,
         RenderAttachementDescriptor, RenderSourceDescriptor, Url, UrlError,
     },
-    render::{Compile, CompiledRenderTarget, Context, RenderTargetCompileExtra, Surface},
-    GameError,
+    render::{Compile, CompiledRenderTarget, Context, RenderError, RenderTargetCompileExtra, Surface},
 };
 use shine_ecs::core::async_task::AsyncTask;
-use std::{borrow::Cow, sync::Mutex};
+use std::sync::Mutex;
 
 pub const DEFAULT_PASS: &str = "$";
 const FRAME_TARGET_INDEX: usize = usize::max_value();
@@ -233,20 +232,8 @@ pub struct FrameTextures<'t> {
 #[derive(Debug, Clone)]
 pub struct FrameGraphError;
 
-#[derive(Debug, Clone)]
-pub enum FrameStartError {
-    /// Failed to crate frame output
-    Output,
-
-    /// Frame Graph has some issue
-    Graph(FrameGraphError),
-
-    /// Frame is not ready
-    Pending,
-}
-
 pub struct Frame {
-    descriptor: Option<FrameGraphDescriptor>,
+    descriptor: Option<Result<FrameGraphDescriptor, FrameGraphLoadError>>,
     descriptor_loader: Option<AsyncTask<Result<FrameGraphDescriptor, FrameGraphLoadError>>>,
 
     targets: FrameTargets,
@@ -258,7 +245,7 @@ pub struct Frame {
 impl Frame {
     pub fn new() -> Frame {
         Frame {
-            descriptor: Some(FrameGraphDescriptor::single_pass()),
+            descriptor: Some(Ok(FrameGraphDescriptor::single_pass())),
             descriptor_loader: None,
             targets: FrameTargets::new(),
             passes: Ok(Vec::new()),
@@ -266,64 +253,39 @@ impl Frame {
         }
     }
 
-    pub fn load_graph(&mut self, _context: &Context, assetio: AssetIO, descriptor: String) {
-        let task = async move { assetio.load_frame_graph(descriptor).await };
-
-        // release graph and start async loading.
-        self.release_frame_graph();
-        self.descriptor = None;
-        self.descriptor_loader = Some(AsyncTask::start(task));
-    }
-
-    pub fn set_graph(&mut self, context: &Context, descriptor: Result<FrameGraphDescriptor, FrameGraphError>) {
-        self.descriptor_loader = None;
-        self.release_frame_graph();
-        match descriptor {
-            Ok(descriptor) => {
-                self.descriptor = Some(descriptor);
-                self.recompile_frame_graph(context);
-            }
-            Err(err) => {
-                self.descriptor = None;
-                self.passes = Err(err);
-            }
-        };
-    }
-
-    fn release_frame_graph(&mut self) {
-        log::info!("Releasing frame graph");
+    pub fn load_graph(&mut self, assetio: AssetIO, descriptor: String) {
         self.passes = Ok(Vec::new());
         self.targets.clear_targets();
+        let task = async move { assetio.load_frame_graph(descriptor).await };
+        self.descriptor_loader = Some(AsyncTask::start(task));
+        self.descriptor = None;
     }
 
-    fn recompile_frame_graph(&mut self, context: &Context) {
+    pub fn set_graph(&mut self, descriptor: Result<FrameGraphDescriptor, FrameGraphLoadError>) {
+        self.passes = Ok(Vec::new());
+        self.targets.clear_targets();
+        self.descriptor_loader = None;
+        self.descriptor = Some(descriptor);
+    }
+
+    fn recompile_frame_graph(&mut self, context: &Context) -> Result<(), FrameGraphError> {
         log::info!("Compiling frame graph");
         match &self.descriptor {
-            Some(desc) => {
+            Some(Ok(desc)) => {
                 log::debug!("Creating render targets");
-                if let Err(err) = self.targets.recompile_targets(context.device(), desc) {
-                    log::warn!("Frame graph compilation failed: {:?}", err);
-                    self.passes = Err(FrameGraphError);
-                    return;
-                }
+                self.targets.recompile_targets(context.device(), desc)?;
 
                 log::debug!("Creating passes");
                 let mut passes = Vec::new();
                 for (name, pass_desc) in &desc.passes {
                     log::trace!("Creating pass {}", name);
-                    let pass = match Pass::create(context.device(), &self.targets, name, pass_desc) {
-                        Err(err) => {
-                            log::warn!("Frame graph compilation failed: {:?}", err);
-                            self.passes = Err(FrameGraphError);
-                            return;
-                        }
-                        Ok(pass) => {
-                            passes.push(pass);
-                        }
-                    };
+                    let pass = Pass::create(context.device(), &self.targets, name, pass_desc)?;
+                    passes.push(pass);
                 }
                 self.passes = Ok(passes);
+                Ok(())
             }
+            Some(Err(_)) => Err(FrameGraphError),
             None => {
                 // for explicit setting, descriptor is always some
                 // for async loaded, recompile should not be called until desc's been loaded
@@ -332,40 +294,59 @@ impl Frame {
         }
     }
 
-    pub fn start_frame(&mut self, surface: &Surface, context: &mut Context) -> Result<(), FrameStartError> {
-        let frame = context.create_frame(surface).map_err(|err| FrameStartError::Output)?;
-        self.targets.set_frame_output(Some(frame));
-
+    fn try_get_new_descriptor(&mut self) -> Option<Result<FrameGraphDescriptor, FrameGraphLoadError>> {
         if let Some(loader) = self.descriptor_loader.as_mut() {
-            log::error!("Checking loader");
-            let descriptor = match loader.try_get() {
-                Err(err) => {
-                    log::warn!("Frame graph load failed error");
-                    Some(Err(FrameGraphError))
+            log::error!("Checking loader for frame graph");
+            match loader.try_get() {
+                Err(_) => {
+                    log::warn!("Frame graph load canceled");
+                    Some(Err(FrameGraphLoadError::Canceled))
                 }
                 Ok(Some(Err(err))) => {
                     log::warn!("Frame graph load failed: {:?}", err);
-                    Some(Err(FrameGraphError))
+                    Some(Err(err))
                 }
                 Ok(Some(Ok(descriptor))) => Some(Ok(descriptor)),
                 Ok(None) => None,
-            };
-
-            if let Some(descriptor) = descriptor {
-                self.set_graph(context, descriptor);
             }
-        };
-
-        // check frame size, resize targets
-
-        match &self.passes {
-            Err(err) => Err(FrameStartError::Graph(err.clone())),
-            Ok(pass) if pass.is_empty() => Err(FrameStartError::Pending),
-            Ok(_) => Ok(()),
+        } else {
+            None
         }
     }
 
-    pub fn postprocess_frame(&mut self) {}
+    pub fn start_frame(&mut self, surface: &Surface, context: &mut Context) -> Result<(), RenderError> {
+        if let Some(descriptor) = self.try_get_new_descriptor() {
+            self.set_graph(descriptor);
+        }
+        if self.descriptor.is_none() {
+            return Err(RenderError::GraphNotReady);
+        }
+        if self.passes.is_err() {
+            return Err(RenderError::GraphError);
+        }
+
+        let frame = context.create_frame(surface).map_err(|err| RenderError::Output)?;
+        self.targets.set_frame_output(Some(frame));
+
+        if self.passes.as_ref().map(|p| p.is_empty()).unwrap() {
+            if let Err(err) = self.recompile_frame_graph(context) {
+                log::warn!("Failed to compile frame graph: {:?}", err);
+                {
+                    // todo: is it ok to clear the render queue ???
+                    let mut buffers = self.buffers.lock().unwrap();
+                    buffers.clear();
+                }
+                self.targets.clear_targets();
+                self.targets.set_frame_output(None);
+                self.passes = Err(err);
+                return Err(RenderError::GraphError);
+            }
+        } else {
+            // check frame size, resize targets
+        }
+
+        Ok(())
+    }
 
     pub fn end_frame(&mut self, queue: &wgpu::Queue) {
         {
@@ -409,16 +390,16 @@ impl Frame {
         }
     }*/
 
-    pub fn get_pipeline_state(&self, pass_name: &str) -> Result<&PipelineStateDescriptor, GameError> {
+    pub fn get_pipeline_state(&self, pass_name: &str) -> Result<&PipelineStateDescriptor, RenderError> {
         if let Ok(passes) = &self.passes {
             if let Some(pass) = passes.iter().find(|x| x.name == pass_name) {
                 Ok(&pass.output.pipeline_state)
             } else {
                 //log::warn!("No [{}] pass was found", pass);
-                Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
+                Err(RenderError::MissinPass(pass_name.to_owned()))
             }
         } else {
-            Err(GameError::Render(format!("graph error")))
+            Err(RenderError::GraphError)
         }
     }
 
@@ -426,7 +407,7 @@ impl Frame {
         &'f self,
         encoder: &'f mut wgpu::CommandEncoder,
         pass_name: &str,
-    ) -> Result<wgpu::RenderPass<'e>, GameError> {
+    ) -> Result<wgpu::RenderPass<'e>, RenderError> {
         // Pass is given, use the attached output(s)
         if let Ok(passes) = &self.passes {
             if let Some(pass) = passes.iter().find(|x| x.name == pass_name) {
@@ -458,11 +439,10 @@ impl Frame {
 
                 Ok(render_pass)
             } else {
-                //log::warn!("No [{}] pass was found", pass);
-                Err(GameError::Render(format!("No [{}] pass was found", pass_name)))
+                Err(RenderError::MissinPass(pass_name.to_owned()))
             }
         } else {
-            Err(GameError::Render(format!("graph error")))
+            Err(RenderError::GraphError)
         }
     }
 

@@ -128,7 +128,7 @@ fn create_bind_group_layout(
 ) -> Result<Option<(wgpu::BindGroupLayout, Vec<PipelineUniform>)>, AssetError> {
     let bindings = create_bind_group_layout_entries(layout)?;
     let uniforms: Vec<_> = layout.iter().map(|(u, _)| u).cloned().collect();
-    if !bindings.is_empty() {
+    //if !bindings.is_empty() {
         Ok(Some((
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
@@ -136,9 +136,9 @@ fn create_bind_group_layout(
             }),
             uniforms,
         )))
-    } else {
+    /*} else {
         Ok(None)
-    }
+    }*/
 }
 
 fn create_attribute_descriptors(

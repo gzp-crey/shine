@@ -30,7 +30,7 @@ impl ScheduleSet {
                 entry.or_insert(logic);
                 Ok(())
             }
-            Entry::Occupied(_) => Err(GameError::Setup(format!("Logic {} already registered", name))),
+            Entry::Occupied(_) => Err(GameError::Config(format!("Logic {} already registered", name))),
         }
     }
 
