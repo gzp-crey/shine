@@ -1,6 +1,6 @@
 use crate::{
     assets::vertex,
-    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, DEFAULT_PASS},
+    render::{Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, DEFAULT_PASS},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -48,6 +48,7 @@ impl GameUnloadWorld for Test1World {
 /// Resources for the test
 struct TestScene {
     pipeline: PipelineDependency,
+    bind_group: Option<PipelineBindGroup>,
 }
 
 impl TestScene {
@@ -56,14 +57,30 @@ impl TestScene {
             pipeline: PipelineDependency::new()
                 .with_id(test.pipeline)
                 .with_vertex_layout::<vertex::Null>(),
+            bind_group: None,
         }
     }
 
-    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
+    fn render(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &Frame,
+        pipelines: &PipelineStoreRead<'_>,
+    ) {
         if let Ok(mut pass) = frame.begin_pass(encoder, DEFAULT_PASS) {
             self.pipeline.or_state(pass.get_pipeline_state());
             if let Ok(Some(pipeline)) = self.pipeline.request(pipelines) {
-                pass.set_pipeline(&pipeline.pipeline);
+                if self.bind_group.is_none() {
+                    self.bind_group = Some(pipeline.create_bind_groups(
+                        device,
+                        |_| unreachable!(),
+                        |_| unreachable!(),
+                        |_| unreachable!(),
+                    ));
+                }
+
+                pass.set_pipeline(&pipeline, self.bind_group.as_ref().unwrap());
                 pass.draw(0..3, 0..1);
             }
         }
@@ -80,7 +97,7 @@ fn render_test() -> Box<dyn Schedulable> {
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(&mut encoder, &*frame, &pipelines.read());
+            scene.render(context.device(), &mut encoder, &*frame, &pipelines.read());
 
             frame.add_command(encoder.finish());
         })

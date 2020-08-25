@@ -1,6 +1,6 @@
 use crate::{
     assets::vertex::{self, Pos3fCol4f},
-    render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, DEFAULT_PASS},
+    render::{Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, DEFAULT_PASS},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -77,6 +77,7 @@ impl GameUnloadWorld for Test2World {
 struct TestScene {
     pipeline: PipelineDependency,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
+    bind_group: Option<PipelineBindGroup>,
 }
 
 impl TestScene {
@@ -86,6 +87,7 @@ impl TestScene {
                 .with_id(test.pipeline)
                 .with_vertex_layout::<vertex::Pos3fCol4f>(),
             buffers: None,
+            bind_group: None,
         }
     }
 
@@ -108,11 +110,26 @@ impl TestScene {
         });
     }
 
-    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, pipelines: &PipelineStoreRead<'_>) {
+    fn render(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &Frame,
+        pipelines: &PipelineStoreRead<'_>,
+    ) {
         if let Ok(mut pass) = frame.begin_pass(encoder, DEFAULT_PASS) {
             self.pipeline.or_state(pass.get_pipeline_state());
             if let (Some(buffers), Ok(Some(pipeline))) = (self.buffers.as_ref(), self.pipeline.request(pipelines)) {
-                pass.set_pipeline(&pipeline.pipeline);
+                if self.bind_group.is_none() {
+                    self.bind_group = Some(pipeline.create_bind_groups(
+                        device,
+                        |_| unreachable!(),
+                        |_| unreachable!(),
+                        |_| unreachable!(),
+                    ));
+                }
+
+                pass.set_pipeline(&pipeline, self.bind_group.as_ref().unwrap());
                 pass.set_vertex_buffer(0, buffers.0.slice(..));
                 pass.set_index_buffer(buffers.1.slice(..));
                 pass.draw_indexed(0..buffers.2, 0, 0..1);
@@ -133,7 +150,7 @@ fn render_test() -> Box<dyn Schedulable> {
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(&mut encoder, &*frame, &pipelines.read());
+            scene.render(context.device(), &mut encoder, &*frame, &pipelines.read());
 
             frame.add_command(encoder.finish());
         })

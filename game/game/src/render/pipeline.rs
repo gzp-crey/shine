@@ -475,6 +475,10 @@ impl PipelineDependency {
         }
     }
 
+    pub fn id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
+
     pub fn or_id<S: ToString>(&mut self, id: S) -> &mut PipelineDependency {
         assert!(!self.is_none());
         if self.id.is_none() {

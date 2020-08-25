@@ -2,13 +2,13 @@ use crate::{
     assets::{
         uniform::ViewProj,
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform, UniformScope, UniformSemantic,
+        TextureSemantic, Uniform, UniformSemantic,
     },
     components::camera::{Camera, FirstPerson, Projection},
     input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputPlugin},
     render::{
-        Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead, DEFAULT_PASS,
+        Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency,
+        TextureStore, TextureStoreRead, DEFAULT_PASS,
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -110,7 +110,7 @@ struct TestScene {
     texture: TextureDependency,
     geometry: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
     uniforms: Option<wgpu::Buffer>,
-    bind_group: Option<wgpu::BindGroup>,
+    bind_group: Option<PipelineBindGroup>,
 }
 
 impl TestScene {
@@ -188,25 +188,32 @@ impl TestScene {
                 self.pipeline.request(pipelines),
                 self.texture.request(textures),
             ) {
-                let bind_group = self.bind_group.get_or_insert_with(|| {
-                    pipeline.create_bind_group(UniformScope::Global, device, |u| match u {
-                        Uniform::Texture(TextureSemantic::Diffuse) => wgpu::BindingResource::TextureView(&texture.view),
-                        Uniform::Sampler(TextureSemantic::Diffuse) => wgpu::BindingResource::Sampler(&texture.sampler),
-                        Uniform::UniformBuffer(UniformSemantic::ViewProj) => wgpu::BindingResource::Buffer {
-                            buffer: uniforms,
-                            offset: 0,
-                            size: None,
+                if self.bind_group.is_none() {
+                    self.bind_group = Some(pipeline.create_bind_groups(
+                        device,
+                        |_| unreachable!(),
+                        |u| match u {
+                            Uniform::Texture(TextureSemantic::Diffuse) => {
+                                wgpu::BindingResource::TextureView(&texture.view)
+                            }
+                            Uniform::Sampler(TextureSemantic::Diffuse) => {
+                                wgpu::BindingResource::Sampler(&texture.sampler)
+                            }
+                            Uniform::UniformBuffer(UniformSemantic::ViewProj) => wgpu::BindingResource::Buffer {
+                                buffer: uniforms,
+                                offset: 0,
+                                size: None,
+                            },
+                            _ => unreachable!(),
                         },
-                        _ => unreachable!(),
-                    })
-                });
-                {
-                    pass.set_pipeline(&pipeline.pipeline);
-                    pass.set_vertex_buffer(0, geometry.0.slice(..));
-                    pass.set_index_buffer(geometry.1.slice(..));
-                    pass.set_bind_group(UniformScope::Global.bind_location(), bind_group, &[]);
-                    pass.draw_indexed(0..geometry.2, 0, 0..1);
+                        |_| unreachable!(),
+                    ));
                 }
+
+                pass.set_pipeline(&pipeline, self.bind_group.as_ref().unwrap());
+                pass.set_vertex_buffer(0, geometry.0.slice(..));
+                pass.set_index_buffer(geometry.1.slice(..));
+                pass.draw_indexed(0..geometry.2, 0, 0..1);
             }
         }
     }

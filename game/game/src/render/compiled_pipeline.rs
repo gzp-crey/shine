@@ -11,6 +11,12 @@ struct PipelineBindGroupLayout {
     uniforms: Vec<PipelineUniform>,
 }
 
+pub struct PipelineBindGroup {
+    pub auto: wgpu::BindGroup,
+    pub global: wgpu::BindGroup,
+    pub local: wgpu::BindGroup,
+}
+
 /// Compiled pipeline with related binding information
 pub struct CompiledPipeline {
     pub pipeline: wgpu::RenderPipeline,
@@ -55,8 +61,8 @@ impl CompiledPipeline {
 
     pub fn create_bind_group<'a, F>(
         &self,
-        scope: UniformScope,
         device: &wgpu::Device,
+        scope: UniformScope,
         mut get_value: F,
     ) -> wgpu::BindGroup
     where
@@ -80,6 +86,25 @@ impl CompiledPipeline {
             layout: &bind_group.layout,
             entries: &bindings,
         })
+    }
+
+    pub fn create_bind_groups<'a, FA, FG, FL>(
+        &self,
+        device: &wgpu::Device,
+        get_auto: FA,
+        get_global: FG,
+        get_local: FL,
+    ) -> PipelineBindGroup
+    where
+        FA: FnMut(&Uniform) -> wgpu::BindingResource<'a>,
+        FG: FnMut(&Uniform) -> wgpu::BindingResource<'a>,
+        FL: FnMut(&Uniform) -> wgpu::BindingResource<'a>,
+    {
+        PipelineBindGroup {
+            auto: self.create_bind_group(device, UniformScope::Auto, get_auto),
+            global: self.create_bind_group(device, UniformScope::Global, get_global),
+            local: self.create_bind_group(device, UniformScope::Local, get_local),
+        }
     }
 }
 

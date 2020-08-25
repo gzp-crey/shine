@@ -4,8 +4,8 @@ use crate::{
         TextureSemantic, Uniform, UniformScope,
     },
     render::{
-        Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
-        TextureStoreRead, DEFAULT_PASS,
+        Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency,
+        TextureStore, TextureStoreRead, DEFAULT_PASS,
     },
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
@@ -91,9 +91,7 @@ struct TestScene {
     pipeline: PipelineDependency,
     texture: TextureDependency,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
-    auto_bind_group: Option<wgpu::BindGroup>,
-    global_bind_group: Option<wgpu::BindGroup>,
-    local_bind_group: Option<wgpu::BindGroup>,
+    bind_group: Option<PipelineBindGroup>,
 }
 
 impl TestScene {
@@ -104,9 +102,7 @@ impl TestScene {
                 .with_vertex_layout::<vertex::Pos3fTex2f>(),
             texture: TextureDependency::new().with_id(test.texture),
             buffers: None,
-            auto_bind_group: None,
-            global_bind_group: None,
-            local_bind_group: None,
+            bind_group: None,
         }
     }
 
@@ -145,31 +141,27 @@ impl TestScene {
                 self.pipeline.request(pipelines),
                 self.texture.request(textures),
             ) {
-                let auto_bind_group = self
-                    .auto_bind_group
-                    .get_or_insert_with(|| pipeline.create_bind_group(UniformScope::Auto, device, |_| unreachable!()));
-
-                let global_bind_group = self.global_bind_group.get_or_insert_with(|| {
-                    pipeline.create_bind_group(UniformScope::Global, device, |u| match u {
-                        Uniform::Texture(TextureSemantic::Diffuse) => wgpu::BindingResource::TextureView(&texture.view),
-                        Uniform::Sampler(TextureSemantic::Diffuse) => wgpu::BindingResource::Sampler(&texture.sampler),
-                        _ => unreachable!(),
-                    })
-                });
-
-                let local_bind_group = self
-                    .local_bind_group
-                    .get_or_insert_with(|| pipeline.create_bind_group(UniformScope::Local, device, |_| unreachable!()));
-
-                {
-                    pass.set_pipeline(&pipeline.pipeline);
-                    pass.set_vertex_buffer(0, buffers.0.slice(..));
-                    pass.set_index_buffer(buffers.1.slice(..));
-                    pass.set_bind_group(UniformScope::Auto.bind_location(), self.auto_bind_group.as_ref().unwrap(), &[]);
-                    pass.set_bind_group(UniformScope::Global.bind_location(), self.global_bind_group.as_ref().unwrap(), &[]);
-                    pass.set_bind_group(UniformScope::Local.bind_location(), self.local_bind_group.as_ref().unwrap(), &[]);
-                    pass.draw_indexed(0..buffers.2, 0, 0..1);
+                if self.bind_group.is_none() {
+                    self.bind_group = Some(pipeline.create_bind_groups(
+                        device,
+                        |_| unreachable!(),
+                        |u| match u {
+                            Uniform::Texture(TextureSemantic::Diffuse) => {
+                                wgpu::BindingResource::TextureView(&texture.view)
+                            }
+                            Uniform::Sampler(TextureSemantic::Diffuse) => {
+                                wgpu::BindingResource::Sampler(&texture.sampler)
+                            }
+                            _ => unreachable!(),
+                        },
+                        |_| unreachable!(),
+                    ));
                 }
+
+                pass.set_pipeline(&pipeline, self.bind_group.as_ref().unwrap());
+                pass.set_vertex_buffer(0, buffers.0.slice(..));
+                pass.set_index_buffer(buffers.1.slice(..));
+                pass.draw_indexed(0..buffers.2, 0, 0..1);
             }
         }
     }

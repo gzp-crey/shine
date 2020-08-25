@@ -1,9 +1,12 @@
 use crate::{
     assets::{
         AssetError, AssetIO, FrameGraphDescriptor, FramePassDescriptor, PipelineStateDescriptor,
-        RenderAttachementDescriptor, RenderSourceDescriptor, Url, UrlError,
+        RenderAttachementDescriptor, RenderSourceDescriptor, UniformScope, Url, UrlError,
     },
-    render::{Compile, CompiledRenderTarget, Context, RenderError, RenderTargetCompileExtra, Surface},
+    render::{
+        Compile, CompiledPipeline, CompiledRenderTarget, Context, PipelineBindGroup, RenderError,
+        RenderTargetCompileExtra, Surface,
+    },
 };
 use shine_ecs::core::async_task::AsyncTask;
 use std::{
@@ -19,12 +22,12 @@ pub struct FrameOutput {
     pub descriptor: wgpu::SwapChainDescriptor,
 }
 
-pub struct FrameTarget {
+struct FrameTarget {
     pub name: String,
     pub render_target: CompiledRenderTarget,
 }
 
-pub struct FrameTargets {
+struct FrameTargets {
     frame_output: Option<FrameOutput>,
     targets: Vec<FrameTarget>,
 }
@@ -225,11 +228,6 @@ impl Pass {
             output,
         })
     }
-}
-
-pub struct FrameTextures<'t> {
-    pub frame: &'t wgpu::SwapChainTexture,
-    pub textures: Vec<(&'t FrameTarget, &'t wgpu::Sampler)>,
 }
 
 #[derive(Debug, Clone)]
@@ -486,6 +484,16 @@ impl<'r> RenderPass<'r> {
 
     pub fn get_pipeline_state(&self) -> &PipelineStateDescriptor {
         &self.pass.output.pipeline_state
+    }
+
+    pub fn set_pipeline(&mut self, pipeline: &'r CompiledPipeline, bindings: &'r PipelineBindGroup) {
+        self.render_pass.set_pipeline(&pipeline.pipeline);
+        self.render_pass
+            .set_bind_group(UniformScope::Auto.bind_location(), &bindings.auto, &[]);
+        self.render_pass
+            .set_bind_group(UniformScope::Global.bind_location(), &bindings.global, &[]);
+        self.render_pass
+            .set_bind_group(UniformScope::Local.bind_location(), &bindings.local, &[]);
     }
 }
 
