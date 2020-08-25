@@ -6,7 +6,10 @@ use crate::{
     render::{Compile, CompiledRenderTarget, Context, RenderError, RenderTargetCompileExtra, Surface},
 };
 use shine_ecs::core::async_task::AsyncTask;
-use std::sync::Mutex;
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Mutex,
+};
 
 pub const DEFAULT_PASS: &str = "$";
 const FRAME_TARGET_INDEX: usize = usize::max_value();
@@ -239,7 +242,7 @@ pub struct Frame {
     targets: FrameTargets,
     passes: Result<Vec<Pass>, FrameGraphError>,
 
-    buffers: Mutex<Vec<wgpu::CommandBuffer>>,
+    commands: Mutex<Vec<wgpu::CommandBuffer>>,
 }
 
 impl Frame {
@@ -249,7 +252,7 @@ impl Frame {
             descriptor_loader: None,
             targets: FrameTargets::new(),
             passes: Ok(Vec::new()),
-            buffers: Mutex::new(Vec::new()),
+            commands: Mutex::new(Vec::new()),
         }
     }
 
@@ -325,7 +328,7 @@ impl Frame {
             return Err(RenderError::GraphError);
         }
 
-        let frame = context.create_frame(surface).map_err(|err| RenderError::Output)?;
+        let frame = context.create_frame(surface)?;
         self.targets.set_frame_output(Some(frame));
 
         if self.passes.as_ref().map(|p| p.is_empty()).unwrap() {
@@ -333,8 +336,8 @@ impl Frame {
                 log::warn!("Failed to compile frame graph: {:?}", err);
                 {
                     // todo: is it ok to clear the render queue ???
-                    let mut buffers = self.buffers.lock().unwrap();
-                    buffers.clear();
+                    let mut commands = self.commands.lock().unwrap();
+                    commands.clear();
                 }
                 self.targets.clear_targets();
                 self.targets.set_frame_output(None);
@@ -350,8 +353,8 @@ impl Frame {
 
     pub fn end_frame(&mut self, queue: &wgpu::Queue) {
         {
-            let mut buffers = self.buffers.lock().unwrap();
-            queue.submit(buffers.drain(..));
+            let mut commands = self.commands.lock().unwrap();
+            queue.submit(commands.drain(..));
         }
         self.targets.set_frame_output(None);
     }
@@ -364,91 +367,26 @@ impl Frame {
         self.targets.frame_size()
     }
 
-    /*pub fn pass_textures(&self, pass: &str) -> Result<FrameTextures<'_>, GameError> {
-        if pass == "DEBUG" {
-            Ok(FrameTextures {
-                frame: &self.frame_output().unwrap().frame,
-                textures: Vec::new(),
-            })
-        } else if let Some(pass) = self.passes.iter().find(|x| x.name == pass) {
-            Ok(FrameTextures {
-                frame: &self.frame_output().unwrap().frame,
-                textures: pass
-                    .inputs
-                    .iter()
-                    .map(|texture| {
-                        (
-                            self.targets.get_target(texture.texture_index).unwrap(),
-                            &texture.sampler,
-                        )
-                    })
-                    .collect(),
-            })
-        } else {
-            //log::warn!("No [{}] pass was found", pass);
-            Err(GameError::Render(format!("No [{}] pass was found", pass)))
-        }
-    }*/
-
-    pub fn get_pipeline_state(&self, pass_name: &str) -> Result<&PipelineStateDescriptor, RenderError> {
+    pub fn begin_pass<'r, 'f: 'r, 'e: 'f>(
+        &'f self,
+        encoder: &'e mut wgpu::CommandEncoder,
+        pass_name: &'f str,
+    ) -> Result<RenderPass<'r>, RenderError> {
         if let Ok(passes) = &self.passes {
             if let Some(pass) = passes.iter().find(|x| x.name == pass_name) {
-                Ok(&pass.output.pipeline_state)
+                Ok(RenderPass::new(pass, &self.targets, &self.commands, encoder))
             } else {
                 //log::warn!("No [{}] pass was found", pass);
-                Err(RenderError::MissinPass(pass_name.to_owned()))
+                Err(RenderError::MissingPass(pass_name.to_owned()))
             }
         } else {
             Err(RenderError::GraphError)
         }
     }
 
-    pub fn create_pass<'e, 'f: 'e>(
-        &'f self,
-        encoder: &'f mut wgpu::CommandEncoder,
-        pass_name: &str,
-    ) -> Result<wgpu::RenderPass<'e>, RenderError> {
-        // Pass is given, use the attached output(s)
-        if let Ok(passes) = &self.passes {
-            if let Some(pass) = passes.iter().find(|x| x.name == pass_name) {
-                let color_desc = pass
-                    .output
-                    .colors
-                    .iter()
-                    .map(|attachement| wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: self.targets.get_view(attachement.target_index),
-                        resolve_target: None,
-                        ops: attachement.operation,
-                    })
-                    .collect::<Vec<_>>();
-
-                let depth_desc =
-                    pass.output
-                        .depth
-                        .as_ref()
-                        .map(|attachement| wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                            attachment: self.targets.get_view(attachement.target_index),
-                            depth_ops: attachement.depth_operation,
-                            stencil_ops: attachement.stencil_operation,
-                        });
-
-                let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: &color_desc[..],
-                    depth_stencil_attachment: depth_desc,
-                });
-
-                Ok(render_pass)
-            } else {
-                Err(RenderError::MissinPass(pass_name.to_owned()))
-            }
-        } else {
-            Err(RenderError::GraphError)
-        }
-    }
-
-    pub fn add_command(&self, commands: wgpu::CommandBuffer) {
-        let mut buffers = self.buffers.lock().unwrap();
-        buffers.push(commands);
+    pub fn add_command(&self, command: wgpu::CommandBuffer) {
+        let mut commands = self.commands.lock().unwrap();
+        commands.push(command);
     }
 }
 
@@ -494,5 +432,73 @@ impl AssetIO {
         descriptor.check_target_references()?;
 
         Ok(descriptor)
+    }
+}
+
+pub struct RenderPass<'r> {
+    pass: &'r Pass,
+    targets: &'r FrameTargets,
+    commands: &'r Mutex<Vec<wgpu::CommandBuffer>>,
+    pub render_pass: wgpu::RenderPass<'r>,
+}
+
+impl<'r> RenderPass<'r> {
+    fn new<'f: 'r>(
+        pass: &'f Pass,
+        targets: &'f FrameTargets,
+        commands: &'f Mutex<Vec<wgpu::CommandBuffer>>,
+        encoder: &'f mut wgpu::CommandEncoder,
+    ) -> RenderPass<'r> {
+        // Pass is given, use the attached output(s)
+        let color_desc = pass
+            .output
+            .colors
+            .iter()
+            .map(|attachement| wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: targets.get_view(attachement.target_index),
+                resolve_target: None,
+                ops: attachement.operation,
+            })
+            .collect::<Vec<_>>();
+
+        let depth_desc =
+            pass.output
+                .depth
+                .as_ref()
+                .map(|attachement| wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                    attachment: targets.get_view(attachement.target_index),
+                    depth_ops: attachement.depth_operation,
+                    stencil_ops: attachement.stencil_operation,
+                });
+
+        let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &color_desc[..],
+            depth_stencil_attachment: depth_desc,
+        });
+
+        RenderPass {
+            pass,
+            targets,
+            commands,
+            render_pass,
+        }
+    }
+
+    pub fn get_pipeline_state(&self) -> &PipelineStateDescriptor {
+        &self.pass.output.pipeline_state
+    }
+}
+
+impl<'r> Deref for RenderPass<'r> {
+    type Target = wgpu::RenderPass<'r>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.render_pass
+    }
+}
+
+impl<'r> DerefMut for RenderPass<'r> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.render_pass
     }
 }

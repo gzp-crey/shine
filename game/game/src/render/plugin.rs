@@ -11,7 +11,7 @@ pub enum RenderError {
     Output,
     GraphNotReady,
     GraphError,
-    MissinPass(String),
+    MissingPass(String),
 }
 
 pub trait RenderPlugin {

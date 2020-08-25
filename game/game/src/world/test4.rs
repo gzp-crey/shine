@@ -2,7 +2,7 @@ use crate::{
     assets::{
         uniform::ViewProj,
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform, UniformSemantic, GLOBAL_UNIFORMS,
+        TextureSemantic, Uniform, UniformScope, UniformSemantic,
     },
     components::camera::{Camera, FirstPerson, Projection},
     input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputPlugin},
@@ -180,32 +180,31 @@ impl TestScene {
         pipelines: &PipelineStoreRead<'_>,
         textures: &TextureStoreRead<'_>,
     ) {
-        self.pipeline.or_state(frame.get_pipeline_state(DEFAULT_PASS).unwrap());
-        
-        if let (Some(ref geometry), Some(ref uniforms), Ok(Some(pipeline)), Ok(Some(texture))) = (
-            self.geometry.as_ref(),
-            self.uniforms.as_ref(),
-            self.pipeline.request(pipelines),
-            self.texture.request(textures),
-        ) {
-            let bind_group = self.bind_group.get_or_insert_with(|| {
-                pipeline
-                    .create_bind_group(GLOBAL_UNIFORMS, device, |u| match u {
+        if let Ok(mut pass) = frame.begin_pass(encoder, DEFAULT_PASS) {
+            self.pipeline.or_state(pass.get_pipeline_state());
+            if let (Some(ref geometry), Some(ref uniforms), Ok(Some(pipeline)), Ok(Some(texture))) = (
+                self.geometry.as_ref(),
+                self.uniforms.as_ref(),
+                self.pipeline.request(pipelines),
+                self.texture.request(textures),
+            ) {
+                let bind_group = self.bind_group.get_or_insert_with(|| {
+                    pipeline.create_bind_group(UniformScope::Global, device, |u| match u {
                         Uniform::Texture(TextureSemantic::Diffuse) => wgpu::BindingResource::TextureView(&texture.view),
                         Uniform::Sampler(TextureSemantic::Diffuse) => wgpu::BindingResource::Sampler(&texture.sampler),
-                        Uniform::UniformBuffer(UniformSemantic::ViewProj) => {
-                            wgpu::BindingResource::Buffer(uniforms.slice(..))
-                        }
+                        Uniform::UniformBuffer(UniformSemantic::ViewProj) => wgpu::BindingResource::Buffer {
+                            buffer: uniforms,
+                            offset: 0,
+                            size: None,
+                        },
                         _ => unreachable!(),
                     })
-                    .unwrap()
-            });
-            {
-                if let Ok(mut pass) = frame.create_pass(encoder, DEFAULT_PASS) {
+                });
+                {
                     pass.set_pipeline(&pipeline.pipeline);
                     pass.set_vertex_buffer(0, geometry.0.slice(..));
                     pass.set_index_buffer(geometry.1.slice(..));
-                    pass.set_bind_group(GLOBAL_UNIFORMS, bind_group, &[]);
+                    pass.set_bind_group(UniformScope::Global.bind_location(), bind_group, &[]);
                     pass.draw_indexed(0..geometry.2, 0, 0..1);
                 }
             }

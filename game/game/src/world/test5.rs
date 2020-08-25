@@ -1,5 +1,5 @@
 use crate::{
-    assets::{vertex, TextureSemantic, Uniform, GLOBAL_UNIFORMS},
+    assets::{vertex, TextureSemantic, Uniform},
     render::{Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, RenderPlugin},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,

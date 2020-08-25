@@ -85,7 +85,7 @@ impl Context {
             (sc, sd)
         });
 
-        let frame = sc.get_current_frame().map_err(|err| RenderError::Output)?.output;
+        let frame = sc.get_current_frame().map_err(|_| RenderError::Output)?.output;
         Ok(FrameOutput {
             frame,
             descriptor: sd.clone(),

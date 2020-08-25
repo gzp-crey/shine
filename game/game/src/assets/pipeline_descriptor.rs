@@ -7,10 +7,22 @@ use std::{
     str::FromStr,
 };
 
-pub const MAX_UNIFORM_GROUP_COUNT: usize = 3;
-pub const AUTO_UNIFORMS: u32 = 0;
-pub const GLOBAL_UNIFORMS: u32 = 1;
-pub const LOCAL_UNIFORMS: u32 = 2;
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum UniformScope {
+    Auto,
+    Global,
+    Local,
+}
+
+impl UniformScope {
+    pub fn bind_location(self) -> u32 {
+        match self {
+            UniformScope::Auto => 0,
+            UniformScope::Global => 1,
+            UniformScope::Local => 2,
+        }
+    }
+}
 
 /// Supported shader types
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -180,15 +192,11 @@ pub struct PipelineDescriptor {
 }
 
 impl PipelineDescriptor {
-    pub fn get_uniform_layout(&self, group: u32) -> Result<PipelineUniformLayout, AssetError> {
-        let (vs_uniforms, fs_uniforms) = if group == AUTO_UNIFORMS {
-            (&self.vertex_stage.auto_uniforms, &self.fragment_stage.auto_uniforms)
-        } else if group == GLOBAL_UNIFORMS {
-            (&self.vertex_stage.global_uniforms, &self.fragment_stage.global_uniforms)
-        } else if group == LOCAL_UNIFORMS {
-            (&self.vertex_stage.local_uniforms, &self.fragment_stage.local_uniforms)
-        } else {
-            return Err(AssetError::Content(format!("Invalid uniform group: {}", group)));
+    pub fn get_uniform_layout(&self, scope: UniformScope) -> Result<PipelineUniformLayout, AssetError> {
+        let (vs_uniforms, fs_uniforms) = match scope {
+            UniformScope::Auto => (&self.vertex_stage.auto_uniforms, &self.fragment_stage.auto_uniforms),
+            UniformScope::Global => (&self.vertex_stage.global_uniforms, &self.fragment_stage.global_uniforms),
+            UniformScope::Local => (&self.vertex_stage.local_uniforms, &self.fragment_stage.local_uniforms),
         };
 
         PipelineUniformLayout::merge_from_stages(&[

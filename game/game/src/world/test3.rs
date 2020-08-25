@@ -1,7 +1,7 @@
 use crate::{
     assets::{
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform, GLOBAL_UNIFORMS,
+        TextureSemantic, Uniform, UniformScope,
     },
     render::{
         Context, Frame, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency, TextureStore,
@@ -91,7 +91,9 @@ struct TestScene {
     pipeline: PipelineDependency,
     texture: TextureDependency,
     buffers: Option<(wgpu::Buffer, wgpu::Buffer, u32)>,
-    bind_group: Option<wgpu::BindGroup>,
+    auto_bind_group: Option<wgpu::BindGroup>,
+    global_bind_group: Option<wgpu::BindGroup>,
+    local_bind_group: Option<wgpu::BindGroup>,
 }
 
 impl TestScene {
@@ -102,7 +104,9 @@ impl TestScene {
                 .with_vertex_layout::<vertex::Pos3fTex2f>(),
             texture: TextureDependency::new().with_id(test.texture),
             buffers: None,
-            bind_group: None,
+            auto_bind_group: None,
+            global_bind_group: None,
+            local_bind_group: None,
         }
     }
 
@@ -133,29 +137,37 @@ impl TestScene {
         pipelines: &PipelineStoreRead<'_>,
         textures: &TextureStoreRead<'_>,
     ) {
-        self.pipeline.or_state(frame.get_pipeline_state(DEFAULT_PASS).unwrap());
-        
-        if let (Some(ref buffers), Ok(Some(pipeline)), Ok(Some(texture))) = (
-            &self.buffers,
-            self.pipeline.request(pipelines),
-            self.texture.request(textures),
-        ) {
-            let bind_group = self.bind_group.get_or_insert_with(|| {
-                pipeline
-                    .create_bind_group(GLOBAL_UNIFORMS, device, |u| match u {
+        if let Ok(mut pass) = frame.begin_pass(encoder, DEFAULT_PASS) {
+            self.pipeline.or_state(pass.get_pipeline_state());
+
+            if let (Some(ref buffers), Ok(Some(pipeline)), Ok(Some(texture))) = (
+                &self.buffers,
+                self.pipeline.request(pipelines),
+                self.texture.request(textures),
+            ) {
+                let auto_bind_group = self
+                    .auto_bind_group
+                    .get_or_insert_with(|| pipeline.create_bind_group(UniformScope::Auto, device, |_| unreachable!()));
+
+                let global_bind_group = self.global_bind_group.get_or_insert_with(|| {
+                    pipeline.create_bind_group(UniformScope::Global, device, |u| match u {
                         Uniform::Texture(TextureSemantic::Diffuse) => wgpu::BindingResource::TextureView(&texture.view),
                         Uniform::Sampler(TextureSemantic::Diffuse) => wgpu::BindingResource::Sampler(&texture.sampler),
                         _ => unreachable!(),
                     })
-                    .unwrap()
-            });
+                });
 
-            {
-                if let Ok(mut pass) = frame.create_pass(encoder, DEFAULT_PASS) {
+                let local_bind_group = self
+                    .local_bind_group
+                    .get_or_insert_with(|| pipeline.create_bind_group(UniformScope::Local, device, |_| unreachable!()));
+
+                {
                     pass.set_pipeline(&pipeline.pipeline);
                     pass.set_vertex_buffer(0, buffers.0.slice(..));
                     pass.set_index_buffer(buffers.1.slice(..));
-                    pass.set_bind_group(GLOBAL_UNIFORMS, &bind_group, &[]);
+                    pass.set_bind_group(UniformScope::Auto.bind_location(), self.auto_bind_group.as_ref().unwrap(), &[]);
+                    pass.set_bind_group(UniformScope::Global.bind_location(), self.global_bind_group.as_ref().unwrap(), &[]);
+                    pass.set_bind_group(UniformScope::Local.bind_location(), self.local_bind_group.as_ref().unwrap(), &[]);
                     pass.draw_indexed(0..buffers.2, 0, 0..1);
                 }
             }
