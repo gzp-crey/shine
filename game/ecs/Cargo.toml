@@ -15,7 +15,9 @@ futures = "0.3"
 
 serde = "1.0"
 legion = {git = "https://github.com/TomGillen/legion.git", rev="80a3d15c2dbb293052f10d196fdfb656cbb54f68", default-features = false}
+hecs = "0.2"
 fxhash = "0.2"
+
 
 # native
 # "macros, time" is required only for test, but see https://github.com/rust-lang/cargo/issues/1596

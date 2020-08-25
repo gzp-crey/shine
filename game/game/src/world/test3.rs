@@ -1,7 +1,7 @@
 use crate::{
     assets::{
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform, UniformScope,
+        TextureSemantic, Uniform,
     },
     render::{
         Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency,

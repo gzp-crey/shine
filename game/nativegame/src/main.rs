@@ -149,8 +149,7 @@ async fn run() {
                 //flame::end("frame");
                 //use std::fs::File;
                 //flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
-                game.unload_world().unwrap();
-                game.gc();
+                unload_world(&rt, &mut game, true).unwrap();
                 is_closing = true;
                 return;
             }
