@@ -1,31 +1,37 @@
+use crate::{
+    assets::{AssetIO, FrameGraphDescriptor},
+    render::FrameGraphLoadError,
+};
+use shine_ecs::core::async_task::AsyncTask;
+
+/// Manage the frame graph lifecycle for static graphs
 pub struct FrameGraphLoader {
     descriptor: Option<Result<FrameGraphDescriptor, FrameGraphLoadError>>,
     descriptor_loader: Option<AsyncTask<Result<FrameGraphDescriptor, FrameGraphLoadError>>>,
-u::CommandBuffer>>,
+    is_activated: bool,
 }
 
 impl FrameGraphLoader {
     pub fn new() -> FrameGraphLoader {
         FrameGraphLoader {
-            descriptor: Some(Ok(FrameGraphDescriptor::single_pass())),
-            descriptor_loader: None,}
+            descriptor: None,
+            descriptor_loader: None,
+            is_activated: false,
         }
+    }
 
-         /*pub fn load_graph(&mut self, assetio: AssetIO, descriptor: String) {
-        self.passes = FramePasses::new();
-        self.targets.clear_targets();
-        //let task = async move { assetio.load_frame_graph(descriptor).await };
-        //self.descriptor_loader = Some(AsyncTask::start(task));
-        //self.descriptor = None;
-    }*/
-
-
-        /*pub fn set_graph(&mut self, descriptor: Result<FrameGraphDescriptor, FrameGraphLoadError>) {
-        self.passes = Ok(Vec::new());
-        self.targets.clear_targets();
+    pub fn request_single_pass(&mut self) {
         self.descriptor_loader = None;
-        self.descriptor = Some(descriptor);
-    }*/
+        self.descriptor = Some(FrameGraphDescriptor::single_pass());
+        self.is_activated = false;
+    }
+
+    pub fn request_asset(&mut self, assetio: AssetIO, descriptor: String) {
+        let task = async move { assetio.load_frame_graph(descriptor).await };
+        self.descriptor_loader = Some(AsyncTask::start(task));
+        self.descriptor = None;
+        self.is_activated = false;
+    }
 
     fn try_get_new_descriptor(&mut self) -> Option<Result<FrameGraphDescriptor, FrameGraphLoadError>> {
         if let Some(loader) = self.descriptor_loader.as_mut() {
@@ -46,6 +52,4 @@ impl FrameGraphLoader {
             None
         }
     }
-
-
-    }
+}

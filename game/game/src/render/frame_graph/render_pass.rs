@@ -1,9 +1,6 @@
 use crate::{
     assets::{PipelineStateDescriptor, UniformScope},
-    render::{
-        frame_graph::frame_target::FrameTargets,
-        CompiledPipeline, PipelineBindGroup,
-    },
+    render::{frame_graph::frame_target::FrameTargets, CompiledPipeline, PipelineBindGroup},
 };
 use std::ops::{Deref, DerefMut};
 

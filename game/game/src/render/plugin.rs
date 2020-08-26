@@ -1,6 +1,6 @@
 use crate::{
     assets::FrameGraphDescriptor,
-    render::{frame_graph::FrameGraphError, Context, Frame, Model, Pipeline, Shader, Texture},
+    render::{frame_graph::FrameGraphError, Context, Frame, FrameGraphLoader, Model, Pipeline, Shader, Texture},
     GameView,
 };
 use shine_ecs::core::store;
@@ -23,7 +23,7 @@ impl From<FrameGraphError> for RenderError {
 pub trait RenderPlugin {
     fn add_render_plugin(&mut self, context: Context) -> Result<(), RenderError>;
     //fn remove_render_plugin(&mut self) -> Result<(), RenderError>;
-    fn set_frame_graph(&mut self, graph_id: Option<String>);
+    //fn set_frame_graph(&mut self, graph_id: Option<String>);
     fn render(&mut self, size: (u32, u32)) -> Result<(), RenderError>;
 }
 
@@ -50,8 +50,10 @@ impl RenderPlugin for GameView {
     fn add_render_plugin(&mut self, context: Context) -> Result<(), RenderError> {
         log::info!("Adding render plugin");
 
+        
         self.resources.insert(context);
         self.resources.insert(Frame::new());
+        self.resources.insert(FrameGraphLoader::new());
 
         self.resources
             .insert(store::async_load::<Shader, _>(16, self.assetio.clone()));
@@ -63,18 +65,6 @@ impl RenderPlugin for GameView {
             .insert(store::async_load::<Model, _>(16, self.assetio.clone()));
 
         Ok(())
-    }
-
-    //fn remove_render_plugin(&mut self) -> Result<(), RenderError> {}
-
-    fn set_frame_graph(&mut self, graph_id: Option<String>) {
-        /*if let Some(mut frame) = self.resources.get_mut::<Frame>() {
-            if let Some(graph_id) = graph_id {
-                frame.load_graph(self.assetio.clone(), graph_id)
-            } else {
-                frame.set_graph(Ok(FrameGraphDescriptor::single_pass()));
-            }
-        }*/
     }
 
     fn render(&mut self, size: (u32, u32)) -> Result<(), RenderError> {
