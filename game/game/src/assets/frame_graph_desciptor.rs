@@ -90,15 +90,6 @@ impl FrameGraphDescriptor {
         }
     }
 
-    pub fn is_target_sampled(&self, target: &str) -> bool {
-        for pass in self.passes.values() {
-            if pass.inputs.iter().any(|x| x.target == target) {
-                return true;
-            }
-        }
-        false
-    }
-
     /// Check if target - pass references are correct
     pub fn check_target_references(&self) -> Result<(), AssetError> {
         for (pass_name, pass) in self.passes.iter() {

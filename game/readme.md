@@ -14,9 +14,13 @@
 
 #### render
 
-* [ ] move wgpu resource creation from asset module into render module (replica _to_ with _from_ functions)
+* [ ] frame graph order
 
-* [ ] frame graph
+* [ ] frame graph scheduler
+
+* [ ] frame graph parallel executor
+
+* [ ] Use RenderError instead of FrameGraphError
 
 * [ ] pipeline color/depth stage should depend on the render target
 

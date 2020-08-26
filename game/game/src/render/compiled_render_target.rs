@@ -4,6 +4,8 @@ use crate::render::Compile;
 pub struct CompiledRenderTarget {
     pub format: wgpu::TextureFormat,
     pub size: (u32, u32),
+    pub is_sampled: bool,
+
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
 }
@@ -47,6 +49,7 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
 
         CompiledRenderTarget {
             format: self.format,
+            is_sampled: extra.is_sampled,
             size,
             texture,
             view,

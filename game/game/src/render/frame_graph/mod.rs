@@ -1,6 +1,6 @@
 mod frame;
+mod frame_pass;
 mod frame_target;
-mod pass;
 mod render_pass;
 
 pub use self::frame::*;
