@@ -40,11 +40,7 @@ impl GameView {
         view.schedules.insert(
             "prepare_update",
             Schedule::builder()
-                .add_system(render::systems::update_shaders())
-                .add_system(render::systems::update_textures())
-                .add_system(render::systems::update_pipelines())
-                //.add_system(render::systems::update_frame_graphs())
-                .add_system(render::systems::update_models())
+                .add_system(render::systems::update_resources())
                 .add_system(input::systems::advance_input_states())
                 .flush()
                 .build(),
@@ -53,11 +49,7 @@ impl GameView {
         view.schedules.insert(
             "gc",
             Schedule::builder()
-                .add_system(render::systems::gc_models())
-                //.add_system(render::systems::gc_frame_graphs())
-                .add_system(render::systems::gc_pipelines())
-                .add_system(render::systems::gc_textures())
-                .add_system(render::systems::gc_shaders())
+                .add_system(render::systems::gc_resources())
                 .flush()
                 .build(),
         )?;

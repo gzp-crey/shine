@@ -12,9 +12,6 @@ pub struct FrameOutput {
     pub descriptor: wgpu::SwapChainDescriptor,
 }
 
-#[derive(Debug, Clone)]
-pub struct FrameGraphError;
-
 pub struct Frame {
     targets: FrameTargets,
     passes: FramePasses,
@@ -31,7 +28,7 @@ impl Frame {
         }
     }
 
-    pub fn add_target(&mut self, name: &str, target_descriptor: RenderTargetDescriptor) -> Result<(), RenderError> {
+    pub fn add_target(&mut self, name: String, target_descriptor: RenderTargetDescriptor) -> Result<(), RenderError> {
         self.targets.add_target(name, target_descriptor)?;
         Ok(())
     }
@@ -40,13 +37,28 @@ impl Frame {
         Ok(())
     }
 
-    pub fn add_pass(&mut self, name: &str, pass_descriptor: FramePassDescriptor) -> Result<(), RenderError> {
+    pub fn add_pass(&mut self, name: String, pass_descriptor: FramePassDescriptor) -> Result<(), RenderError> {
         self.passes.add_pass(name, pass_descriptor)?;
         Ok(())
     }
 
     pub fn remove_pass(&mut self, pass_name: &str) -> Result<(), RenderError> {
         self.passes.remove_pass(pass_name)?;
+        Ok(())
+    }
+
+    pub fn set_frame_graph(&mut self, graph: FrameGraphDescriptor) -> Result<(), RenderError> {
+        self.passes.clear();
+        self.targets.clear_targets();
+
+        let FrameGraphDescriptor { targets, passes } = graph;
+        for target in targets.into_iter() {
+            self.add_target(target.0, target.1)?;
+        }
+        for pass in passes.into_iter() {
+            self.add_pass(pass.0, pass.1)?;
+        }
+
         Ok(())
     }
 
@@ -136,7 +148,7 @@ impl From<bincode::Error> for FrameGraphLoadError {
 }
 
 impl AssetIO {
-    async fn load_frame_graph(&self, source_id: String) -> Result<FrameGraphDescriptor, FrameGraphLoadError> {
+    pub async fn load_frame_graph(&self, source_id: String) -> Result<FrameGraphDescriptor, FrameGraphLoadError> {
         let url = Url::parse(&source_id)?;
         log::debug!("[{:?}] Loading frame graph...", source_id);
         let data = self.download_binary(&url).await?;

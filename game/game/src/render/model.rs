@@ -145,25 +145,3 @@ impl AsyncLoader<Model> for AssetIO {
 pub type ModelStore = Store<Model, AsyncLoadHandler<Model>>;
 pub type ModelStoreRead<'a> = ReadGuard<'a, Model, AsyncLoadHandler<Model>>;
 pub type ModelIndex = Index<Model>;
-
-pub mod systems {
-    use super::*;
-    use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
-
-    pub fn update_models() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_models")
-            .read_resource::<Context>()
-            .write_resource::<ModelStore>()
-            .build(move |_, _, (context, models), _| {
-                models.load_and_finalize_requests((&*context,));
-            })
-    }
-
-    pub fn gc_models() -> Box<dyn Schedulable> {
-        SystemBuilder::new("gc_models")
-            .write_resource::<ModelStore>()
-            .build(move |_, _, models, _| {
-                models.drain_unused();
-            })
-    }
-}

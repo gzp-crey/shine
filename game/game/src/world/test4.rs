@@ -2,14 +2,11 @@ use crate::{
     assets::{
         uniform::ViewProj,
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform, UniformSemantic,
+        FrameGraphDescriptor, TextureSemantic, Uniform, UniformSemantic,
     },
     components::camera::{Camera, FirstPerson, Projection},
     input::{mapper::FirstPersonShooter, CurrentInputState, InputMapper, InputPlugin},
-    render::{
-        Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency,
-        TextureStore, TextureStoreRead, DEFAULT_PASS,
-    },
+    render::{Context, Frame, PipelineBindGroup, PipelineDependency, RenderPlugin, RenderResources, TextureDependency},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -63,6 +60,7 @@ impl GameLoadWorld for Test4World {
     fn build(source: Test4, game: &mut GameView) -> Result<Test4World, GameError> {
         log::info!("Adding test4 scene to the world");
 
+        game.set_frame_graph(FrameGraphDescriptor::single_pass())?;
         game.set_input(FirstPersonShooter::new())?;
         game.resources.insert(TestScene::new(source));
         game.resources.insert(FirstPerson::new());
@@ -177,16 +175,18 @@ impl TestScene {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         frame: &Frame,
-        pipelines: &PipelineStoreRead<'_>,
-        textures: &TextureStoreRead<'_>,
+        resources: &RenderResources,
     ) {
-        if let Ok(mut pass) = frame.begin_pass(encoder, DEFAULT_PASS) {
+        let pipelines = resources.pipelines.read();
+        let textures = resources.textures.read();
+
+        if let Ok(mut pass) = frame.begin_pass(encoder, FrameGraphDescriptor::SINGLE_PASS_NAME) {
             self.pipeline.or_state(pass.get_pipeline_state());
             if let (Some(ref geometry), Some(ref uniforms), Ok(Some(pipeline)), Ok(Some(texture))) = (
                 self.geometry.as_ref(),
                 self.uniforms.as_ref(),
-                self.pipeline.request(pipelines),
-                self.texture.request(textures),
+                self.pipeline.request(&pipelines),
+                self.texture.request(&textures),
             ) {
                 if self.bind_group.is_none() {
                     self.bind_group = Some(pipeline.create_bind_groups(
@@ -270,20 +270,15 @@ fn render() -> Box<dyn Schedulable> {
     SystemBuilder::new("render")
         .read_resource::<Context>()
         .read_resource::<Frame>()
-        .read_resource::<PipelineStore>()
-        .read_resource::<TextureStore>()
+        .read_resource::<RenderResources>()
         .write_resource::<TestScene>()
-        .build(move |_, _, (context, frame, pipelines, textures, scene), _| {
+        .build(move |_, _, (context, frame, resources, scene), _| {
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(
-                context.device(),
-                &mut encoder,
-                &frame,
-                &pipelines.read(),
-                &textures.read(),
-            );
+
+            scene.render(context.device(), &mut encoder, &frame, &resources);
+
             frame.add_command(encoder.finish());
         })
 }

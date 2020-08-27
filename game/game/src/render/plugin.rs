@@ -1,9 +1,8 @@
 use crate::{
     assets::FrameGraphDescriptor,
-    render::{frame_graph::FrameGraphError, Context, Frame, FrameGraphLoader, Model, Pipeline, Shader, Texture},
+    render::{Context, Frame, RenderResources},
     GameView,
 };
-use shine_ecs::core::store;
 
 #[derive(Debug)]
 pub enum RenderError {
@@ -11,19 +10,15 @@ pub enum RenderError {
     Output,
     GraphNotReady,
     GraphError,
-    MissingPass(String),
-}
-
-impl From<FrameGraphError> for RenderError {
-    fn from(err: FrameGraphError) -> RenderError {
-        RenderError::GraphError
-    }
+    GraphInconsistency,
+    MissingFramePass(String),
 }
 
 pub trait RenderPlugin {
     fn add_render_plugin(&mut self, context: Context) -> Result<(), RenderError>;
     //fn remove_render_plugin(&mut self) -> Result<(), RenderError>;
-    //fn set_frame_graph(&mut self, graph_id: Option<String>);
+    //fn load_frame_graph(&mut self, graph_id: String);
+    fn set_frame_graph(&mut self, graph: FrameGraphDescriptor) -> Result<(), RenderError>;
     fn render(&mut self, size: (u32, u32)) -> Result<(), RenderError>;
 }
 
@@ -50,21 +45,16 @@ impl RenderPlugin for GameView {
     fn add_render_plugin(&mut self, context: Context) -> Result<(), RenderError> {
         log::info!("Adding render plugin");
 
-        
         self.resources.insert(context);
         self.resources.insert(Frame::new());
-        self.resources.insert(FrameGraphLoader::new());
-
-        self.resources
-            .insert(store::async_load::<Shader, _>(16, self.assetio.clone()));
-        self.resources
-            .insert(store::async_load::<Texture, _>(16, self.assetio.clone()));
-        self.resources
-            .insert(store::async_load::<Pipeline, _>(16, self.assetio.clone()));
-        self.resources
-            .insert(store::async_load::<Model, _>(16, self.assetio.clone()));
+        self.resources.insert(RenderResources::new(&self.assetio));
 
         Ok(())
+    }
+
+    fn set_frame_graph(&mut self, graph: FrameGraphDescriptor) -> Result<(), RenderError> {
+        let mut frame = self.resources.get_mut::<Frame>().unwrap();
+        frame.set_frame_graph(graph)
     }
 
     fn render(&mut self, size: (u32, u32)) -> Result<(), RenderError> {

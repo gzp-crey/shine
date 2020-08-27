@@ -182,28 +182,6 @@ pub type TextureStore = Store<Texture, AsyncLoadHandler<Texture>>;
 pub type TextureStoreRead<'a> = ReadGuard<'a, Texture, AsyncLoadHandler<Texture>>;
 pub type TextureIndex = Index<Texture>;
 
-pub mod systems {
-    use super::*;
-    use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
-
-    pub fn update_textures() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_texture")
-            .read_resource::<Context>()
-            .write_resource::<TextureStore>()
-            .build(move |_, _, (context, textures), _| {
-                textures.load_and_finalize_requests((&*context,));
-            })
-    }
-
-    pub fn gc_textures() -> Box<dyn Schedulable> {
-        SystemBuilder::new("gc_texture")
-            .write_resource::<TextureStore>()
-            .build(move |_, _, textures, _| {
-                textures.drain_unused();
-            })
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct TextureDependencyError;
 

@@ -368,30 +368,6 @@ pub type PipelineStore = Store<Pipeline, AsyncLoadHandler<Pipeline>>;
 pub type PipelineStoreRead<'a> = ReadGuard<'a, Pipeline, AsyncLoadHandler<Pipeline>>;
 pub type PipelineIndex = Index<Pipeline>;
 
-pub mod systems {
-    use super::*;
-    use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
-
-    pub fn update_pipelines() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_pipelines")
-            .read_resource::<Context>()
-            .read_resource::<ShaderStore>()
-            .write_resource::<PipelineStore>()
-            .build(move |_, _, (context, shaders, pipelines), _| {
-                //log::info!("pipeline");
-                pipelines.load_and_finalize_requests((&*context, &*shaders));
-            })
-    }
-
-    pub fn gc_pipelines() -> Box<dyn Schedulable> {
-        SystemBuilder::new("gc_pipelines")
-            .write_resource::<PipelineStore>()
-            .build(move |_, _, pipelines, _| {
-                pipelines.drain_unused();
-            })
-    }
-}
-
 /// Error indicating a failed pipeline dependency request.
 pub struct PipelineDependencyError;
 

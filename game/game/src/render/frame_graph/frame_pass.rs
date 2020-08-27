@@ -5,7 +5,7 @@ use crate::{
             frame_target::{FrameTargetIndex, FrameTargetIndexRelocation, FrameTargets},
             render_pass::RenderPass,
         },
-        Compile, FrameGraphError, RenderError,
+        Compile, RenderError,
     },
 };
 
@@ -32,7 +32,7 @@ impl FramePassOutput {
         self.resolved = None;
     }
 
-    fn check_dirty_with_index_relocation(&mut self, targets: &FrameTargets) -> Result<bool, FrameGraphError> {
+    fn check_dirty_with_index_relocation(&mut self, targets: &FrameTargets) -> Result<bool, RenderError> {
         if let Some(resolved) = &mut self.resolved {
             if let Some(depth_target) = &mut resolved.depth_target_index {
                 let depth_target_name = self.descriptor.depth.as_ref().map(|depth| &depth.target).unwrap();
@@ -59,7 +59,7 @@ impl FramePassOutput {
                             "FrameTarget {} removed, while a FramePassOutput still references it (depth)",
                             depth_target_name
                         );
-                        return Err(FrameGraphError);
+                        return Err(RenderError::GraphInconsistency);
                     }
                 };
             }
@@ -92,7 +92,7 @@ impl FramePassOutput {
                             color_target_name,
                             color_idx
                         );
-                        return Err(FrameGraphError);
+                        return Err(RenderError::GraphInconsistency);
                     }
                 };
             }
@@ -102,7 +102,7 @@ impl FramePassOutput {
         }
     }
 
-    fn resolve(&mut self, targets: &FrameTargets) -> Result<(), FrameGraphError> {
+    fn resolve(&mut self, targets: &FrameTargets) -> Result<(), RenderError> {
         if !self.check_dirty_with_index_relocation(targets)? {
             return Ok(());
         }
@@ -111,7 +111,7 @@ impl FramePassOutput {
         let (depth_state, depth_target_index) = if let Some(depth) = &self.descriptor.depth {
             let target_index = targets.find_target_index(&depth.target).ok_or_else(|| {
                 log::error!("FrameTarget {} not found forFramePassOutput (depth)", depth.target);
-                FrameGraphError
+                RenderError::GraphInconsistency
             })?;
 
             let state = wgpu::DepthStencilStateDescriptor {
@@ -137,7 +137,7 @@ impl FramePassOutput {
         for color in self.descriptor.colors.iter() {
             let target_index = targets.find_target_index(&color.target).ok_or_else(|| {
                 log::error!("FrameTarget {} not found for FramePassOutput (color)", color.target);
-                FrameGraphError
+                RenderError::GraphInconsistency
             })?;
 
             let state = wgpu::ColorStateDescriptor {
@@ -186,7 +186,7 @@ impl FramePassInput {
         self.resolved = None;
     }
 
-    fn check_dirty_with_index_relocation(&mut self, targets: &FrameTargets) -> Result<bool, FrameGraphError> {
+    fn check_dirty_with_index_relocation(&mut self, targets: &FrameTargets) -> Result<bool, RenderError> {
         if let Some(resolved) = &mut self.resolved {
             match targets.relocate_target_index(&resolved.target_index, &self.descriptor.target) {
                 FrameTargetIndexRelocation::Current(index) => {
@@ -211,7 +211,7 @@ impl FramePassInput {
                         "FrameTarget {} removed, while a FramePassInput still references it",
                         self.descriptor.target,
                     );
-                    return Err(FrameGraphError);
+                    return Err(RenderError::GraphInconsistency);
                 }
             };
 
@@ -221,14 +221,14 @@ impl FramePassInput {
         }
     }
 
-    fn resolve(&mut self, device: &wgpu::Device, targets: &FrameTargets) -> Result<(), FrameGraphError> {
+    fn resolve(&mut self, device: &wgpu::Device, targets: &FrameTargets) -> Result<(), RenderError> {
         if !self.check_dirty_with_index_relocation(targets)? {
             return Ok(());
         }
 
         let target_index = targets.find_target_index(&self.descriptor.target).ok_or_else(|| {
             log::error!("FrameTarget {} not found for FramePassInput", self.descriptor.target);
-            FrameGraphError
+            RenderError::GraphInconsistency
         })?;
         let sampler = self.descriptor.sampler.compile(device, ());
         self.resolved = Some(ResolvedFramePassInput { target_index, sampler });
@@ -244,12 +244,12 @@ pub struct FramePass {
 }
 
 impl FramePass {
-    fn create(name: &str, descriptor: FramePassDescriptor) -> FramePass {
+    fn create(name: String, descriptor: FramePassDescriptor) -> FramePass {
         let FramePassDescriptor { inputs, output } = descriptor;
         let inputs = inputs.into_iter().map(|input| FramePassInput::create(input)).collect();
         let output = FramePassOutput::create(output);
         FramePass {
-            name: name.to_owned(),
+            name,
             inputs,
             output,
             generation: 0,
@@ -263,7 +263,7 @@ impl FramePass {
         self.output.release();
     }
 
-    fn resolve(&mut self, device: &wgpu::Device, targets: &FrameTargets) -> Result<(), FrameGraphError> {
+    fn resolve(&mut self, device: &wgpu::Device, targets: &FrameTargets) -> Result<(), RenderError> {
         for input in self.inputs.iter_mut() {
             input.resolve(device, targets)?;
         }
@@ -296,25 +296,30 @@ impl FramePasses {
         }
     }
 
-    pub fn add_pass(&mut self, name: &str, descriptor: FramePassDescriptor) -> Result<(), FrameGraphError> {
-        if self.find_pass_index(name).is_some() {
+    pub fn add_pass(&mut self, name: String, descriptor: FramePassDescriptor) -> Result<(), RenderError> {
+        if self.find_pass_index(&name).is_some() {
             log::error!("FramePass {} alread exists", name);
-            Err(FrameGraphError)
+            Err(RenderError::GraphInconsistency)
         } else {
             self.passes.push(FramePass::create(name, descriptor));
             Ok(())
         }
     }
 
-    pub fn remove_pass(&mut self, name: &str) -> Result<(), FrameGraphError> {
+    pub fn remove_pass(&mut self, name: &str) -> Result<(), RenderError> {
         let len = self.passes.len();
         self.passes.retain(|pass| pass.name != name);
         if len == self.passes.len() {
             log::error!("FramePass {} not found", name);
-            Err(FrameGraphError)
+            Err(RenderError::GraphInconsistency)
         } else {
             Ok(())
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.generation += 1;
+        self.passes.clear();
     }
 
     pub fn find_pass_index(&self, pass_name: &str) -> Option<usize> {
@@ -327,7 +332,7 @@ impl FramePasses {
         }
     }
 
-    pub fn resolve(&mut self, device: &wgpu::Device, targets: &FrameTargets) -> Result<(), FrameGraphError> {
+    pub fn resolve(&mut self, device: &wgpu::Device, targets: &FrameTargets) -> Result<(), RenderError> {
         for pass in self.passes.iter_mut() {
             pass.resolve(device, targets)?;
         }
@@ -397,7 +402,7 @@ impl FramePasses {
             Ok(RenderPass::new(render_pass, pipeline_state, &targets))
         } else {
             //log::warn!("No [{}] pass was found", pass);
-            Err(RenderError::MissingPass(pass_name.to_owned()))
+            Err(RenderError::MissingFramePass(pass_name.to_owned()))
         }
     }
 }

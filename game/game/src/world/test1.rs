@@ -1,6 +1,6 @@
 use crate::{
-    assets::vertex,
-    render::{Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, DEFAULT_PASS},
+    assets::{vertex, FrameGraphDescriptor},
+    render::{Context, Frame, PipelineBindGroup, PipelineDependency, RenderPlugin, RenderResources},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -25,6 +25,7 @@ impl GameLoadWorld for Test1World {
     fn build(source: Test1, game: &mut GameView) -> Result<Test1World, GameError> {
         log::info!("Adding test1 scene to the world");
 
+        game.set_frame_graph(FrameGraphDescriptor::single_pass())?;
         game.resources.insert(TestScene::new(source));
 
         let render = Schedule::builder().add_system(render_test()).flush().build();
@@ -66,22 +67,28 @@ impl TestScene {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         frame: &Frame,
-        pipelines: &PipelineStoreRead<'_>,
+        resources: &RenderResources,
     ) {
-        if let Ok(mut pass) = frame.begin_pass(encoder, DEFAULT_PASS) {
-            self.pipeline.or_state(pass.get_pipeline_state());
-            if let Ok(Some(pipeline)) = self.pipeline.request(pipelines) {
-                if self.bind_group.is_none() {
-                    self.bind_group = Some(pipeline.create_bind_groups(
-                        device,
-                        |_| unreachable!(),
-                        |_| unreachable!(),
-                        |_| unreachable!(),
-                    ));
-                }
+        let pipelines = resources.pipelines.read();
+        match frame.begin_pass(encoder, FrameGraphDescriptor::SINGLE_PASS_NAME) {
+            Ok(mut pass) => {
+                self.pipeline.or_state(pass.get_pipeline_state());
+                if let Ok(Some(pipeline)) = self.pipeline.request(&pipelines) {
+                    if self.bind_group.is_none() {
+                        self.bind_group = Some(pipeline.create_bind_groups(
+                            device,
+                            |_| unreachable!(),
+                            |_| unreachable!(),
+                            |_| unreachable!(),
+                        ));
+                    }
 
-                pass.set_pipeline(&pipeline, self.bind_group.as_ref().unwrap());
-                pass.draw(0..3, 0..1);
+                    pass.set_pipeline(&pipeline, self.bind_group.as_ref().unwrap());
+                    pass.draw(0..3, 0..1);
+                }
+            }
+            Err(err) => {
+                log::error!("render error: {:?}", err);
             }
         }
     }
@@ -91,13 +98,13 @@ fn render_test() -> Box<dyn Schedulable> {
     SystemBuilder::new("test_render")
         .read_resource::<Context>()
         .read_resource::<Frame>()
-        .read_resource::<PipelineStore>()
+        .read_resource::<RenderResources>()
         .write_resource::<TestScene>()
-        .build(move |_, _, (context, frame, pipelines, scene), _| {
+        .build(move |_, _, (context, frame, resources, scene), _| {
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(context.device(), &mut encoder, &*frame, &pipelines.read());
+            scene.render(context.device(), &mut encoder, &frame, &resources);
 
             frame.add_command(encoder.finish());
         })

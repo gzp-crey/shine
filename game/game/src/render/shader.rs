@@ -169,28 +169,6 @@ pub type ShaderStore = Store<Shader, AsyncLoadHandler<Shader>>;
 pub type ShaderStoreRead<'a> = ReadGuard<'a, Shader, AsyncLoadHandler<Shader>>;
 pub type ShaderIndex = Index<Shader>;
 
-pub mod systems {
-    use super::*;
-    use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
-
-    pub fn update_shaders() -> Box<dyn Schedulable> {
-        SystemBuilder::new("update_shaders")
-            .read_resource::<Context>()
-            .write_resource::<ShaderStore>()
-            .build(move |_, _, (context, shaders), _| {
-                shaders.load_and_finalize_requests((&*context,));
-            })
-    }
-
-    pub fn gc_shaders() -> Box<dyn Schedulable> {
-        SystemBuilder::new("gc_shaders")
-            .write_resource::<ShaderStore>()
-            .build(move |_, _, shaders, _| {
-                shaders.drain_unused();
-            })
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ShaderDependencyError;
 

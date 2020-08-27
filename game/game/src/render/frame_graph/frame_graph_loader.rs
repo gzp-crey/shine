@@ -22,7 +22,7 @@ impl FrameGraphLoader {
 
     pub fn request_single_pass(&mut self) {
         self.descriptor_loader = None;
-        self.descriptor = Some(FrameGraphDescriptor::single_pass());
+        self.descriptor = Some(Ok(FrameGraphDescriptor::single_pass()));
         self.is_activated = false;
     }
 

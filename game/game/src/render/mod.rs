@@ -33,10 +33,7 @@ pub use self::model::{Model, ModelError, ModelIndex, ModelKey, ModelStore, Model
 mod frame_graph;
 pub use self::frame_graph::*;
 
-pub mod systems {
-    //pub use super::frame_graph::systems::*;
-    pub use super::model::systems::*;
-    pub use super::pipeline::systems::*;
-    pub use super::shader::systems::*;
-    pub use super::texture::systems::*;
-}
+mod render_resources;
+pub use self::render_resources::*;
+
+pub mod systems;

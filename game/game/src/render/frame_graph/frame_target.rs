@@ -1,7 +1,7 @@
 use crate::{
     assets::RenderTargetDescriptor,
     render::{
-        frame_graph::frame_pass::FramePasses, Compile, CompiledRenderTarget, FrameGraphError, FrameOutput,
+        frame_graph::frame_pass::FramePasses, Compile, CompiledRenderTarget, FrameOutput, RenderError,
         RenderTargetCompileExtra,
     },
 };
@@ -40,9 +40,9 @@ struct FrameTarget {
 }
 
 impl FrameTarget {
-    fn create(name: &str, descriptor: RenderTargetDescriptor, initial_generation: usize) -> FrameTarget {
+    fn create(name: String, descriptor: RenderTargetDescriptor, initial_generation: usize) -> FrameTarget {
         FrameTarget {
-            name: name.to_owned(),
+            name,
             descriptor,
             generation: initial_generation,
             resolved: None,
@@ -65,12 +65,7 @@ impl FrameTarget {
         }
     }
 
-    fn resolve(
-        &mut self,
-        device: &wgpu::Device,
-        frame_size: (u32, u32),
-        is_sampled: bool,
-    ) -> Result<(), FrameGraphError> {
+    fn resolve(&mut self, device: &wgpu::Device, frame_size: (u32, u32), is_sampled: bool) -> Result<(), RenderError> {
         if self.is_dirty(frame_size, is_sampled) {
             let compile_args = RenderTargetCompileExtra {
                 frame_size: frame_size,
@@ -117,23 +112,23 @@ impl FrameTargets {
             .unwrap_or((0, 0))
     }
 
-    pub fn add_target(&mut self, name: &str, descriptor: RenderTargetDescriptor) -> Result<(), FrameGraphError> {
-        if self.find_target_index(name).is_some() {
+    pub fn add_target(&mut self, name: String, descriptor: RenderTargetDescriptor) -> Result<(), RenderError> {
+        if self.find_target_index(&name).is_some() {
             log::error!("FrameTarget {} alread exists", name);
-            Err(FrameGraphError)
+            Err(RenderError::GraphInconsistency)
         } else if name == "FRAME" {
             log::error!("FrameTarget {} alread exists, it is the surface output", name);
-            Err(FrameGraphError)
+            Err(RenderError::GraphInconsistency)
         } else {
             self.generation += 1;
-            let target_generation = self.target_generation_start.remove(name).unwrap_or(0);
+            let target_generation = self.target_generation_start.remove(&name).unwrap_or(0);
             self.targets
                 .push(FrameTarget::create(name, descriptor, target_generation));
             Ok(())
         }
     }
 
-    pub fn remove_target(&mut self, name: &str) -> Result<(), FrameGraphError> {
+    pub fn remove_target(&mut self, name: &str) -> Result<(), RenderError> {
         let len = self.targets.len();
         let target_generation_start = &mut self.target_generation_start;
         self.targets.retain(|target| {
@@ -149,7 +144,7 @@ impl FrameTargets {
 
         if len == self.targets.len() {
             log::error!("FrameTarget {} not found", name);
-            Err(FrameGraphError)
+            Err(RenderError::GraphInconsistency)
         } else {
             self.generation += 1;
             Ok(())
@@ -167,7 +162,7 @@ impl FrameTargets {
         }
     }
 
-    pub fn resolve(&mut self, device: &wgpu::Device, passes: &FramePasses) -> Result<(), FrameGraphError> {
+    pub fn resolve(&mut self, device: &wgpu::Device, passes: &FramePasses) -> Result<(), RenderError> {
         let frame_size = self.frame_size();
 
         for target in self.targets.iter_mut() {

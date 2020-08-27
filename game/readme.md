@@ -20,8 +20,6 @@
 
 * [ ] frame graph parallel executor
 
-* [ ] Use RenderError instead of FrameGraphError
-
 * [ ] pipeline color/depth stage should depend on the render target
 
 * [ ] AUTO_UNIFORM those are bound automaically during pipeline pass creation - no need for FrameTextures<'_>

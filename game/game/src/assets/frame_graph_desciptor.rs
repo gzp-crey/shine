@@ -61,12 +61,14 @@ pub struct FrameGraphDescriptor {
 }
 
 impl FrameGraphDescriptor {
+    pub const SINGLE_PASS_NAME: &'static str = "$";
+
     /// Construct a descriptor with a single pass. Usually used for test cases.
     pub fn single_pass() -> FrameGraphDescriptor {
         FrameGraphDescriptor {
             targets: HashMap::new(),
             passes: [(
-                "$".to_owned(),
+                Self::SINGLE_PASS_NAME.to_owned(),
                 FramePassDescriptor {
                     inputs: Vec::new(),
                     output: RenderAttachementDescriptor {

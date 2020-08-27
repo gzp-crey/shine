@@ -1,12 +1,9 @@
 use crate::{
     assets::{
         vertex::{self, Pos3fTex2f},
-        TextureSemantic, Uniform,
+        FrameGraphDescriptor, TextureSemantic, Uniform,
     },
-    render::{
-        Context, Frame, PipelineBindGroup, PipelineDependency, PipelineStore, PipelineStoreRead, TextureDependency,
-        TextureStore, TextureStoreRead, DEFAULT_PASS,
-    },
+    render::{Context, Frame, PipelineBindGroup, PipelineDependency, RenderPlugin, RenderResources, TextureDependency},
     world::{GameLoadWorld, GameUnloadWorld},
     GameError, GameView,
 };
@@ -59,6 +56,7 @@ impl GameLoadWorld for Test3World {
     fn build(source: Test3, game: &mut GameView) -> Result<Test3World, GameError> {
         log::info!("Adding test3 scene to the world");
 
+        game.set_frame_graph(FrameGraphDescriptor::single_pass())?;
         game.resources.insert(TestScene::new(source));
 
         game.schedules.insert(
@@ -130,16 +128,18 @@ impl TestScene {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         frame: &Frame,
-        pipelines: &PipelineStoreRead<'_>,
-        textures: &TextureStoreRead<'_>,
+        resources: &RenderResources,
     ) {
-        if let Ok(mut pass) = frame.begin_pass(encoder, DEFAULT_PASS) {
+        let pipelines = resources.pipelines.read();
+        let textures = resources.textures.read();
+
+        if let Ok(mut pass) = frame.begin_pass(encoder, FrameGraphDescriptor::SINGLE_PASS_NAME) {
             self.pipeline.or_state(pass.get_pipeline_state());
 
             if let (Some(ref buffers), Ok(Some(pipeline)), Ok(Some(texture))) = (
                 &self.buffers,
-                self.pipeline.request(pipelines),
-                self.texture.request(textures),
+                self.pipeline.request(&pipelines),
+                self.texture.request(&textures),
             ) {
                 if self.bind_group.is_none() {
                     self.bind_group = Some(pipeline.create_bind_groups(
@@ -180,22 +180,15 @@ fn render() -> Box<dyn Schedulable> {
     SystemBuilder::new("render")
         .read_resource::<Context>()
         .read_resource::<Frame>()
-        .read_resource::<PipelineStore>()
-        .read_resource::<TextureStore>()
+        .read_resource::<RenderResources>()
         .write_resource::<TestScene>()
-        .build(move |_, _, (context, frame, pipelines, textures, scene), _| {
+        .build(move |_, _, (context, frame, resources, scene), _| {
             scene.prepare(&context.device());
 
             let mut encoder = context
                 .device()
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            scene.render(
-                context.device(),
-                &mut encoder,
-                &frame,
-                &pipelines.read(),
-                &textures.read(),
-            );
+            scene.render(context.device(), &mut encoder, &frame, &resources);
 
             frame.add_command(encoder.finish());
         })

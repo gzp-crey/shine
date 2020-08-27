@@ -27,7 +27,7 @@ impl GameLoadWorld for Test5World {
     fn build(source: Test5, game: &mut GameView) -> Result<Test5World, GameError> {
         log::info!("Adding test5 scene to the world");
 
-        game.set_frame_graph(Some(source.frame_graph.clone()));
+        //game.set_frame_graph(Some(source.frame_graph.clone()));
         game.resources.insert(TestScene::new(source));
 
         let render = Schedule::builder().add_system(render_test()).flush().build();
@@ -41,7 +41,7 @@ impl GameUnloadWorld for Test5World {
     fn unload(&mut self, game: &mut GameView) -> Result<(), GameError> {
         log::info!("Removing test5 scene from the world");
 
-        game.set_frame_graph(None);
+        //game.set_frame_graph(None);
         game.schedules.remove("render");
         let _ = game.resources.remove::<TestScene>();
 

@@ -4,8 +4,6 @@ use crate::{
 };
 use std::ops::{Deref, DerefMut};
 
-pub const DEFAULT_PASS: &str = "$";
-
 pub struct RenderPass<'r> {
     targets: &'r FrameTargets,
     pipeline_state: &'r PipelineStateDescriptor,
