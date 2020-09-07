@@ -5,5 +5,8 @@
 #![allow(clippy::module_inception)]
 
 pub mod core;
+pub mod resources;
+pub mod scheduler;
+pub mod utils;
 
-pub use legion;
+pub use hecs;

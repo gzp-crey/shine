@@ -1,7 +1,4 @@
-use crate::{
-    render::{FrameOutput, RenderError, Surface},
-    Config,
-};
+use crate::render::{FrameOutput, RenderConfig, RenderError, Surface};
 
 /// Thread safe rendering context.
 pub struct Context {
@@ -13,7 +10,11 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn new(instance: wgpu::Instance, surface: &Surface, config: &Config) -> Result<Context, RenderError> {
+    pub async fn new(
+        instance: wgpu::Instance,
+        surface: &Surface,
+        config: &RenderConfig,
+    ) -> Result<Context, RenderError> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::Default,

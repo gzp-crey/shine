@@ -1,13 +1,13 @@
 #![feature(async_closure)]
 
 use shine_game::{
-    assets::Url,
+    assets::{AssetPlugin, Url},
     input::InputPlugin,
-    render::Surface,
+    render::{RenderPlugin, Surface},
     wgpu,
-    world::{
+    /*world::{
         test1::Test1World, test2::Test2World, test3::Test3World, test4::Test4World, test5::Test5World, WorldSystem,
-    },
+    },*/
     Config, GameError, GameView,
 };
 use std::time::{Duration, Instant};
@@ -38,7 +38,7 @@ async fn logic(event_loop_proxy: EventLoopProxy<CustomEvent>) {
 }
 
 fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url, gc: bool) -> Result<(), GameError> {
-    use shine_game::world::WorldData;
+    /*use shine_game::world::WorldData;
     let world_data = rt
         .block_on(WorldData::from_url(&game.assetio, url))
         .map_err(|err| GameError::Config(format!("Failed to load world: {}", err)))?;
@@ -51,15 +51,15 @@ fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url, gc: bool) -> R
     }
     if gc {
         game.gc();
-    }
+    }*/
     Ok(())
 }
 
 fn unload_world(_rt: &RuntimeHandle, game: &mut GameView, gc: bool) -> Result<(), GameError> {
-    game.unload_world()?;
+    /*game.unload_world()?;
     if gc {
         game.gc();
-    }
+    }*/
     Ok(())
 }
 
@@ -85,7 +85,16 @@ async fn run() {
         let test3_url = Url::parse("world://test_worlds/test3/test.wrld").unwrap();
         let test4_url = Url::parse("world://test_worlds/test4/test.wrld").unwrap();
         let test5_url = Url::parse("world://test_worlds/test5/test.wrld").unwrap();
-        let mut game = rt.block_on(GameView::new(config, wgpu_instance, surface)).unwrap();
+        let mut game = rt
+            .block_on(async move {
+                let mut game = GameView::new();
+                game.add_asset_plugin(config.asset.clone()).await?;
+                game.add_render_plugin(config.render.clone(), wgpu_instance, surface)
+                    .await?;
+                game.add_input_plugin().await?;
+                Ok::<_, GameError>(game)
+            })
+            .unwrap();
 
         let event_proxy = event_loop.create_proxy();
         tokio::task::spawn(logic(event_proxy));
@@ -125,7 +134,7 @@ async fn run() {
                                 Some(VirtualKeyCode::Key3) => load_world(&rt, &mut game, &test3_url, alt).unwrap(),
                                 Some(VirtualKeyCode::Key4) => load_world(&rt, &mut game, &test4_url, alt).unwrap(),
                                 Some(VirtualKeyCode::Key5) => load_world(&rt, &mut game, &test5_url, alt).unwrap(),
-                                Some(VirtualKeyCode::F9) => game.gc(),
+                                //Some(VirtualKeyCode::F9) => game.gc(),
                                 _ => {}
                             }
                         }
@@ -165,9 +174,9 @@ async fn run() {
             } else {
                 // no time left
                 //log::trace!("elapsed time since last render: {} ({})", elapsed_time, 1000./(elapsed_time as f64));
-                if let Err(err) = game.refresh(size) {
+                /*if let Err(err) = game.refresh(size) {
                     log::warn!("Failed to render: {:?}", err);
-                }
+                }*/
                 //flame::end("frame");
                 //flame::start("frame");
                 *control_flow = ControlFlow::Poll;

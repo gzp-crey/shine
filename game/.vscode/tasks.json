@@ -226,6 +226,7 @@
                 "test",
                 "--features",
                 "native",
+                //"--test", "interval_id",
                 "--",
                 //"--nocapture",
                 "--test-threads=1"

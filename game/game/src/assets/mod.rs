@@ -7,6 +7,8 @@ mod url;
 pub use self::url::*;
 mod assetio;
 pub use self::assetio::*;
+mod plugin;
+pub use self::plugin::*;
 
 mod vertex_descriptor;
 pub use self::vertex_descriptor::*;

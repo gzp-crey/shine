@@ -33,6 +33,7 @@ base64 = "0.12"
 ring = "0.16"
 data-encoding = "2.2"
 itertools = "0.9"
+async-trait = "0.1"
 
 image = {version = "0.23", features = ["jpeg"] }
 nalgebra = "0.21"

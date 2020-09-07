@@ -6,7 +6,7 @@ edition = "2018"
 
 [features]
 default= []
-native = ["legion/par-iter", "legion/par-schedule", "legion/ffi", "tokio"]
+native = ["tokio"]
 wasm = ["wasm-bindgen-futures"]
 
 [dependencies]
@@ -14,7 +14,7 @@ log = "0.4"
 futures = "0.3"
 
 serde = "1.0"
-legion = {git = "https://github.com/TomGillen/legion.git", rev="80a3d15c2dbb293052f10d196fdfb656cbb54f68", default-features = false}
+downcast-rs = "1.2"
 hecs = "0.2"
 fxhash = "0.2"
 

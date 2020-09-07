@@ -1,16 +1,13 @@
-use crate::{assets::Url, GameError};
+use crate::{assets::AssetConfig, render::RenderConfig, GameError};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 use std::str::FromStr;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub virtual_schemes: HashMap<String, Url>,
-    pub swap_chain_format: wgpu::TextureFormat,
-    pub enable_validation: bool,
-    pub wgpu_trace: Option<String>,
+    pub asset: AssetConfig,
+    pub render: RenderConfig,
 }
 
 impl Config {
@@ -19,8 +16,10 @@ impl Config {
 
         s.merge(File::from_str(
             r#"{
-                "swap_chain_format": "Bgra8UnormSrgb",
-                "enable_validation": false
+                "render": {
+                    "swap_chain_format": "Bgra8UnormSrgb",
+                    "enable_validation": false
+                }
             }"#,
             FileFormat::Json,
         ))

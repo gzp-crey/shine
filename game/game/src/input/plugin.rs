@@ -2,14 +2,12 @@ use crate::{
     input::{mapper, GameInput, InputEvent},
     GameView,
 };
-use shine_ecs::{
-    legion::query::{Read, Write},
-    legion::systems::resource::ResourceSet,
-};
 use shine_input::{GuestureManager, InputManager, InputState};
 use std::{
     any::Any,
+    future::Future,
     ops::{Deref, DerefMut},
+    pin::Pin,
 };
 
 /// The input state for the current frame.
@@ -89,34 +87,45 @@ impl InputHandler {
 #[derive(Debug)]
 pub struct InputError;
 
+pub type InputFuture<'a, R> = Pin<Box<dyn Future<Output = R> + 'a>>;
+
 pub trait InputPlugin {
-    fn add_input_plugin(&mut self) -> Result<(), InputError>;
-    fn remove_input_plugin(&mut self) -> Result<(), InputError>;
+    /// Add input handler plugin to the world
+    fn add_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>>;
+
+    /// Remove input handler plugin from the world
+    fn remove_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>>;
 
     fn set_input<I: GameInput>(&mut self, input: I) -> Result<(), InputError>;
     fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), InputError>;
 }
 
 impl InputPlugin for GameView {
-    fn add_input_plugin(&mut self) -> Result<(), InputError> {
-        log::info!("Adding input plugin");
-        self.resources.insert(InputHandler::new());
-        self.resources.insert(CurrentInputState::new());
-        self.resources.insert(InputMapper::new(mapper::Unmapped));
-        Ok(())
+    fn add_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>> {
+        Box::pin(async move {
+            log::info!("Adding input plugin");
+            self.resources.insert(None, InputHandler::new());
+            self.resources.insert(None, CurrentInputState::new());
+            self.resources.insert(None, InputMapper::new(mapper::Unmapped));
+            Ok(())
+        })
     }
 
-    fn remove_input_plugin(&mut self) -> Result<(), InputError> {
-        log::info!("Removing input plugin");
-        let _ = self.resources.remove::<InputHandler>();
-        let _ = self.resources.remove::<CurrentInputState>();
-        let _ = self.resources.remove::<InputMapper>();
-        Ok(())
+    fn remove_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>> {
+        Box::pin(async move {
+            log::info!("Removing input plugin");
+            let _ = self.resources.remove::<InputHandler>(None);
+            let _ = self.resources.remove::<CurrentInputState>(None);
+            let _ = self.resources.remove::<InputMapper>(None);
+            Ok(())
+        })
     }
 
     fn set_input<I: GameInput>(&mut self, input: I) -> Result<(), InputError> {
-        let (mut mapper, mut handler, mut state) =
-            <(Write<InputMapper>, Write<InputHandler>, Write<CurrentInputState>)>::fetch_mut(&mut self.resources);
+        let mut mapper = self.resources.get_mut::<InputMapper>(None).unwrap();
+        let mut handler = self.resources.get_mut::<InputHandler>(None).unwrap();
+        let mut state = self.resources.get_mut::<CurrentInputState>(None).unwrap();
+
         *handler = InputHandler::new();
         *state = CurrentInputState::new();
         input.init_guestures(&mut handler.guestures);
@@ -125,7 +134,9 @@ impl InputPlugin for GameView {
     }
 
     fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), InputError> {
-        let (mapper, mut handler) = <(Read<InputMapper>, Write<InputHandler>)>::fetch_mut(&mut self.resources);
+        let mapper = self.resources.get::<InputMapper>(None).unwrap();
+        let mut handler = self.resources.get_mut::<InputHandler>(None).unwrap();
+
         handler.inject_input(&mapper, event.into());
         Ok(())
     }
