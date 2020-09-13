@@ -44,6 +44,10 @@ impl<'a, T: Resource> MultiRes<'a, T> {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl<'a, T: Resource> Index<usize> for MultiRes<'a, T> {
@@ -60,6 +64,10 @@ pub struct MultiResMut<'a, T: Resource>(pub(crate) MultiResourceWrite<'a, T>);
 impl<'a, T: Resource> MultiResMut<'a, T> {
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 

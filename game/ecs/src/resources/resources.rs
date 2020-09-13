@@ -142,6 +142,10 @@ impl<'a, T: Resource> MultiResourceRead<'a, T> {
     pub fn len(&self) -> usize {
         self.inner.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
 impl<'a, T: Resource> Index<usize> for MultiResourceRead<'a, T> {
@@ -167,6 +171,10 @@ pub struct MultiResourceWrite<'a, T: Resource> {
 impl<'a, T: Resource> MultiResourceWrite<'a, T> {
     pub fn len(&self) -> usize {
         self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 }
 
@@ -338,14 +346,14 @@ impl Resources {
     ///
     /// # Returns
     /// If the type `T` was stored, the inner instance of `T is returned. Otherwise, `None`.
-    pub fn remove<T: Resource>(&mut self, name: Option<ResourceName>) -> Option<T> {
+    pub fn remove<T: Resource>(&mut self, name: &Option<ResourceName>) -> Option<T> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
             let resource = self
                 .internal
-                .remove(&ResourceIndex::of::<T>(name.map(|n| n.to_owned())))?
+                .remove(&ResourceIndex::of::<T>(name.as_ref().map(|n| n.to_owned())))?
                 .downcast::<T>()
                 .ok()?;
             Some(*resource)

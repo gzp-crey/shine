@@ -1,5 +1,5 @@
 use permutohedron::Heap;
-use shine_ecs::scheduler::IntervalStore;
+use shine_ecs::core::ids::IntervalStore;
 
 mod utils;
 

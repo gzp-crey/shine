@@ -35,11 +35,11 @@ fn simple_read_write_test() {
 
     resources.insert(None, NotSync { ptr: std::ptr::null() });
 
-    assert_eq!(resources.get::<TestOne>(None).unwrap().value, "one");
-    assert_eq!(resources.get::<TestTwo>(None).unwrap().value, "two");
-    assert_eq!(resources.get::<NotSync>(None).unwrap().ptr, std::ptr::null());
+    assert_eq!(resources.get::<TestOne>(&None).unwrap().value, "one");
+    assert_eq!(resources.get::<TestTwo>(&None).unwrap().value, "two");
+    assert_eq!(resources.get::<NotSync>(&None).unwrap().ptr, std::ptr::null());
 
     // test re-ownership
-    let owned = resources.remove::<TestTwo>(None);
+    let owned = resources.remove::<TestTwo>(&None);
     assert_eq!(owned.unwrap().value, "two");
 }

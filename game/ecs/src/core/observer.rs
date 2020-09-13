@@ -84,35 +84,3 @@ impl<E> Default for ObserveDispatcher<E> {
         Self::new()
     }
 }
-/*
-/// Keep track of the active and requested subscriptions.
-pub struct SubscriptionRequest<E> {
-    request: Option<ObserverStrong<E>>,
-    active: Option<Subscription<E>>,
-}
-
-impl<E> SubscriptionRequest<E> {
-    /// Cancel the active subscription by dropping the reference.
-    pub fn with_unsubscribe(self) -> SubscriptionRequest<E> {
-        SubscriptionRequest { active: None, ..self }
-    }
-
-    /// Change requested observer.
-    pub fn with_request<T>(self, observer: T) -> SubscriptionRequest<E>
-    where
-        T: 'static + Fn(&E) -> ObserverResult,
-    {
-        SubscriptionRequest {
-            request: Some(Arc::from(observer)),
-            ..self
-        }
-    }
-
-    /// Replace the subscription.
-    pub fn subscribe(&mut self, dispatcher: &ObserveDispatcher<E>) {
-        if let Some(observer) = self.request.take() {
-            self.active = Some(dispatcher.subscribe_impl(observer));
-        }
-    }
-}
-*/

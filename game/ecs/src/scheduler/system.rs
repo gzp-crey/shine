@@ -1,12 +1,15 @@
-use crate::resources::{
-    FetchResource, MultiResourceClaims, Resource, ResourceAccess, ResourceName, ResourceQuery, Resources,
+use crate::{
+    core::ids::SmallStringId,
+    resources::{FetchResource, MultiResourceClaims, ResourceAccess, ResourceName, ResourceQuery, Resources},
 };
 use std::{any, borrow::Cow};
+
+pub type SystemName = SmallStringId<16>;
 
 /// Systems scheduled for execution
 pub trait System: Send + Sync {
     fn type_name(&self) -> Cow<'static, str>;
-    fn name(&self) -> Option<&str>;
+    fn name(&self) -> &Option<SystemName>;
     fn resource_access(&self) -> &ResourceAccess;
     fn run(&mut self, resources: &Resources);
 }
@@ -28,14 +31,15 @@ pub trait IntoSystemConfiguration<State, R> {
 
 pub struct SystemConfiguration<Func, R> {
     func: Func,
-    name: Option<String>,
+    name: Option<SystemName>,
     multi_resource_claims: MultiResourceClaims,
+    dependencies: Vec<SystemName>,
     _phantom: std::marker::PhantomData<R>,
 }
 
 impl<Func, R> SystemConfiguration<Func, R> {
     #[must_use]
-    pub fn with_name<T: Resource>(mut self, name: Option<String>) -> Self {
+    pub fn with_name(mut self, name: Option<SystemName>) -> Self {
         self.name = name;
         self
     }
@@ -43,6 +47,12 @@ impl<Func, R> SystemConfiguration<Func, R> {
     #[must_use]
     pub fn with_resources<T: ResourceQuery>(mut self, names: &[Option<ResourceName>]) -> Self {
         <T as ResourceQuery>::add_claim(&mut self.multi_resource_claims, names);
+        self
+    }
+
+    #[must_use]
+    pub fn with_dependencies(mut self, names: &[SystemName]) -> Self {
+        self.dependencies.extend(names.iter().cloned());
         self
     }
 }
@@ -53,7 +63,7 @@ where
     State: Sync + Send,
 {
     type_name: Cow<'static, str>,
-    name: Option<String>,
+    name: Option<SystemName>,
     resource_access: ResourceAccess,
     state: State,
     func: Func,
@@ -68,8 +78,8 @@ where
         self.type_name.clone()
     }
 
-    fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+    fn name(&self) -> &Option<SystemName> {
+        &self.name
     }
 
     fn resource_access(&self) -> &ResourceAccess {
@@ -108,7 +118,8 @@ macro_rules! impl_into_system {
                 SystemConfiguration {
                     name: None,
                     func: self,
-                    multi_resource_claims: MultiResourceClaims::default(),
+                    multi_resource_claims: Default::default(),
+                    dependencies: Default::default(),
                     _phantom: std::marker::PhantomData,
                 }
             }

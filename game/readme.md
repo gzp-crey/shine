@@ -2,6 +2,10 @@
 
 ## TODO
 
+ * [ ] use thiserror:Error for better error types
+
+ * [ ] use default instead of new
+
 ### Game
 
 #### ecc based world
@@ -14,11 +18,7 @@
 
 #### render
 
-* [ ] frame graph order
-
-* [ ] frame graph scheduler
-
-* [ ] frame graph parallel executor
+* [ ] use resources to store render targets and use scheduler for render pass
 
 * [ ] pipeline color/depth stage should depend on the render target
 
