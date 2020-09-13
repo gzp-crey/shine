@@ -12,6 +12,7 @@ wasm = ["wasm-bindgen-futures"]
 [dependencies]
 log = "0.4"
 futures = "0.3"
+thiserror = "1.0"
 
 serde = "1.0"
 downcast-rs = "1.2"

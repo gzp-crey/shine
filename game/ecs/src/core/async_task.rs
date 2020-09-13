@@ -1,6 +1,6 @@
 use futures::{channel::oneshot, Future};
 
-pub struct Canceled;
+pub struct TaskCanceled;
 
 /// Send task into an async anvironment and poll for completion in non-async context using a oneshot channel
 pub struct AsyncTask<T> {
@@ -40,9 +40,9 @@ where
         AsyncTask { receiver }
     }
 
-    pub fn try_get(&mut self) -> Result<Option<T>, Canceled> {
+    pub fn try_get(&mut self) -> Result<Option<T>, TaskCanceled> {
         match self.receiver.try_recv() {
-            Err(_) => Err(Canceled),
+            Err(_) => Err(TaskCanceled),
             Ok(res) => Ok(res),
         }
     }

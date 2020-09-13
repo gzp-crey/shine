@@ -2514,6 +2514,7 @@ dependencies = [
  "permutohedron",
  "rand",
  "serde 1.0.115",
+ "thiserror",
  "tokio",
  "wasm-bindgen",
  "wasm-bindgen-futures",

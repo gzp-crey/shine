@@ -226,9 +226,9 @@
                 "test",
                 "--features",
                 "native",
-                //"--test", "interval_id",
+                "--test", "scheduler",
                 "--",
-                //"--nocapture",
+                "--nocapture",
                 "--test-threads=1"
             ],
             "options": {
@@ -292,7 +292,7 @@
                 "env": {
                     "RUST_BACKTRACE": "1"
                 },
-                "cwd": "${workspaceFolder}/game"
+                "cwd": "${workspaceFolder}/ecs"
             },
             "presentation": {
                 "echo": true,
