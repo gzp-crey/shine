@@ -1,7 +1,7 @@
 use crate::{
     assets::{
         AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, PipelineStateDescriptor, PipelineStateTypeId,
-        ShaderType, Url, UrlError, VertexBufferLayouts, VertexTypeId,
+        ShaderType, Url, VertexBufferLayouts, VertexTypeId,
     },
     render::{Compile, CompiledPipeline, Context, ShaderDependency, ShaderStore, ShaderStoreRead},
 };
@@ -239,7 +239,7 @@ impl OnLoad for Pipeline {
                         load_token,
                         desc.vertex_stage.shader
                     );
-                    self.vertex_shader = ShaderDependency::new()
+                    self.vertex_shader = ShaderDependency::default()
                         .with_type(ShaderType::Vertex)
                         .with_id(desc.vertex_stage.shader.clone());
                 }
@@ -254,7 +254,7 @@ impl OnLoad for Pipeline {
                         load_token,
                         desc.fragment_stage.shader
                     );
-                    self.fragment_shader = ShaderDependency::new()
+                    self.fragment_shader = ShaderDependency::default()
                         .with_type(ShaderType::Fragment)
                         .with_id(desc.fragment_stage.shader.clone());
                 }
@@ -284,14 +284,12 @@ impl OnLoad for Pipeline {
 
 pub struct PipelineLoadRequest(String);
 
-#[derive(Clone)]
 enum PipelineLoadResponseInner {
     PipelineDescriptor(Box<PipelineDescriptor>),
     ShaderReady(ShaderType),
     Error(PipelineLoadError),
 }
 
-#[derive(Clone)]
 pub struct PipelineLoadResponse(PipelineLoadResponseInner);
 
 impl PipelineLoadResponse {
@@ -301,16 +299,10 @@ impl PipelineLoadResponse {
 }
 
 /// Error during pipeline load
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum PipelineLoadError {
     Asset(AssetError),
     Canceled,
-}
-
-impl From<UrlError> for PipelineLoadError {
-    fn from(err: UrlError) -> PipelineLoadError {
-        PipelineLoadError::Asset(AssetError::InvalidUrl(err))
-    }
 }
 
 impl From<LoadCanceled> for PipelineLoadError {
@@ -325,23 +317,19 @@ impl From<AssetError> for PipelineLoadError {
     }
 }
 
-impl From<bincode::Error> for PipelineLoadError {
-    fn from(err: bincode::Error) -> PipelineLoadError {
-        PipelineLoadError::Asset(AssetError::ContentLoad(format!("Binary stream error: {}", err)))
-    }
-}
-
 impl AssetIO {
     async fn load_pipeline(
         &self,
         load_token: LoadToken<Pipeline>,
         source_id: String,
     ) -> Result<PipelineLoadResponseInner, PipelineLoadError> {
-        let url = Url::parse(&source_id)?;
         log::debug!("[{:?}] Loading pipeline...", load_token);
 
+        let url = Url::parse(&source_id).map_err(|err| AssetError::InvalidUrl(err))?;
         let data = self.download_binary(&url).await?;
-        let descriptor = bincode::deserialize::<PipelineDescriptor>(&data)?;
+        load_token.ok()?;
+        let descriptor = bincode::deserialize::<PipelineDescriptor>(&data)
+            .map_err(|err| AssetError::load_failed(url.as_str(), err))?;
         log::trace!("pipeline: {:#?}", descriptor);
 
         Ok(PipelineLoadResponseInner::PipelineDescriptor(Box::new(descriptor)))
@@ -387,6 +375,17 @@ pub struct PipelineDependency {
     index: PipelineDependencyIndex,
 }
 
+impl Default for PipelineDependency {
+    fn default() -> Self {
+        Self {
+            vertex_id: None,
+            state_id: None,
+            id: None,
+            index: PipelineDependencyIndex::Incomplete,
+        }
+    }
+}
+
 impl PipelineDependency {
     pub fn none() -> PipelineDependency {
         PipelineDependency {
@@ -394,15 +393,6 @@ impl PipelineDependency {
             state_id: None,
             id: None,
             index: PipelineDependencyIndex::None,
-        }
-    }
-
-    pub fn new() -> PipelineDependency {
-        PipelineDependency {
-            vertex_id: None,
-            state_id: None,
-            id: None,
-            index: PipelineDependencyIndex::Incomplete,
         }
     }
 
@@ -541,11 +531,5 @@ impl PipelineDependency {
         pipelines: &'r PipelineStoreRead<'c>,
     ) -> Result<Option<&'c CompiledPipeline>, PipelineDependencyError> {
         self.request_with(pipelines, |_| None)
-    }
-}
-
-impl Default for PipelineDependency {
-    fn default() -> Self {
-        Self::new()
     }
 }

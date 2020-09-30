@@ -1,4 +1,4 @@
-use crate::input::{CurrentInputState, GameInput, InputEvent};
+use crate::input::{CurrentInputState, InputEvent, InputMapper};
 use shine_input::{guestures, GuestureManager, InputId, InputIdGenerator, InputState, InputValue};
 use std::any::Any;
 
@@ -34,10 +34,11 @@ pub struct FirstPersonShooter {
     yaw_scale: f32,
 }
 
-impl FirstPersonShooter {
-    pub fn new() -> FirstPersonShooter {
-        let mut gen_id = InputIdGenerator::new();
-        FirstPersonShooter {
+impl Default for FirstPersonShooter {
+    fn default() -> Self {
+        let mut gen_id = InputIdGenerator::default();
+
+        Self {
             move_pos_x: gen_id.next(),
             move_neg_x: gen_id.next(),
             move_x: gen_id.next(),
@@ -97,13 +98,7 @@ impl FirstPersonShooter {
     }
 }
 
-impl Default for FirstPersonShooter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl GameInput for FirstPersonShooter {
+impl InputMapper for FirstPersonShooter {
     fn as_any(&self) -> &dyn Any {
         self
     }

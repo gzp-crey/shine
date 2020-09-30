@@ -31,18 +31,7 @@ impl MeshData {
 }
 
 /// Deserialized model data
+#[derive(Default)]
 pub struct ModelData {
     pub meshes: Vec<MeshData>,
-}
-
-impl ModelData {
-    pub fn new() -> ModelData {
-        ModelData { meshes: Vec::new() }
-    }
-}
-
-impl Default for ModelData {
-    fn default() -> Self {
-        Self::new()
-    }
 }

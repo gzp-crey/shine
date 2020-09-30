@@ -1,11 +1,6 @@
 use crate::input::{CurrentInputState, InputHandler};
-use shine_ecs::legion::systems::{schedule::Schedulable, SystemBuilder};
+use shine_ecs::resources::ResMut;
 
-pub fn advance_input_states() -> Box<dyn Schedulable> {
-    SystemBuilder::new("advance_input_states")
-        .write_resource::<CurrentInputState>()
-        .write_resource::<InputHandler>()
-        .build(|_, _, (prev, handler), _| {
-            handler.advance(prev);
-        })
+pub fn advance_input_states(mut prev_states: ResMut<CurrentInputState>, mut handler: ResMut<InputHandler>) {
+    handler.advance(&mut prev_states);
 }

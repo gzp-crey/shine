@@ -3,35 +3,39 @@ use gltf::{accessor::Dimensions, buffer, Document, Gltf, Primitive, Semantic};
 use itertools::izip;
 
 ///Load data from url
-pub fn load_source(uri: &str) -> Result<Vec<u8>, AssetError> {
+pub fn load_source(url: &Url, uri: &str) -> Result<Vec<u8>, AssetError> {
     if uri.starts_with("data:") {
         let mut split = uri["data:".len()..].split(";base64,");
         let match0 = split.next();
         let match1 = split.next();
         if let Some(data) = match1 {
-            base64::decode(&data).map_err(|err| AssetError::ContentLoad(format!("Embedded data error: {:?}", err)))
+            base64::decode(&data).map_err(|err| AssetError::load_failed(url.as_str(), err))
         } else if let Some(data) = match0 {
-            base64::decode(&data).map_err(|err| AssetError::ContentLoad(format!("Embedded data error: {:?}", err)))
+            base64::decode(&data).map_err(|err| AssetError::load_failed(url.as_str(), err))
         } else {
-            Err(AssetError::ContentLoad("Unsupported embedded data scheme".to_owned()))
+            Err(AssetError::load_failed_str(url.as_str(), "Unsupported data scheme"))
         }
     } else {
-        Err(AssetError::ContentLoad("Unsupported external data".to_owned()))
+        Err(AssetError::load_failed_str(url.as_str(), "Unsupported external data"))
     }
 }
 
 /// Import the buffer data referenced by a gltf document.
-pub fn import_buffer_data(document: &Document, mut blob: Option<Vec<u8>>) -> Result<Vec<buffer::Data>, AssetError> {
+pub fn import_buffer_data(
+    url: &Url,
+    document: &Document,
+    mut blob: Option<Vec<u8>>,
+) -> Result<Vec<buffer::Data>, AssetError> {
     let mut buffers = Vec::new();
     for buffer in document.buffers() {
         let mut data = match buffer.source() {
-            buffer::Source::Uri(uri) => load_source(uri),
+            buffer::Source::Uri(uri) => load_source(url, uri),
             buffer::Source::Bin => blob
                 .take()
-                .ok_or_else(|| AssetError::ContentLoad("Gltf error: missing blob".to_owned())),
+                .ok_or_else(|| AssetError::load_failed_str(url.as_str(), "Gltf error: missing blob")),
         }?;
         if data.len() < buffer.length() {
-            return Err(AssetError::ContentLoad("Insufficient buffer length".to_owned()));
+            return Err(AssetError::load_failed_str(url.as_str(), "Insufficient buffer length"));
         }
         data.resize(((data.len() + 3) / 4) * 4, 0);
         buffers.push(buffer::Data(data));
@@ -56,12 +60,11 @@ pub fn create_vertex_p3c4(buffers: &[buffer::Data], primitive: &Primitive<'_>) -
 
 pub async fn load_from_url(io: &AssetIO, url: &Url) -> Result<ModelData, AssetError> {
     let data = io.download_binary(&url).await?;
-    let Gltf { document, blob } =
-        Gltf::from_slice(&data).map_err(|err| AssetError::ContentLoad(format!("Failed to parse gltf: {:?}", err)))?;
+    let Gltf { document, blob } = Gltf::from_slice(&data).map_err(|err| AssetError::load_failed(url.as_str(), err))?;
 
-    let buffers = import_buffer_data(&document, blob)?;
+    let buffers = import_buffer_data(url, &document, blob)?;
 
-    let mut model = ModelData::new();
+    let mut model = ModelData::default();
     for mesh in document.meshes() {
         for primitive in mesh.primitives() {
             let vertex_data = {

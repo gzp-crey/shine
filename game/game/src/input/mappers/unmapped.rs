@@ -1,11 +1,11 @@
-use crate::input::{GameInput, InputEvent};
+use crate::input::{InputEvent, InputMapper};
 use shine_input::{GuestureManager, InputState};
 use std::any::Any;
 
 /// Default game input, that ignores ever user input
 pub struct Unmapped;
 
-impl GameInput for Unmapped {
+impl InputMapper for Unmapped {
     fn as_any(&self) -> &dyn Any {
         self
     }

@@ -19,16 +19,18 @@ where
     observers: Mutex<Vec<ObserverWeak<E>>>,
 }
 
+impl<E> Default for ObserveDispatcher<E> {
+    fn default() -> Self {
+        Self {
+            observers: Mutex::new(Vec::default()),
+        }
+    }
+}
+
 impl<E> ObserveDispatcher<E>
 where
     E: 'static,
 {
-    pub fn new() -> ObserveDispatcher<E> {
-        ObserveDispatcher {
-            observers: Mutex::new(Vec::new()),
-        }
-    }
-
     fn subscribe_impl(&self, observer: ObserverStrong<E>) -> Subscription<E> {
         let mut observers = self.observers.lock().unwrap();
         let weak = Arc::downgrade(&observer);
@@ -76,11 +78,5 @@ where
                 false
             }
         });
-    }
-}
-
-impl<E> Default for ObserveDispatcher<E> {
-    fn default() -> Self {
-        Self::new()
     }
 }

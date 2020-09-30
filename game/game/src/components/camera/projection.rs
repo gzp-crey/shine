@@ -1,6 +1,6 @@
 use crate::assets::uniform::ViewProj;
 use crate::components::camera;
-use nalgebra::{Isometry3, Matrix4, Perspective3, Vector3};
+use nalgebra::{Isometry3, Matrix4, Perspective3};
 
 /// Camera used for rendering
 #[derive(Debug)]
@@ -11,16 +11,18 @@ pub struct Projection {
     projection_view_matrix: Matrix4<f32>,
 }
 
-impl Projection {
-    pub fn new() -> Projection {
-        Projection {
+impl Default for Projection {
+    fn default() -> Self {
+        Self {
             view_matrix: Matrix4::identity(),
             inverse_view_matrix: Matrix4::identity(),
             projection_matrix: Matrix4::identity(),
             projection_view_matrix: Matrix4::identity(),
         }
     }
+}
 
+impl Projection {
     pub fn view_matrix(&self) -> &Matrix4<f32> {
         &self.view_matrix
     }
@@ -48,12 +50,6 @@ impl Projection {
 
     pub fn set_camera<C: camera::Camera>(&mut self, cam: &C) {
         self.set_perspective(&cam.get_view(), &cam.get_perspective());
-    }
-}
-
-impl Default for Projection {
-    fn default() -> Self {
-        Projection::new()
     }
 }
 

@@ -1,14 +1,15 @@
-use shine_game::assets::{AssetIO, AssetId, Url};
+use color_eyre::{self, Report};
+use shine_game::assets::{AssetError, AssetIO, AssetId, Url};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 mod config;
 mod cook_frame_graph;
+mod cook_game;
 mod cook_gltf;
 mod cook_pipeline;
 mod cook_shader;
 mod cook_texture;
-mod cook_world;
 mod error;
 mod target_db;
 
@@ -29,8 +30,8 @@ async fn cook(context: &Context, asset_base: &Url, asset_id: &AssetId) -> Result
         "fgr" => cook_frame_graph::cook_frame_graph(&context, &asset_base, &asset_id).await?,
         "glb" | "gltf" => cook_gltf::cook_gltf(&context, &asset_base, &asset_id).await?,
         "jpg" | "png" => cook_texture::cook_texture(&context, &asset_base, &asset_id).await?,
-        "wrld" => cook_world::cook_world(&context, &asset_base, &asset_id).await?,
-        e => return Err(CookingError::Other(format!("Unknown asset type: {}", e))),
+        "game" => cook_game::cook_game(&context, &asset_base, &asset_id).await?,
+        e => return Err(AssetError::UnsupportedFormat(e.into()).into()),
     };
 
     Ok(cooked_dependency)
@@ -57,7 +58,8 @@ async fn run(assets: Vec<AssetId>) -> Result<(), CookingError> {
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), Report> {
+    color_eyre::install()?;
     let _ = env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .filter_module("shine_cooker", log::LevelFilter::Trace)
@@ -65,20 +67,19 @@ fn main() {
         .filter_module("shine_game", log::LevelFilter::Trace)
         .filter_module("sqlx_core::postgres::executor", log::LevelFilter::Trace)
         .try_init();
-    let mut rt = Runtime::new().unwrap();
+    let mut rt = Runtime::new()?;
 
     let assets = [
-        "test_worlds/test1/test.wrld",
-        "test_worlds/test2/test.wrld",
-        "test_worlds/test3/test.wrld",
-        "test_worlds/test4/test.wrld",
-        //"test_worlds/test5/test.wrld",
+        "games/test1/test.game",
+        //"games/test2/test.game",
+        //"games/test3/test.game",
+        //"games/test4/test.game",
+        //"games/test5/test.wrld",
     ]
     .iter()
-    .map(|x| AssetId::new(x).unwrap())
-    .collect();
+    .map(|x| AssetId::new(x))
+    .collect::<Result<Vec<_>, _>>()?;
 
-    if let Err(err) = rt.block_on(run(assets)) {
-        println!("Cooking failed: {}", err);
-    }
+    rt.block_on(run(assets))?;
+    Ok(())
 }

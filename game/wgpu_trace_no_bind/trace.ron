@@ -1,0 +1,1782 @@
+[
+Init(
+    desc: (
+        features: (
+            bits: 0,
+        ),
+        limits: (
+            max_bind_groups: 4,
+            max_dynamic_uniform_buffers_per_pipeline_layout: 8,
+            max_dynamic_storage_buffers_per_pipeline_layout: 4,
+            max_sampled_textures_per_shader_stage: 16,
+            max_samplers_per_shader_stage: 16,
+            max_storage_buffers_per_shader_stage: 4,
+            max_storage_textures_per_shader_stage: 4,
+            max_uniform_buffers_per_shader_stage: 12,
+            max_uniform_buffer_binding_size: 16384,
+            max_push_constant_size: 0,
+        ),
+        shader_validation: true,
+    ),
+    backend: Vulkan,
+),
+CreateSwapChain(Id(0, 1, Vulkan), (
+    usage: (
+        bits: 16,
+    ),
+    format: Bgra8UnormSrgb,
+    width: 1024,
+    height: 768,
+    present_mode: Mailbox,
+)),
+GetSwapChainTexture(
+    id: Some(Id(0, 1, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(1, [
+    RunRenderPass(
+        base: (
+            commands: [],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 1, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 2, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(2, [
+    RunRenderPass(
+        base: (
+            commands: [],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 2, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 3, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(3, [
+    RunRenderPass(
+        base: (
+            commands: [],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 3, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 4, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(4, [
+    RunRenderPass(
+        base: (
+            commands: [],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 4, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+CreateShaderModule(
+    id: Id(0, 1, Vulkan),
+    data: "data1.spv",
+),
+GetSwapChainTexture(
+    id: Some(Id(0, 5, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(5, [
+    RunRenderPass(
+        base: (
+            commands: [],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 5, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+CreateShaderModule(
+    id: Id(1, 1, Vulkan),
+    data: "data2.spv",
+),
+CreateBindGroupLayout(Id(0, 1, Vulkan), (
+    label: None,
+    entries: [],
+)),
+CreatePipelineLayout(Id(0, 1, Vulkan), (
+    label: None,
+    bind_group_layouts: [],
+    push_constant_ranges: [],
+)),
+CreateRenderPipeline(Id(0, 1, Vulkan), (
+    label: None,
+    layout: Some(Id(0, 1, Vulkan)),
+    vertex_stage: (
+        module: Id(0, 1, Vulkan),
+        entry_point: "main",
+    ),
+    fragment_stage: Some((
+        module: Id(1, 1, Vulkan),
+        entry_point: "main",
+    )),
+    rasterization_state: None,
+    primitive_topology: TriangleList,
+    color_states: [
+        (
+            format: Bgra8UnormSrgb,
+            alpha_blend: (
+                src_factor: One,
+                dst_factor: Zero,
+                operation: Add,
+            ),
+            color_blend: (
+                src_factor: One,
+                dst_factor: Zero,
+                operation: Add,
+            ),
+            write_mask: (
+                bits: 15,
+            ),
+        ),
+    ],
+    depth_stencil_state: None,
+    vertex_state: (
+        index_format: Uint16,
+        vertex_buffers: [
+            (
+                stride: 0,
+                step_mode: Vertex,
+                attributes: [],
+            ),
+        ],
+    ),
+    sample_count: 1,
+    sample_mask: 4294967295,
+    alpha_to_coverage_enabled: false,
+)),
+GetSwapChainTexture(
+    id: Some(Id(0, 6, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(6, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 6, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 7, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(7, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 7, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 8, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(8, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 8, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 9, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(9, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 9, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 10, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(10, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 10, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 11, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(11, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 11, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 12, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(12, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 12, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 13, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(13, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 13, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 14, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(14, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 14, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 15, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(15, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 15, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 16, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(16, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 16, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 17, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(17, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 17, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 18, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(18, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 18, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 19, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(19, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 19, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 20, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(20, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 20, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 21, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(21, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 21, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 22, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(22, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 22, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 23, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(23, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 23, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 24, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(24, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 24, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 25, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(25, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 25, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 26, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(26, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 26, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 27, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(27, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 27, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 28, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(28, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 28, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 29, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(29, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 29, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 30, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(30, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 30, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 31, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(31, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 31, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 32, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(32, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 32, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 33, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(33, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 33, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 34, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(34, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 34, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 35, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(35, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 35, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 36, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(36, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 36, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 37, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(37, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 37, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 38, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(38, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 38, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 39, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(39, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 39, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 40, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(40, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 40, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 41, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(41, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 41, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+GetSwapChainTexture(
+    id: Some(Id(0, 42, Vulkan)),
+    parent_id: Id(0, 1, Vulkan),
+),
+Submit(42, [
+    RunRenderPass(
+        base: (
+            commands: [
+                SetPipeline(Id(0, 1, Vulkan)),
+                Draw(
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0,
+                ),
+            ],
+            dynamic_offsets: [],
+            string_data: [],
+            push_constant_data: [],
+        ),
+        target_colors: [
+            (
+                attachment: Id(0, 42, Vulkan),
+                resolve_target: None,
+                channel: (
+                    load_op: Clear,
+                    store_op: Store,
+                    clear_value: (
+                        r: 0,
+                        g: 1,
+                        b: 0,
+                        a: 1,
+                    ),
+                    read_only: false,
+                ),
+            ),
+        ],
+        target_depth_stencil: None,
+    ),
+]),
+PresentSwapChain(Id(0, 1, Vulkan)),
+DestroyShaderModule(Id(0, 1, Vulkan)),
+DestroyShaderModule(Id(1, 1, Vulkan)),
+DestroyRenderPipeline(Id(0, 1, Vulkan)),
+DestroyPipelineLayout(Id(0, 1, Vulkan)),
+DestroyBindGroupLayout(Id(0, 1, Vulkan)),
+]

@@ -7,19 +7,13 @@ pub trait Guesture: Send + Sync {
 }
 
 /// Handle multiple guestures and their dependencies
+#[derive(Default)]
 pub struct GuestureManager {
     guestures: Vec<Box<dyn Guesture>>,
     guestures_order: Vec<usize>,
 }
 
 impl GuestureManager {
-    pub fn new() -> GuestureManager {
-        GuestureManager {
-            guestures: Vec::new(),
-            guestures_order: Vec::new(),
-        }
-    }
-
     pub fn add_guesture<G: 'static + Guesture>(&mut self, guesture: G) {
         self.guestures.push(Box::new(guesture));
         self.guestures_order.clear();
@@ -40,11 +34,5 @@ impl GuestureManager {
             let guesture = &mut self.guestures[*i];
             guesture.on_update(previous, current);
         }
-    }
-}
-
-impl Default for GuestureManager {
-    fn default() -> GuestureManager {
-        GuestureManager::new()
     }
 }

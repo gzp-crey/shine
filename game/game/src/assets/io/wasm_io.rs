@@ -16,14 +16,8 @@ impl AssetLowIO {
         opts.method(method);
         opts.mode(RequestMode::Cors);
 
-        let request = Request::new_with_str_and_init(url.as_str(), &opts).map_err(|err| {
-            AssetError::AssetProvider(format!(
-                "Failed to create request [[{}]{}]: {:?}",
-                method,
-                url.as_str(),
-                err
-            ))
-        })?;
+        let request = Request::new_with_str_and_init(url.as_str(), &opts)
+            .map_err(|err| AssetError::source_error(url.as_str(), err))?;
         Ok(request)
     }
 
@@ -31,7 +25,7 @@ impl AssetLowIO {
         let window = web_sys::window().unwrap();
         let resp = JsFuture::from(window.fetch_with_request(&request))
             .await
-            .map_err(|err| AssetError::AssetProvider(format!("Fetch failed: {:?}", err)))?
+            .map_err(|err| AssetError::source_error(url.as_str(), err))?
             .dyn_into::<Response>()
             .unwrap();
 
@@ -40,23 +34,22 @@ impl AssetLowIO {
                 Ok(promise) => JsFuture::from(promise).await.unwrap().as_string().unwrap(),
                 Err(_) => "".to_owned(),
             };
-            Err(AssetError::AssetProvider(format!(
-                "Unexpected status code ({}): {}",
-                resp.status(),
-                err
-            )))
+            Err(AssetError::source_error_str(
+                url.as_str(),
+                format!("Unexpected status code ({}): {}", resp.status(), err),
+            ))
         } else {
             Ok(resp)
         }
     }
 
-    async fn get_response_content(response: Response) -> Result<Vec<u8>, AssetError> {
+    async fn get_response_content(url: &Url, response: Response) -> Result<Vec<u8>, AssetError> {
         match response.array_buffer() {
             Ok(promise) => {
                 let array_buffer = JsFuture::from(promise).await.unwrap();
                 Ok(Uint8Array::new_with_byte_offset(&array_buffer, 0).to_vec())
             }
-            Err(err) => Err(AssetError::ContentLoad(format!("Failed to parse response: {:?}", err))),
+            Err(err) => Err(AssetError::load_failed(url.as_str(), err)),
         }
     }
 
@@ -70,13 +63,13 @@ impl AssetLowIO {
             "http" | "https" => {
                 let request = Self::create_request("GET", url)?;
                 let resp = Self::wait_response(request).await?;
-                Self::get_response_content(resp).await
+                Self::get_response_content(url, resp).await
             }
             "blobs" => {
                 let url = url.set_scheme("https")?;
                 let request = Self::create_request("GET", &url)?;
                 let resp = Self::wait_response(request).await?;
-                Self::get_response_content(resp).await
+                Self::get_response_content(url, resp).await
             }
             sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
         }
@@ -93,75 +86,3 @@ impl AssetLowIO {
         }
     }
 }
-/*
-
-
-
-
-pub async fn get_response(url: &Url) -> Result<Response, AssetError> {
-    let mut opts = RequestInit::new();
-    opts.method("GET");
-    opts.mode(RequestMode::Cors);
-
-    let request = Request::new_with_str_and_init(url.as_str(), &opts)
-        .map_err(|err| AssetError::AssetProvider(format!("Failed to download {}: {:?}", url.as_str(), err)))?;
-
-    let window = web_sys::window().unwrap();
-    let resp = JsFuture::from(window.fetch_with_request(&request))
-        .await
-        .map_err(|err| AssetError::AssetProvider(format!("Failed to download {}: {:?}", url.as_str(), err)))?
-        .dyn_into::<Response>()
-        .unwrap();
-
-    if !resp.ok() {
-        let err = match resp.text() {
-            Ok(promise) => JsFuture::from(promise).await.unwrap().as_string().unwrap(),
-            Err(_) => "".to_owned(),
-        };
-        Err(AssetError::AssetProvider(format!(
-            "Unexpected status code ({}) for {}: {}",
-            resp.status(),
-            url.as_str(),
-            err
-        )))
-    } else {
-        Ok(resp)
-    }
-}
-
-pub async fn download_string(url: &Url) -> Result<String, AssetError> {
-    match url.scheme() {
-        "http" | "https" => match get_response(url).await?.text() {
-            Ok(promise) => dbg!(Ok(JsFuture::from(promise).await.unwrap().as_string().unwrap())),
-            Err(err) => Err(AssetError::ContentLoad(format!("Failed to parse response: {:?}", err))),
-        },
-        sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
-    }
-}
-
-pub async fn download_binary(url: &Url) -> Result<Vec<u8>, AssetError> {
-    match url.scheme() {
-        "http" | "https" => match get_response(url).await?.array_buffer() {
-            Ok(promise) => {
-                let array_buffer = JsFuture::from(promise).await.unwrap();
-                Ok(Uint8Array::new_with_byte_offset(&array_buffer, 0).to_vec())
-            }
-            Err(err) => Err(AssetError::ContentLoad(format!(
-                "Failed to parse response for {}: {:?}",
-                url.as_str(),
-                err
-            ))),
-        },
-
-        sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
-    }
-}
-
-pub async fn upload_binary(url: &Url, data: &[u8]) -> Result<(), AssetError> {
-    unimplemented!()
-}
-
-pub async fn upload_string(url: &Url, data: &str) -> Result<(), AssetError> {
-    unimplemented!()
-}
-*/

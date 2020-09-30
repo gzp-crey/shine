@@ -1,5 +1,5 @@
 use crate::{
-    assets::{AssetError, AssetIO, ShaderType, Url, UrlError},
+    assets::{AssetError, AssetIO, ShaderType, Url},
     render::{Compile, CompiledShader, Context},
 };
 use shine_ecs::core::{
@@ -9,7 +9,7 @@ use shine_ecs::core::{
         Store,
     },
 };
-use std::{io, mem, pin::Pin, str::FromStr};
+use std::{mem, pin::Pin, str::FromStr};
 
 /// Unique key for a shader
 pub type ShaderKey = String;
@@ -112,12 +112,6 @@ pub enum ShaderLoadError {
     Canceled,
 }
 
-impl From<UrlError> for ShaderLoadError {
-    fn from(err: UrlError) -> ShaderLoadError {
-        ShaderLoadError::Asset(AssetError::InvalidUrl(err))
-    }
-}
-
 impl From<LoadCanceled> for ShaderLoadError {
     fn from(_err: LoadCanceled) -> ShaderLoadError {
         ShaderLoadError::Canceled
@@ -130,21 +124,16 @@ impl From<AssetError> for ShaderLoadError {
     }
 }
 
-impl From<io::Error> for ShaderLoadError {
-    fn from(err: io::Error) -> ShaderLoadError {
-        ShaderLoadError::Asset(AssetError::ContentLoad(format!("{:?}", err)))
-    }
-}
-
 impl AssetIO {
     async fn load_shader(
         &self,
         load_token: LoadToken<Shader>,
         source_id: String,
     ) -> Result<(ShaderType, Vec<u8>), ShaderLoadError> {
-        let url = Url::parse(&source_id)?;
-        let ty = ShaderType::from_str(url.extension())?;
         log::debug!("[{:?}] Loading shader...", load_token);
+
+        let url = Url::parse(&source_id).map_err(|err| AssetError::InvalidUrl(err))?;
+        let ty = ShaderType::from_str(url.extension())?;
         let data = self.download_binary(&url).await?;
         Ok((ty, data))
     }
@@ -186,20 +175,22 @@ pub struct ShaderDependency {
     index: ShaderDependencyIndex,
 }
 
+impl Default for ShaderDependency {
+    fn default() -> Self {
+        Self {
+            ty: None,
+            id: None,
+            index: ShaderDependencyIndex::Incomplete,
+        }
+    }
+}
+
 impl ShaderDependency {
     pub fn none() -> ShaderDependency {
         ShaderDependency {
             ty: None,
             id: None,
             index: ShaderDependencyIndex::None,
-        }
-    }
-
-    pub fn new() -> ShaderDependency {
-        ShaderDependency {
-            ty: None,
-            id: None,
-            index: ShaderDependencyIndex::Incomplete,
         }
     }
 
@@ -315,11 +306,5 @@ impl ShaderDependency {
         shaders: &'r ShaderStoreRead<'c>,
     ) -> Result<Option<&'c CompiledShader>, ShaderDependencyError> {
         self.request_with(shaders, |_| None)
-    }
-}
-
-impl Default for ShaderDependency {
-    fn default() -> Self {
-        Self::new()
     }
 }

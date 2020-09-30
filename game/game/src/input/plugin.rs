@@ -1,29 +1,17 @@
 use crate::{
-    input::{mapper, GameInput, InputEvent},
-    GameView,
+    input::{mappers, InputError, InputEvent, InputMapper},
+    World,
 };
 use shine_input::{GuestureManager, InputManager, InputState};
 use std::{
-    any::Any,
     future::Future,
     ops::{Deref, DerefMut},
     pin::Pin,
 };
 
 /// The input state for the current frame.
+#[derive(Default)]
 pub struct CurrentInputState(InputState);
-
-impl CurrentInputState {
-    pub fn new() -> CurrentInputState {
-        CurrentInputState(InputState::new())
-    }
-}
-
-impl Default for CurrentInputState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Deref for CurrentInputState {
     type Target = InputState;
@@ -39,26 +27,19 @@ impl DerefMut for CurrentInputState {
     }
 }
 
-/// Convert user inputs into InputState changes
-pub struct InputMapper {
-    input: Box<dyn GameInput>,
+/// Wraper for the InputMapper to allow polymorhism.
+pub struct WrapInputMapper {
+    input: Box<dyn InputMapper>,
 }
 
-impl InputMapper {
-    pub fn new<I: GameInput>(input: I) -> InputMapper {
-        InputMapper { input: Box::new(input) }
-    }
-
-    pub fn as_input<I: GameInput>(&self) -> Option<&I> {
-        Any::downcast_ref::<I>(self.input.as_any())
-    }
-
-    pub fn as_input_mut<I: GameInput>(&mut self) -> Option<&mut I> {
-        Any::downcast_mut::<I>(self.input.as_any_mut())
+impl WrapInputMapper {
+    pub fn wrap<I: InputMapper>(input: I) -> Self {
+        Self { input: Box::new(input) }
     }
 }
 
 /// Handler for the inputs to prepare the state for the next frame.
+#[derive(Default)]
 pub struct InputHandler {
     state: InputState,
     manager: InputManager,
@@ -66,15 +47,7 @@ pub struct InputHandler {
 }
 
 impl InputHandler {
-    fn new() -> InputHandler {
-        InputHandler {
-            state: InputState::new(),
-            manager: InputManager::new(),
-            guestures: GuestureManager::new(),
-        }
-    }
-
-    pub fn inject_input(&mut self, mapper: &InputMapper, event: InputEvent<'_>) {
+    pub fn inject_input(&mut self, mapper: &WrapInputMapper, event: InputEvent<'_>) {
         mapper.input.update_state(event, &mut self.state);
     }
 
@@ -84,58 +57,55 @@ impl InputHandler {
     }
 }
 
-#[derive(Debug)]
-pub struct InputError;
-
 pub type InputFuture<'a, R> = Pin<Box<dyn Future<Output = R> + 'a>>;
 
 pub trait InputPlugin {
     /// Add input handler plugin to the world
-    fn add_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>>;
+    fn add_input_plugin(&mut self) -> InputFuture<'_, Result<(), InputError>>;
 
     /// Remove input handler plugin from the world
-    fn remove_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>>;
+    fn remove_input_plugin(&mut self) -> InputFuture<'_, Result<(), InputError>>;
 
-    fn set_input<I: GameInput>(&mut self, input: I) -> Result<(), InputError>;
+    fn set_input_mapper<I: InputMapper>(&mut self, input: I) -> Result<(), InputError>;
     fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), InputError>;
 }
 
-impl InputPlugin for GameView {
-    fn add_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>> {
+impl InputPlugin for World {
+    fn add_input_plugin(&mut self) -> InputFuture<'_, Result<(), InputError>> {
         Box::pin(async move {
             log::info!("Adding input plugin");
-            self.resources.insert(None, InputHandler::new());
-            self.resources.insert(None, CurrentInputState::new());
-            self.resources.insert(None, InputMapper::new(mapper::Unmapped));
+            self.resources.insert(None, InputHandler::default());
+            self.resources.insert(None, CurrentInputState::default());
+            self.resources.insert(None, WrapInputMapper::wrap(mappers::Unmapped));
             Ok(())
         })
     }
 
-    fn remove_input_plugin<'a>(&'a mut self) -> InputFuture<'a, Result<(), InputError>> {
+    fn remove_input_plugin(&mut self) -> InputFuture<'_, Result<(), InputError>> {
         Box::pin(async move {
             log::info!("Removing input plugin");
-            let _ = self.resources.remove::<InputHandler>(None);
-            let _ = self.resources.remove::<CurrentInputState>(None);
-            let _ = self.resources.remove::<InputMapper>(None);
+            let _ = self.resources.remove::<InputHandler>(&None);
+            let _ = self.resources.remove::<CurrentInputState>(&None);
+            let _ = self.resources.remove::<WrapInputMapper>(&None);
             Ok(())
         })
     }
 
-    fn set_input<I: GameInput>(&mut self, input: I) -> Result<(), InputError> {
-        let mut mapper = self.resources.get_mut::<InputMapper>(None).unwrap();
-        let mut handler = self.resources.get_mut::<InputHandler>(None).unwrap();
-        let mut state = self.resources.get_mut::<CurrentInputState>(None).unwrap();
+    fn set_input_mapper<I: InputMapper>(&mut self, input_mapper: I) -> Result<(), InputError> {
+        let mut mapper = self.plugin_resource_mut::<WrapInputMapper>("input", &None)?;
+        let mut handler = self.plugin_resource_mut::<InputHandler>("input", &None)?;
+        let mut state = self.plugin_resource_mut::<CurrentInputState>("input", &None)?;
 
-        *handler = InputHandler::new();
-        *state = CurrentInputState::new();
-        input.init_guestures(&mut handler.guestures);
-        mapper.input = Box::new(input);
+        *handler = InputHandler::default();
+        *state = CurrentInputState::default();
+        input_mapper.init_guestures(&mut handler.guestures);
+        mapper.input = Box::new(input_mapper);
         Ok(())
     }
 
     fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), InputError> {
-        let mapper = self.resources.get::<InputMapper>(None).unwrap();
-        let mut handler = self.resources.get_mut::<InputHandler>(None).unwrap();
+        let mapper = self.plugin_resource::<WrapInputMapper>("input", &None)?;
+        let mut handler = self.plugin_resource_mut::<InputHandler>("input", &None)?;
 
         handler.inject_input(&mapper, event.into());
         Ok(())

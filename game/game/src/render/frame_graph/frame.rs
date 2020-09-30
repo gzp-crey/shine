@@ -1,5 +1,5 @@
 use crate::{
-    assets::{AssetError, AssetIO, FrameGraphDescriptor, FramePassDescriptor, RenderTargetDescriptor, Url, UrlError},
+    assets::{AssetError, AssetIO, FrameGraphDescriptor, FramePassDescriptor, RenderTargetDescriptor, Url},
     render::{
         frame_graph::{frame_pass::FramePasses, frame_target::FrameTargets, render_pass::RenderPass},
         Context, RenderError, Surface,
@@ -19,15 +19,17 @@ pub struct Frame {
     commands: Mutex<Vec<wgpu::CommandBuffer>>,
 }
 
-impl Frame {
-    pub fn new() -> Frame {
-        Frame {
-            targets: FrameTargets::new(),
-            passes: FramePasses::new(),
+impl Default for Frame {
+    fn default() -> Self {
+        Self {
+            targets: Default::default(),
+            passes: Default::default(),
             commands: Mutex::new(Vec::new()),
         }
     }
+}
 
+impl Frame {
     pub fn add_target(&mut self, name: String, target_descriptor: RenderTargetDescriptor) -> Result<(), RenderError> {
         self.targets.add_target(name, target_descriptor)?;
         Ok(())
@@ -116,23 +118,11 @@ impl Frame {
     }
 }
 
-impl Default for Frame {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Error during frame graph load
 #[derive(Debug)]
 pub enum FrameGraphLoadError {
     Asset(AssetError),
     Canceled,
-}
-
-impl From<UrlError> for FrameGraphLoadError {
-    fn from(err: UrlError) -> FrameGraphLoadError {
-        FrameGraphLoadError::Asset(AssetError::InvalidUrl(err))
-    }
 }
 
 impl From<AssetError> for FrameGraphLoadError {
@@ -141,19 +131,14 @@ impl From<AssetError> for FrameGraphLoadError {
     }
 }
 
-impl From<bincode::Error> for FrameGraphLoadError {
-    fn from(err: bincode::Error) -> FrameGraphLoadError {
-        FrameGraphLoadError::Asset(AssetError::ContentLoad(format!("Binary stream error: {}", err)))
-    }
-}
-
 impl AssetIO {
     pub async fn load_frame_graph(&self, source_id: String) -> Result<FrameGraphDescriptor, FrameGraphLoadError> {
-        let url = Url::parse(&source_id)?;
         log::debug!("[{:?}] Loading frame graph...", source_id);
-        let data = self.download_binary(&url).await?;
 
-        let descriptor = bincode::deserialize::<FrameGraphDescriptor>(&data)?;
+        let url = Url::parse(&source_id).map_err(|err| AssetError::InvalidUrl(err))?;
+        let data = self.download_binary(&url).await?;
+        let descriptor = bincode::deserialize::<FrameGraphDescriptor>(&data)
+            .map_err(|err| AssetError::load_failed(url.as_str(), err))?;
         log::trace!("Graph: {:#?}", descriptor);
         descriptor.check_target_references()?;
 

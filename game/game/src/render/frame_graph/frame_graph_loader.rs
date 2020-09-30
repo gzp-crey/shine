@@ -11,15 +11,17 @@ pub struct FrameGraphLoader {
     is_activated: bool,
 }
 
-impl FrameGraphLoader {
-    pub fn new() -> FrameGraphLoader {
-        FrameGraphLoader {
+impl Default for FrameGraphLoader {
+    fn default() -> Self {
+        Self {
             descriptor: None,
             descriptor_loader: None,
             is_activated: false,
         }
     }
+}
 
+impl FrameGraphLoader {
     pub fn request_single_pass(&mut self) {
         self.descriptor_loader = None;
         self.descriptor = Some(Ok(FrameGraphDescriptor::single_pass()));

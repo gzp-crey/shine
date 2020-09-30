@@ -20,11 +20,13 @@ pub fn sha256_multiple_bytes(data: &[&[u8]]) -> String {
 /// Helper to hash multi-part content
 pub struct ContentHasher(Context);
 
-impl ContentHasher {
-    pub fn new() -> ContentHasher {
+impl Default for ContentHasher {
+    fn default() -> Self {
         ContentHasher(Context::new(&SHA256))
     }
+}
 
+impl ContentHasher {
     pub fn add(&mut self, data: &[u8]) -> &mut Self {
         self.0.update(data);
         self
@@ -33,12 +35,6 @@ impl ContentHasher {
     pub fn hash(self) -> String {
         let hash = self.0.finish();
         HEXLOWER.encode(hash.as_ref())
-    }
-}
-
-impl Default for ContentHasher {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

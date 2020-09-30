@@ -39,6 +39,10 @@ impl ResourceIndex {
             type_name: any::type_name::<T>(),
         }
     }
+
+    pub fn name(&self) -> Option<&ResourceName> {
+        self.name.as_ref()
+    }
 }
 
 impl std::hash::Hash for ResourceIndex {
@@ -134,11 +138,11 @@ impl<'a, T: Resource> Drop for ResourceWrite<'a, T> {
 }
 
 /// Fetches multiple (distinct) shared resource references of the same resource type
-pub struct MultiResourceRead<'a, T: Resource> {
+pub struct NamedResourceRead<'a, T: Resource> {
     inner: Vec<ResourceRead<'a, T>>,
 }
 
-impl<'a, T: Resource> MultiResourceRead<'a, T> {
+impl<'a, T: Resource> NamedResourceRead<'a, T> {
     pub fn len(&self) -> usize {
         self.inner.len()
     }
@@ -148,7 +152,7 @@ impl<'a, T: Resource> MultiResourceRead<'a, T> {
     }
 }
 
-impl<'a, T: Resource> Index<usize> for MultiResourceRead<'a, T> {
+impl<'a, T: Resource> Index<usize> for NamedResourceRead<'a, T> {
     type Output = T;
 
     #[inline]
@@ -157,18 +161,18 @@ impl<'a, T: Resource> Index<usize> for MultiResourceRead<'a, T> {
     }
 }
 
-impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for MultiResourceRead<'a, T> {
+impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for NamedResourceRead<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(&self.inner).finish()
     }
 }
 
 /// Fetches multiple (distinct) unique resource references of the same resource type
-pub struct MultiResourceWrite<'a, T: Resource> {
+pub struct NamedResourceWrite<'a, T: Resource> {
     inner: Vec<ResourceWrite<'a, T>>,
 }
 
-impl<'a, T: Resource> MultiResourceWrite<'a, T> {
+impl<'a, T: Resource> NamedResourceWrite<'a, T> {
     pub fn len(&self) -> usize {
         self.inner.len()
     }
@@ -178,7 +182,7 @@ impl<'a, T: Resource> MultiResourceWrite<'a, T> {
     }
 }
 
-impl<'a, T: Resource> Index<usize> for MultiResourceWrite<'a, T> {
+impl<'a, T: Resource> Index<usize> for NamedResourceWrite<'a, T> {
     type Output = T;
 
     #[inline]
@@ -187,14 +191,14 @@ impl<'a, T: Resource> Index<usize> for MultiResourceWrite<'a, T> {
     }
 }
 
-impl<'a, T: Resource> IndexMut<usize> for MultiResourceWrite<'a, T> {
+impl<'a, T: Resource> IndexMut<usize> for NamedResourceWrite<'a, T> {
     #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
         &mut self.inner[idx]
     }
 }
 
-impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for MultiResourceWrite<'a, T> {
+impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for NamedResourceWrite<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(&self.inner).finish()
     }
@@ -316,24 +320,15 @@ pub struct Resources {
 }
 
 impl Resources {
-    /// Creates an accessor to resources which are Send and Sync, which itself can be sent
-    /// between threads.
+    /// Creates an accessor to resources which are Send and Sync and can be sent
+    /// safely between threads.
     pub fn sync(&mut self) -> SyncResources {
         SyncResources {
             internal: &self.internal,
         }
     }
 
-    /// Returns `true` if type `T` exists in the store. Otherwise, returns `false`.
-    pub fn contains<T: Resource>(&self, name: Option<ResourceName>) -> bool {
-        self.internal
-            .contains(&ResourceIndex::of::<T>(name.map(|n| n.to_owned())))
-    }
-
-    /// Inserts the instance of `T` into the store. If the type already exists, it will be silently
-    /// overwritten. If you would like to retain the instance of the resource that already exists,
-    /// call `remove` first to retrieve it.
-    pub fn insert<T: Resource>(&mut self, name: Option<ResourceName>, value: T) {
+    fn insert_impl<T: Resource>(&mut self, name: Option<ResourceName>, value: T) {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
@@ -342,82 +337,139 @@ impl Resources {
         }
     }
 
-    /// Removes the type `T` from this store if it exists.
-    ///
-    /// # Returns
-    /// If the type `T` was stored, the inner instance of `T is returned. Otherwise, `None`.
-    pub fn remove<T: Resource>(&mut self, name: &Option<ResourceName>) -> Option<T> {
+    /// Inserts the instance of `T` into the store.
+    pub fn insert<T: Resource>(&mut self, value: T) {
+        self.insert_impl(None, value);
+    }
+
+    /// Inserts the instance of `T` with the given name into the store.
+    pub fn insert_with_name<T: Resource>(&mut self, name: ResourceName, value: T) {
+        self.insert_impl(Some(name), value);
+    }
+
+    fn contains_impl<T: Resource>(&self, name: Option<&ResourceName>) -> bool {
+        self.internal
+            .contains(&ResourceIndex::of::<T>(name.map(|n| n.to_owned())))
+    }
+
+    /// Returns if type `T` exists in the store.
+    pub fn contains<T: Resource>(&self) -> bool {
+        self.contains_impl::<T>(None)
+    }
+
+    /// Returns if type `T` with the given name exists in the store.
+    pub fn contains_with_name<T: Resource>(&self, name: &ResourceName) -> bool {
+        self.contains_impl::<T>(Some(name))
+    }
+
+    fn remove_impl<T: Resource>(&mut self, name: Option<&ResourceName>) -> Option<T> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
             let resource = self
                 .internal
-                .remove(&ResourceIndex::of::<T>(name.as_ref().map(|n| n.to_owned())))?
+                .remove(&ResourceIndex::of::<T>(name.map(|n| n.to_owned())))?
                 .downcast::<T>()
                 .ok()?;
             Some(*resource)
         }
     }
 
-    /// Retrieve an immutable reference to  `T` from the store if it exists.
-    /// Otherwise, return `None`.
-    ///
-    /// # Panics
-    /// Panics if the resource is already borrowed mutably.
-    pub fn get<T: Resource>(&self, name: &Option<ResourceName>) -> Option<ResourceRead<'_, T>> {
+    /// Removes the type `T` from this store if it exists.    
+    pub fn remove<T: Resource>(&mut self) -> Option<T> {
+        self.remove_impl::<T>(None)
+    }
+
+    /// Removes the type `T` with the given name from this store if it exists.    
+    pub fn remove_with_name<T: Resource>(&mut self, name: &ResourceName) -> Option<T> {
+        self.remove_impl::<T>(Some(name))
+    }
+
+    fn get_impl<T: Resource>(&self, name: Option<&ResourceName>) -> Option<ResourceRead<'_, T>> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::of::<T>(name.as_ref().map(|n| n.to_owned()));
+        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
         unsafe { self.internal.get(&type_id)?.get::<T>() }
     }
 
-    /// Retrieve a mutable reference to  `T` from the store if it exists.
-    /// Otherwise, return `None`.
-    ///
-    /// # Panics
-    /// Panics if the resource is already borrowed.
-    pub fn get_mut<T: Resource>(&self, name: &Option<ResourceName>) -> Option<ResourceWrite<'_, T>> {
-        // safety:
-        // this type is !Send and !Sync, and so can only be accessed from the thread which
-        // owns the resources collection
-        let type_id = &ResourceIndex::of::<T>(name.as_ref().map(|n| n.to_owned()));
-        unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
-    }
-
-    /// Retrieve a list of immutable reference to  `T` from the store if it all of them exists.
+    /// Retrieve an shared reference to `T` from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_multi<T: Resource>(&self, names: &[Option<ResourceName>]) -> Option<MultiResourceRead<'_, T>> {
-        log::debug!("get_multi: {:?}", names);
-        let mut resources = Vec::with_capacity(names.len());
-        for name in names {
-            match self.get::<T>(name) {
-                Some(res) => resources.push(res),
-                None => return None,
-            }
-        }
-        Some(MultiResourceRead { inner: resources })
+    pub fn get<T: Resource>(&self) -> Option<ResourceRead<'_, T>> {
+        self.get_impl::<T>(None)
     }
 
-    /// Retrieve a list of mutable reference to  `T` from the store if all of them exists.
+    /// Retrieve an shared reference to a `T` with the give name from the store if it exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed mutably.
+    pub fn get_with_name<T: Resource>(&self, name: &ResourceName) -> Option<ResourceRead<'_, T>> {
+        self.get_impl::<T>(Some(name))
+    }
+
+    /// Retrieve a list of shared reference to `T` with the given names from the store
+    /// if it all of them exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed mutably.
+    pub fn get_with_names<T: Resource, I: IntoIterator<Item = ResourceName>>(
+        &self,
+        names: I,
+    ) -> Option<NamedResourceRead<'_, T>> {
+        let resources = names
+            .into_iter()
+            .map(|name| self.get_with_name::<T>(&name))
+            .collect::<Option<Vec<_>>>()?;
+        Some(NamedResourceRead { inner: resources })
+    }
+
+    fn get_mut_impl<T: Resource>(&self, name: Option<&ResourceName>) -> Option<ResourceWrite<'_, T>> {
+        // safety:
+        // this type is !Send and !Sync, and so can only be accessed from the thread which
+        // owns the resources collection
+        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
+        unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
+    }
+
+    /// Retrieve a unique reference to `T` from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed.
-    pub fn get_multi_mut<T: Resource>(&self, names: &[Option<ResourceName>]) -> Option<MultiResourceWrite<'_, T>> {
-        log::debug!("get_multi_mut: {:?}", names);
-        let mut resources = Vec::with_capacity(names.len());
-        for name in names {
-            match self.get_mut::<T>(name) {
-                Some(res) => resources.push(res),
-                None => return None,
-            }
-        }
-        Some(MultiResourceWrite { inner: resources })
+    pub fn get_mut<T: Resource>(&self) -> Option<ResourceWrite<'_, T>> {
+        self.get_mut_impl::<T>(None)
+    }
+
+    /// Retrieve a unique reference to a `T` with the given name from the store if it exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed.
+    pub fn get_mut_with_name<T: Resource>(&self, name: &ResourceName) -> Option<ResourceWrite<'_, T>> {
+        self.get_mut_impl::<T>(Some(name))
+    }
+
+    /// Retrieve a list of unique references to `T` with the given names from the store
+    /// if it all of them exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed mutably.
+    pub fn get_mut_with_names<T: Resource, I: IntoIterator<Item = ResourceName>>(
+        &self,
+        names: I,
+    ) -> Option<NamedResourceWrite<'_, T>> {
+        let resources = names
+            .into_iter()
+            .map(|name| self.get_mut_with_name::<T>(&name))
+            .collect::<Option<Vec<_>>>()?;
+        Some(NamedResourceWrite { inner: resources })
     }
 }
 
@@ -428,62 +480,90 @@ pub struct SyncResources<'a> {
 }
 
 impl<'a> SyncResources<'a> {
-    /// Retrieve an immutable reference to  `T` from the store if it exists.
-    /// Otherwise, return `None`.
-    ///
-    /// # Panics
-    /// Panics if the resource is already borrowed mutably.
-    pub fn get<T: Resource + Sync>(&self, name: &Option<ResourceName>) -> Option<ResourceRead<'_, T>> {
+    fn get_impl<T: Resource + Sync>(&self, name: Option<&ResourceName>) -> Option<ResourceRead<'_, T>> {
         // safety:
-        // only resources which are Sync can be accessed, and so are safe to access from any thread
-        let type_id = &ResourceIndex::of::<T>(name.as_ref().map(|n| n.to_owned()));
+        // this type is !Send and !Sync, and so can only be accessed from the thread which
+        // owns the resources collection
+        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
         unsafe { self.internal.get(&type_id)?.get::<T>() }
     }
 
-    /// Retrieve a mutable reference to  `T` from the store if it exists.
-    /// Otherwise, return `None`.
-    ///
-    /// # Panics
-    /// Panics if the resource is already borrowed.
-    pub fn get_mut<T: Resource + Send>(&self, name: &Option<ResourceName>) -> Option<ResourceWrite<'_, T>> {
-        // safety:
-        // only resources which are Send can be accessed, and so are safe to access from any thread
-        let type_id = &ResourceIndex::of::<T>(name.as_ref().map(|n| n.to_owned()));
-        unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
-    }
-
-    /// Retrieve a list of immutable reference to  `T` from the store if it all of them exists.
+    /// Retrieve an shared reference to `T` from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_multi<T: Resource + Sync>(&self, names: &[Option<ResourceName>]) -> Option<MultiResourceRead<'_, T>> {
+    pub fn get<T: Resource + Sync>(&self) -> Option<ResourceRead<'_, T>> {
+        self.get_impl::<T>(None)
+    }
+
+    /// Retrieve an shared reference to a `T` with the give name from the store if it exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed mutably.
+    pub fn get_with_name<T: Resource + Sync>(&self, name: &ResourceName) -> Option<ResourceRead<'_, T>> {
+        self.get_impl::<T>(Some(name))
+    }
+
+    /// Retrieve a list of shared reference to `T` with the given names from the store
+    /// if it all of them exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed mutably.
+    pub fn get_with_names<T: Resource + Sync>(&self, names: &[ResourceName]) -> Option<NamedResourceRead<'_, T>> {
         let mut resources = Vec::with_capacity(names.len());
         for name in names {
-            match self.get::<T>(name) {
+            match self.get_with_name::<T>(name) {
                 Some(res) => resources.push(res),
                 None => return None,
             }
         }
-        Some(MultiResourceRead { inner: resources })
+        Some(NamedResourceRead { inner: resources })
     }
 
-    /// Retrieve a list of mutable reference to  `T` from the store if all of them exists.
+    fn get_mut_impl<T: Resource + Send>(&self, name: Option<&ResourceName>) -> Option<ResourceWrite<'_, T>> {
+        // safety:
+        // this type is !Send and !Sync, and so can only be accessed from the thread which
+        // owns the resources collection
+        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
+        unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
+    }
+
+    /// Retrieve a unique reference to `T` from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed.
-    pub fn get_multi_mut<T: Resource + Send>(
-        &self,
-        names: &[Option<ResourceName>],
-    ) -> Option<MultiResourceWrite<'_, T>> {
+    pub fn get_mut<T: Resource + Send>(&self) -> Option<ResourceWrite<'_, T>> {
+        self.get_mut_impl::<T>(None)
+    }
+
+    /// Retrieve a unique reference to a `T` with the given name from the store if it exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed.
+    pub fn get_mut_with_name<T: Resource + Send>(&self, name: &ResourceName) -> Option<ResourceWrite<'_, T>> {
+        self.get_mut_impl::<T>(Some(name))
+    }
+
+    /// Retrieve a list of unique references to `T` with the given names from the store
+    /// if it all of them exists.
+    /// Otherwise, return `None`.
+    ///
+    /// # Panics
+    /// Panics if the resource is already borrowed mutably.
+    pub fn get_mut_with_names<T: Resource + Send>(&self, names: &[ResourceName]) -> Option<NamedResourceWrite<'_, T>> {
+        log::debug!("get_multi: {:?}", names);
         let mut resources = Vec::with_capacity(names.len());
         for name in names {
-            match self.get_mut::<T>(name) {
+            match self.get_mut_with_name::<T>(name) {
                 Some(res) => resources.push(res),
                 None => return None,
             }
         }
-        Some(MultiResourceWrite { inner: resources })
+        Some(NamedResourceWrite { inner: resources })
     }
 }

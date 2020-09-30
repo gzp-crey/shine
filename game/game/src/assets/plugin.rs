@@ -1,6 +1,6 @@
 use crate::{
     assets::{AssetError, AssetIO, Url},
-    GameView,
+    World,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, future::Future, pin::Pin};
@@ -14,14 +14,14 @@ pub struct AssetConfig {
 
 pub trait AssetPlugin {
     /// Add asset handler plugin to the world
-    fn add_asset_plugin<'a>(&'a mut self, config: AssetConfig) -> AssetFuture<'a, Result<(), AssetError>>;
+    fn add_asset_plugin(&mut self, config: AssetConfig) -> AssetFuture<'_, Result<(), AssetError>>;
 
     /// Remove asset handler plugin from the world
-    fn remove_asset_plugin<'a>(&'a mut self) -> AssetFuture<'a, Result<(), AssetError>>;
+    fn remove_asset_plugin(&mut self) -> AssetFuture<'_, Result<(), AssetError>>;
 }
 
-impl AssetPlugin for GameView {
-    fn add_asset_plugin<'a>(&'a mut self, config: AssetConfig) -> AssetFuture<'a, Result<(), AssetError>> {
+impl AssetPlugin for World {
+    fn add_asset_plugin(&mut self, config: AssetConfig) -> AssetFuture<'_, Result<(), AssetError>> {
         Box::pin(async move {
             log::info!("Adding asset plugin");
             let assetio = AssetIO::new(config.virtual_schemes)?;
@@ -30,9 +30,9 @@ impl AssetPlugin for GameView {
         })
     }
 
-    fn remove_asset_plugin<'a>(&'a mut self) -> AssetFuture<'a, Result<(), AssetError>> {
+    fn remove_asset_plugin(&mut self) -> AssetFuture<'_, Result<(), AssetError>> {
         Box::pin(async move {
-            let _ = self.resources.remove::<AssetIO>(None);
+            let _ = self.resources.remove::<AssetIO>(&None);
             Ok(())
         })
     }

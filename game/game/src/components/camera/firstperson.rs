@@ -15,8 +15,8 @@ pub struct FirstPerson {
     inverse_view: Isometry3<f32>,
 }
 
-impl FirstPerson {
-    pub fn new() -> FirstPerson {
+impl Default for FirstPerson {
+    fn default() -> Self {
         let eye = (0., 0., 1.);
 
         let mut camera = FirstPerson {
@@ -33,7 +33,9 @@ impl FirstPerson {
         camera.update();
         camera
     }
+}
 
+impl FirstPerson {
     pub fn get_eye(&self) -> &Point3<f32> {
         &self.eye
     }
@@ -54,7 +56,7 @@ impl FirstPerson {
         self.inverse_view.transform_vector(&Vector3::new(1., 0., 0.))
     }
 
-    pub fn set_view(&mut self, view: Isometry3<f32>) {
+    pub fn set_view(&mut self, _view: Isometry3<f32>) {
         unimplemented!()
     }
 
@@ -166,12 +168,6 @@ impl FirstPerson {
 
         self.inverse_view = Isometry3::from_parts(trans, rot);
         self.view = self.inverse_view.inverse();
-    }
-}
-
-impl Default for FirstPerson {
-    fn default() -> Self {
-        FirstPerson::new()
     }
 }
 

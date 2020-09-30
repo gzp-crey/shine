@@ -1,37 +1,94 @@
 use crate::assets::UrlError;
-use std::{error, fmt};
+use shine_ecs::core::DisplayError;
+use std::error::Error as StdError;
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Error)]
 pub enum AssetError {
+    #[error("Unsupported scheme error: {0}")]
     UnsupportedScheme(String),
-    InvalidUrl(UrlError),
+
+    #[error("Mallformed url")]
+    InvalidUrl(#[from] UrlError),
+
+    #[error("Unsupported input format: {0}")]
     UnsupportedFormat(String),
-    AssetProvider(String),
-    ContentLoad(String),
-    ContentSave(String),
+
+    #[error("Asset source error for {content}")]
+    ContentSource {
+        content: String,
+        source: Box<dyn 'static + StdError + Sync + Send>,
+    },
+
+    #[error("Asset loading error for {content}")]
+    ContentLoad {
+        content: String,
+        source: Box<dyn 'static + StdError + Sync + Send>,
+    },
+
+    #[error("Asset saving error for {content}")]
+    ContentSave {
+        content: String,
+        source: Box<dyn 'static + StdError + Sync + Send>,
+    },
+
+    #[error("Error in content: {0}")]
     Content(String),
-    TODO,
+
+    #[error("{message}")]
+    Other {
+        message: String,
+        source: Box<dyn 'static + StdError + Sync + Send>,
+    },
 }
 
-impl fmt::Display for AssetError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AssetError::UnsupportedScheme(scheme) => write!(f, "Unsupported scheme error: {}", scheme),
-            AssetError::InvalidUrl(err) => write!(f, "Mallformed url: {}", err),
-            AssetError::UnsupportedFormat(ext) => write!(f, "Unsupported input format: {}", ext),
-            AssetError::AssetProvider(err) => write!(f, "Asset source error: {}", err),
-            AssetError::ContentLoad(err) => write!(f, "Asset loading error: {}", err),
-            AssetError::ContentSave(err) => write!(f, "Asset saving error: {}", err),
-            AssetError::Content(err) => write!(f, "Error in content: {}", err),
-            AssetError::TODO => write!(f, "Not implemented"),
+impl AssetError {
+    pub fn source_error<S: ToString, E: 'static + StdError + Sync + Send>(content: S, error: E) -> Self {
+        AssetError::ContentSource {
+            content: content.to_string(),
+            source: Box::new(error),
         }
     }
-}
 
-impl error::Error for AssetError {}
+    pub fn source_error_str<S1: ToString, S2: ToString>(content: S1, error: S2) -> Self {
+        AssetError::ContentSource {
+            content: content.to_string(),
+            source: Box::new(DisplayError(error.to_string())),
+        }
+    }
 
-impl From<UrlError> for AssetError {
-    fn from(err: UrlError) -> AssetError {
-        AssetError::InvalidUrl(err)
+    pub fn load_failed<S: ToString, E: 'static + StdError + Sync + Send>(content: S, error: E) -> Self {
+        AssetError::ContentLoad {
+            content: content.to_string(),
+            source: Box::new(error),
+        }
+    }
+
+    pub fn load_failed_str<S1: ToString, S2: ToString>(content: S1, error: S2) -> Self {
+        AssetError::ContentLoad {
+            content: content.to_string(),
+            source: Box::new(DisplayError(error.to_string())),
+        }
+    }
+
+    pub fn save_failed<S: ToString, E: 'static + StdError + Sync + Send>(content: S, error: E) -> Self {
+        AssetError::ContentSave {
+            content: content.to_string(),
+            source: Box::new(error),
+        }
+    }
+
+    pub fn save_failed_str<S1: ToString, S2: ToString>(content: S1, error: S2) -> Self {
+        AssetError::ContentSave {
+            content: content.to_string(),
+            source: Box::new(DisplayError(error.to_string())),
+        }
+    }
+
+    pub fn other<S: ToString, E: 'static + StdError + Sync + Send>(message: S, error: E) -> Self {
+        AssetError::Other {
+            message: message.to_string(),
+            source: Box::new(error),
+        }
     }
 }

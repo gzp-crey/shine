@@ -79,7 +79,12 @@ impl CompiledPipeline {
             });
         }
 
-        log::trace!("create_bind_group for {:?}: {:?}", scope, bind_group.layout);
+        log::trace!(
+            "create_bind_group for {:?}: {:?}; binding len: {}",
+            scope,
+            bind_group.layout,
+            bindings.len()
+        );
 
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -187,6 +192,8 @@ impl PipelineDescriptor {
 
         let bindings = Self::create_bind_group_layout_entries(&uniform_layout)?;
         let uniforms: Vec<_> = uniform_layout.iter().map(|(u, _)| u).cloned().collect();
+
+        log::trace!("Creating bind group layout with {} entries", bindings.len());
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: &bindings,

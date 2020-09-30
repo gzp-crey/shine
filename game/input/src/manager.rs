@@ -10,16 +10,18 @@ pub struct InputManager {
     time: u128,
 }
 
+impl Default for InputManager {
+    fn default() -> Self {
+        Self { time: 0 }
+    }
+}
+
 impl InputManager {
     fn now() -> u128 {
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_micros()
-    }
-
-    pub fn new() -> InputManager {
-        InputManager { time: 0 }
     }
 
     /// Prepare for the next input frame.
@@ -51,11 +53,5 @@ impl InputManager {
         guestures: &mut GuestureManager,
     ) {
         self.advance_states_with(previous, current, |p, c| guestures.process_guestures(p, c));
-    }
-}
-
-impl Default for InputManager {
-    fn default() -> InputManager {
-        InputManager::new()
     }
 }

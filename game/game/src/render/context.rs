@@ -1,10 +1,12 @@
-use crate::render::{FrameOutput, RenderConfig, RenderError, Surface};
+use crate::render::{RenderConfig, RenderError, Surface};
+use std::sync::Mutex;
 
 /// Thread safe rendering context.
 pub struct Context {
     //instance: wgpu::Instance,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    commands: Mutex<Vec<wgpu::CommandBuffer>>,
     swap_chain_format: wgpu::TextureFormat,
     swap_chain: Option<(wgpu::SwapChain, wgpu::SwapChainDescriptor)>,
 }
@@ -21,7 +23,7 @@ impl Context {
                 compatible_surface: Some(surface.surface()),
             })
             .await
-            .ok_or_else(|| RenderError::Driver("Adapter not found".to_owned()))?;
+            .ok_or_else(|| RenderError::device_error_str("Adapter not found"))?;
 
         //log::info!("Graphics adapter: {:?}", adapter.get_info());
 
@@ -35,12 +37,13 @@ impl Context {
                 config.wgpu_trace.as_ref().map(std::path::Path::new),
             )
             .await
-            .map_err(|err| RenderError::Driver(format!("Failed to create device: {:?}", err)))?;
+            .map_err(|err| RenderError::device_error("Failed to create device.", err))?;
 
         Ok(Context {
             //instance,
             device,
             queue,
+            commands: Mutex::new(Vec::new()),
             swap_chain_format: config.swap_chain_format,
             swap_chain: None,
         })
@@ -54,11 +57,29 @@ impl Context {
         &self.queue
     }
 
+    pub fn clear_commands(&mut self) {
+        let mut commands = self.commands.lock().unwrap();
+        commands.clear();
+    }
+
+    pub fn add_command(&self, command: wgpu::CommandBuffer) {
+        let mut commands = self.commands.lock().unwrap();
+        commands.push(command);
+    }
+
+    pub fn submit_commands(&mut self) {
+        let mut commands = self.commands.lock().unwrap();
+        self.queue.submit(commands.drain(..));
+    }
+
     pub fn swap_chain_format(&self) -> wgpu::TextureFormat {
         self.swap_chain_format
     }
 
-    pub fn create_frame(&mut self, surface: &Surface) -> Result<FrameOutput, RenderError> {
+    pub fn create_frame(
+        &mut self,
+        surface: &Surface,
+    ) -> Result<(wgpu::SwapChainTexture, wgpu::SwapChainDescriptor), RenderError> {
         let device = &self.device;
 
         let format = self.swap_chain_format;
@@ -86,10 +107,11 @@ impl Context {
             (sc, sd)
         });
 
-        let frame = sc.get_current_frame().map_err(|_| RenderError::Output)?.output;
-        Ok(FrameOutput {
-            frame,
-            descriptor: sd.clone(),
-        })
+        let frame = sc
+            .get_current_frame()
+            .map_err(|err| RenderError::device_error("Failed to create frame", err))?
+            .output;
+
+        Ok((frame, sd.clone()))
     }
 }

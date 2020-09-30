@@ -18,7 +18,7 @@ async fn load_etag(context: &Context, texture_url: &Url) -> Result<(String, Opti
     log::debug!("[{}] Downloading descriptor...", meta_url.as_str());
     match context.source_io.download_etag(&meta_url).await {
         Ok(meta_etag) => Ok((image_etag, Some(meta_etag))),
-        Err(AssetError::AssetProvider(_)) => {
+        Err(AssetError::ContentSource { .. }) => {
             log::warn!("[{}] Missing  texture descriptor", meta_url.as_str());
             Ok((image_etag, None))
         }
@@ -34,7 +34,7 @@ async fn load_data(context: &Context, texture_url: &Url) -> Result<(Vec<u8>, Opt
     log::debug!("[{}] Downloading descriptor...", meta_url.as_str());
     match context.source_io.download_binary(&meta_url).await {
         Ok(meta_data) => Ok((image_data, Some(meta_data))),
-        Err(AssetError::AssetProvider(_)) => {
+        Err(AssetError::ContentSource { .. }) => {
             log::warn!("[{}] Missing  texture descriptor", meta_url.as_str());
             Ok((image_data, None))
         }
@@ -71,7 +71,7 @@ pub async fn cook_texture(
     log::debug!("[{}] Downloading image...", texture_url.as_str());
     let (image_data, mut descriptor) = match load_data(context, &texture_url).await? {
         (img, Some(meta)) => (img, serde_json::from_slice(&meta)?),
-        (img, None) => (img, TextureDescriptor::new()),
+        (img, None) => (img, TextureDescriptor::default()),
     };
 
     log::debug!("[{}] Docompressing image...", texture_url.as_str());

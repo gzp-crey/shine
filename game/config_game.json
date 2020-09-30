@@ -11,7 +11,7 @@
             "hash-pipeline" : "file://./cooked_assets/",
             "material" : "file://./cooked_assets/",
             "framegraph" : "file://./cooked_assets/",
-            "world" : "file://./cooked_assets/"
+            "game" : "file://./cooked_assets/"
         },
         "_virtual_schemes": {
             "hash-shader" : "http://assets.shine.com:9100/assets/",
@@ -19,7 +19,7 @@
             "hash-pipeline" : "http://assets.shine.com:9100/assets/",
             "material" : "http://assets.shine.com:9100/assets/",
             "framegraph" : "http://assets.shine.com:9100/assets/",
-            "world" : "http://assets.shine.com:9100/assets/"
+            "game" : "http://assets.shine.com:9100/assets/"
         }
     },
 

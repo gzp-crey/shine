@@ -24,9 +24,9 @@ struct TripleBuffer<T> {
 
 unsafe impl<T> Sync for TripleBuffer<T> {}
 
-impl<T: Default> TripleBuffer<T> {
-    pub fn new() -> TripleBuffer<T> {
-        TripleBuffer {
+impl<T: Default> Default for TripleBuffer<T> {
+    fn default() -> Self {
+        Self {
             buffers: UnsafeCell::new([
                 AlignedData(Default::default()),
                 AlignedData(Default::default()),
@@ -192,6 +192,6 @@ impl<'a, T> DerefMut for RefReceiveBuffer<'a, T> {
 /// It is not a "Single Producer Single Consumer" queue as some massages might be dropped depending
 /// on the thread scheduling.
 pub fn state_channel<T: Default>() -> (Sender<T>, Receiver<T>) {
-    let a = Arc::new(TripleBuffer::new());
+    let a = Arc::new(TripleBuffer::default());
     (Sender::new(&a), Receiver::new(&a))
 }

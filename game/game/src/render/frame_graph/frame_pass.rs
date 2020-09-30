@@ -246,7 +246,7 @@ pub struct FramePass {
 impl FramePass {
     fn create(name: String, descriptor: FramePassDescriptor) -> FramePass {
         let FramePassDescriptor { inputs, output } = descriptor;
-        let inputs = inputs.into_iter().map(|input| FramePassInput::create(input)).collect();
+        let inputs = inputs.into_iter().map(FramePassInput::create).collect();
         let output = FramePassOutput::create(output);
         FramePass {
             name,
@@ -288,14 +288,16 @@ pub struct FramePasses {
     generation: usize,
 }
 
-impl FramePasses {
-    pub fn new() -> FramePasses {
-        FramePasses {
+impl Default for FramePasses {
+    fn default() -> Self {
+        Self {
             passes: Vec::new(),
             generation: 0,
         }
     }
+}
 
+impl FramePasses {
     pub fn add_pass(&mut self, name: String, descriptor: FramePassDescriptor) -> Result<(), RenderError> {
         if self.find_pass_index(&name).is_some() {
             log::error!("FramePass {} alread exists", name);

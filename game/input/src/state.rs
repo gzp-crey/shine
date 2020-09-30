@@ -85,15 +85,17 @@ pub struct InputState {
     inputs: HashMap<InputId, InputData>,  // State of the input
 }
 
-impl InputState {
-    pub fn new() -> InputState {
-        InputState {
+impl Default for InputState {
+    fn default() -> Self {
+        Self {
             time: 0,
             cursore_position: None,
-            inputs: HashMap::new(),
+            inputs: HashMap::default(),
         }
     }
+}
 
+impl InputState {
     pub fn clear(&mut self) {
         self.inputs.clear();
         self.time = 0;
@@ -166,11 +168,5 @@ impl InputState {
 
     pub fn get_input(&self, id: InputId) -> InputValue {
         self.inputs.get(&id).map(|a| a.value).unwrap_or(InputValue::Off)
-    }
-}
-
-impl Default for InputState {
-    fn default() -> Self {
-        InputState::new()
     }
 }

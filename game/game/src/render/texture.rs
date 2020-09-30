@@ -1,5 +1,5 @@
 use crate::{
-    assets::{AssetError, AssetIO, TextureImage, Url, UrlError},
+    assets::{AssetError, AssetIO, TextureImage, Url},
     render::{Compile, CompiledTexture, Context},
 };
 use shine_ecs::core::{
@@ -122,12 +122,6 @@ pub enum TextureLoadError {
     Canceled,
 }
 
-impl From<UrlError> for TextureLoadError {
-    fn from(err: UrlError) -> TextureLoadError {
-        TextureLoadError::Asset(AssetError::InvalidUrl(err))
-    }
-}
-
 impl From<LoadCanceled> for TextureLoadError {
     fn from(_err: LoadCanceled) -> TextureLoadError {
         TextureLoadError::Canceled
@@ -140,25 +134,21 @@ impl From<AssetError> for TextureLoadError {
     }
 }
 
-impl From<bincode::Error> for TextureLoadError {
-    fn from(err: bincode::Error) -> TextureLoadError {
-        TextureLoadError::Asset(AssetError::ContentLoad(format!("Binary stream error: {}", err)))
-    }
-}
-
 impl AssetIO {
     async fn load_texture(
         &self,
         load_token: LoadToken<Texture>,
         source_id: String,
     ) -> Result<TextureImage, TextureLoadError> {
-        let url = Url::parse(&source_id)?;
         log::debug!("[{:?}] Loading texture...", load_token);
-        let data = self.download_binary(&url).await?;
 
+        let url = Url::parse(&source_id).map_err(|err| AssetError::InvalidUrl(err))?;
+        let data = self.download_binary(&url).await?;
         load_token.ok()?;
         log::debug!("[{:?}] Decompressing texture...", load_token);
-        let texture_image = bincode::deserialize::<TextureImage>(&data)?.decompress()?;
+        let texture_image = bincode::deserialize::<TextureImage>(&data)
+            .map_err(|err| AssetError::load_failed(url.as_str(), err))?
+            .decompress()?;
         Ok(texture_image)
     }
 }
@@ -197,18 +187,20 @@ pub struct TextureDependency {
     index: TextureDependencyIndex,
 }
 
+impl Default for TextureDependency {
+    fn default() -> Self {
+        Self {
+            id: None,
+            index: TextureDependencyIndex::Incomplete,
+        }
+    }
+}
+
 impl TextureDependency {
     pub fn none() -> TextureDependency {
         TextureDependency {
             id: None,
             index: TextureDependencyIndex::None,
-        }
-    }
-
-    pub fn new() -> TextureDependency {
-        TextureDependency {
-            id: None,
-            index: TextureDependencyIndex::Incomplete,
         }
     }
 
@@ -299,11 +291,5 @@ impl TextureDependency {
         textures: &'r TextureStoreRead<'c>,
     ) -> Result<Option<&'c CompiledTexture>, TextureDependencyError> {
         self.request_with(textures, |_| None)
-    }
-}
-
-impl Default for TextureDependency {
-    fn default() -> Self {
-        Self::new()
     }
 }

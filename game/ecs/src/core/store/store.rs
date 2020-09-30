@@ -359,12 +359,12 @@ where
     pub(crate) fn new_with_load(page_size: usize, load_handler: L) -> Store<D, L> {
         Store {
             shared: RwLock::new(SharedData {
-                entries: HashMap::new(),
+                entries: HashMap::default(),
             }),
             exclusive: Mutex::new((
                 ExclusiveData {
                     arena: Arena::new(page_size),
-                    entries: HashMap::new(),
+                    entries: HashMap::default(),
                     unnamed_id: 0,
                 },
                 load_handler,
@@ -424,12 +424,12 @@ where
     pub(crate) fn new(page_size: usize) -> Store<D, NoLoad> {
         Store {
             shared: RwLock::new(SharedData {
-                entries: HashMap::new(),
+                entries: HashMap::default(),
             }),
             exclusive: Mutex::new((
                 ExclusiveData {
                     arena: Arena::new(page_size),
-                    entries: HashMap::new(),
+                    entries: HashMap::default(),
                     unnamed_id: 0,
                 },
                 NoLoad,

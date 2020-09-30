@@ -30,7 +30,7 @@ impl<T> Arena<T> {
     pub fn new(page_size: usize) -> Self {
         Arena {
             size: 0,
-            pages: Vec::new(),
+            pages: Vec::default(),
             free_head: Entry::Vacant(usize::max_value()),
             page_size,
         }

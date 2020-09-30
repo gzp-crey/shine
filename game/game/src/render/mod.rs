@@ -30,8 +30,8 @@ pub use self::pipeline::{
 };
 mod model;
 pub use self::model::{Model, ModelError, ModelIndex, ModelKey, ModelStore, ModelStoreRead};
-mod frame_graph;
-pub use self::frame_graph::*;
+mod frame;
+pub use self::frame::*;
 
 mod render_resources;
 pub use self::render_resources::*;

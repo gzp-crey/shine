@@ -1,6 +1,6 @@
 use crate::{
     core::ids::SmallStringId,
-    resources::{FetchResource, MultiResourceClaims, ResourceAccess, ResourceName, ResourceQuery, Resources},
+    resources::{FetchResource, ResourceClaims, ResourceQuery, Resources},
 };
 use std::{any, borrow::Cow};
 
@@ -10,7 +10,7 @@ pub type SystemName = SmallStringId<16>;
 pub trait System: Send + Sync {
     fn type_name(&self) -> Cow<'static, str>;
     fn name(&self) -> &Option<SystemName>;
-    fn resource_access(&self) -> &ResourceAccess;
+    fn resource_claims(&self) -> &ResourceClaims;
     fn run(&mut self, resources: &Resources);
 }
 
@@ -20,24 +20,24 @@ pub trait IntoSystem<State, R> {
     fn into_system(self) -> Box<dyn System>;
 }
 
-/// Convert a sytem candidate into a sytem configuration. It enables one to add extra
+/// Convert a sytem candidate into a sytem builder. It enables one to add extra
 /// scheduling parameters.
-pub trait IntoSystemConfiguration<State, R> {
-    type Configuration: IntoSystem<State, R>;
+pub trait IntoSystemBuilder<State, R> {
+    type Builder: IntoSystem<State, R>;
 
     #[must_use]
-    fn system(self) -> Self::Configuration;
+    fn system(self) -> Self::Builder;
 }
 
-pub struct SystemConfiguration<Func, R> {
+pub struct SystemBuilder<Func, R> {
     func: Func,
     name: Option<SystemName>,
-    multi_resource_claims: MultiResourceClaims,
+    resource_claims: ResourceClaims,
     dependencies: Vec<SystemName>,
     _phantom: std::marker::PhantomData<R>,
 }
 
-impl<Func, R> SystemConfiguration<Func, R> {
+impl<Func, R> SystemBuilder<Func, R> {
     #[must_use]
     pub fn with_name(mut self, name: Option<SystemName>) -> Self {
         self.name = name;
@@ -45,8 +45,8 @@ impl<Func, R> SystemConfiguration<Func, R> {
     }
 
     #[must_use]
-    pub fn with_resources<T: ResourceQuery>(mut self, names: &[Option<ResourceName>]) -> Self {
-        <T as ResourceQuery>::add_claim(&mut self.multi_resource_claims, names);
+    pub fn with_resources<T: ResourceQuery>(mut self, claims: &<T as ResourceQuery>::Claim) -> Self {
+        <T as ResourceQuery>::add_extra_claim(claims, &mut self.resource_claims);
         self
     }
 
@@ -59,19 +59,19 @@ impl<Func, R> SystemConfiguration<Func, R> {
 
 pub struct SystemFn<State, Func>
 where
-    Func: FnMut(&Resources, &mut State, &ResourceAccess),
+    Func: FnMut(&Resources, &mut State, &ResourceClaims),
     State: Sync + Send,
 {
     type_name: Cow<'static, str>,
     name: Option<SystemName>,
-    resource_access: ResourceAccess,
+    resource_claims: ResourceClaims,
     state: State,
     func: Func,
 }
 
 impl<State, Func> System for SystemFn<State, Func>
 where
-    Func: FnMut(&Resources, &mut State, &ResourceAccess) + Send + Sync,
+    Func: FnMut(&Resources, &mut State, &ResourceClaims) + Send + Sync,
     State: Sync + Send,
 {
     fn type_name(&self) -> Cow<'static, str> {
@@ -82,12 +82,13 @@ where
         &self.name
     }
 
-    fn resource_access(&self) -> &ResourceAccess {
-        &self.resource_access
+    fn resource_claims(&self) -> &ResourceClaims {
+        &self.resource_claims
     }
 
     fn run(&mut self, resources: &Resources) {
-        (self.func)(resources, &mut self.state, &self.resource_access);
+        log::trace!("Running system [{:?}] - {:?}", self.name, self.type_name());
+        (self.func)(resources, &mut self.state, &self.resource_claims);
     }
 }
 
@@ -102,7 +103,7 @@ macro_rules! fn_call {
 
 macro_rules! impl_into_system {
     (($($commands: ident)*), ($($resource: ident),*)) => {
-        impl<Func, $($resource,)*> IntoSystemConfiguration<($($commands,)*), ($($resource,)*)> for Func
+        impl<Func, $($resource,)*> IntoSystemBuilder<($($commands,)*), ($($resource,)*)> for Func
         where
             Func:
                 FnMut($($commands,)* $($resource,)*) +
@@ -112,20 +113,20 @@ macro_rules! impl_into_system {
                 Send + Sync + 'static,
             $($resource: ResourceQuery,)*
         {
-            type Configuration = SystemConfiguration<Func, ($($resource,)*)>;
+            type Builder = SystemBuilder<Func, ($($resource,)*)>;
 
-            fn system(self) -> Self::Configuration {
-                SystemConfiguration {
+            fn system(self) -> Self::Builder {
+                SystemBuilder {
                     name: None,
                     func: self,
-                    multi_resource_claims: Default::default(),
+                    resource_claims: Default::default(),
                     dependencies: Default::default(),
                     _phantom: std::marker::PhantomData,
                 }
             }
         }
 
-        impl<Func, $($resource,)*> IntoSystem<($($commands,)*), ($($resource,)*)> for SystemConfiguration<Func, ($($resource,)*)>
+        impl<Func, $($resource,)*> IntoSystem<($($commands,)*), ($($resource,)*)> for SystemBuilder<Func, ($($resource,)*)>
         where
             Func:
                 FnMut($($commands,)* $($resource,)*) +
@@ -139,22 +140,19 @@ macro_rules! impl_into_system {
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
             fn into_system(self) -> Box<dyn System> {
-                let SystemConfiguration{ mut func, name, multi_resource_claims, .. } = self;
+                let SystemBuilder{ mut func, name, mut resource_claims, .. } = self;
                 let type_name = any::type_name::<Func>().into();
 
-                let mut resource_access = ResourceAccess::default();
-                $(<<$resource as ResourceQuery>::Fetch as FetchResource<'_>>::access(&multi_resource_claims, &mut resource_access);)*
-
-                log::debug!("Immutable resource claims for [{}]: {:?}", type_name, resource_access.get_immutable_multi_claims());
-                log::debug!("Mutable resource claims for [{}]: {:?}", type_name, resource_access.get_mutable_multi_claims());
+                $(<$resource as ResourceQuery>::add_default_claim(&mut resource_claims);)*
+                log::debug!("Resource claims for [{}]: {:#?}", type_name, resource_claims);
 
                 Box::new(SystemFn {
                     name,
                     type_name,
-                    resource_access,
+                    resource_claims,
                     state: (),
-                    func: move |resources, state, resource_access| {
-                        $(let mut $resource = <<$resource as ResourceQuery>::Fetch as FetchResource>::fetch(resources, resource_access);)*
+                    func: move |resources, state, resource_claims| {
+                        $(let mut $resource = <<$resource as ResourceQuery>::Fetch as FetchResource>::fetch(resources, resource_claims);)*
                         fn_call!(func, ($($commands, state)*), ($($resource),*));
                     }
                 })

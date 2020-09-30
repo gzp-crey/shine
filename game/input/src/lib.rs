@@ -22,11 +22,13 @@ impl InputId {
 
 pub struct InputIdGenerator(u32);
 
-impl InputIdGenerator {
-    pub fn new() -> InputIdGenerator {
-        InputIdGenerator(0)
+impl Default for InputIdGenerator {
+    fn default() -> Self {
+        Self(0)
     }
+}
 
+impl InputIdGenerator {
     pub fn with_start(start: u32) -> InputIdGenerator {
         InputIdGenerator(start)
     }
@@ -35,11 +37,5 @@ impl InputIdGenerator {
     pub fn next(&mut self) -> InputId {
         self.0 += 1;
         InputId(self.0)
-    }
-}
-
-impl Default for InputIdGenerator {
-    fn default() -> Self {
-        Self::new()
     }
 }

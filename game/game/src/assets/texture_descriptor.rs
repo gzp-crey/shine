@@ -21,9 +21,9 @@ pub struct Image {
     pub size: (u32, u32),
 }
 
-impl Image {
-    pub fn new() -> Image {
-        Image {
+impl Default for Image {
+    fn default() -> Self {
+        Self {
             encoding: ImageEncoding::Png,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             size: (0, 0),
@@ -31,14 +31,8 @@ impl Image {
     }
 }
 
-impl Default for Image {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Sampler descriptor
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SamplerDescriptor {
     pub address_mode_u: wgpu::AddressMode,
     pub address_mode_v: wgpu::AddressMode,
@@ -53,9 +47,9 @@ pub struct SamplerDescriptor {
     pub border_color: Option<wgpu::SamplerBorderColor>,
 }
 
-impl SamplerDescriptor {
-    pub fn new() -> SamplerDescriptor {
-        SamplerDescriptor {
+impl Default for SamplerDescriptor {
+    fn default() -> Self {
+        Self {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -72,29 +66,14 @@ impl SamplerDescriptor {
 }
 
 /// Texture and sampler descriptor
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct TextureDescriptor {
     pub image: Image,
     pub sampler: SamplerDescriptor,
 }
 
-impl TextureDescriptor {
-    pub fn new() -> TextureDescriptor {
-        TextureDescriptor {
-            image: Image::new(),
-            sampler: SamplerDescriptor::new(),
-        }
-    }
-}
-
-impl Default for TextureDescriptor {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Deserialized texture
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TextureImage {
     pub data: Vec<u8>,
     pub image: Image,

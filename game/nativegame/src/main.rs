@@ -1,14 +1,12 @@
 #![feature(async_closure)]
 
 use shine_game::{
+    app::{App, AppError, Config},
     assets::{AssetPlugin, Url},
+    game::test1::Test1,
     input::InputPlugin,
     render::{RenderPlugin, Surface},
-    wgpu,
-    /*world::{
-        test1::Test1World, test2::Test2World, test3::Test3World, test4::Test4World, test5::Test5World, WorldSystem,
-    },*/
-    Config, GameError, GameView,
+    wgpu, World,
 };
 use std::time::{Duration, Instant};
 use tokio::runtime::{Handle as RuntimeHandle, Runtime};
@@ -37,32 +35,6 @@ async fn logic(event_loop_proxy: EventLoopProxy<CustomEvent>) {
     }
 }
 
-fn load_world(rt: &RuntimeHandle, game: &mut GameView, url: &Url, gc: bool) -> Result<(), GameError> {
-    /*use shine_game::world::WorldData;
-    let world_data = rt
-        .block_on(WorldData::from_url(&game.assetio, url))
-        .map_err(|err| GameError::Config(format!("Failed to load world: {}", err)))?;
-    match world_data {
-        WorldData::Test1(test) => game.load_world::<Test1World>(test)?,
-        WorldData::Test2(test) => game.load_world::<Test2World>(test)?,
-        WorldData::Test3(test) => game.load_world::<Test3World>(test)?,
-        WorldData::Test4(test) => game.load_world::<Test4World>(test)?,
-        WorldData::Test5(test) => game.load_world::<Test5World>(test)?,
-    }
-    if gc {
-        game.gc();
-    }*/
-    Ok(())
-}
-
-fn unload_world(_rt: &RuntimeHandle, game: &mut GameView, gc: bool) -> Result<(), GameError> {
-    /*game.unload_world()?;
-    if gc {
-        game.gc();
-    }*/
-    Ok(())
-}
-
 async fn run() {
     tokio::task::spawn_blocking(|| {
         let rt = RuntimeHandle::current();
@@ -80,28 +52,30 @@ async fn run() {
 
         let surface = Surface::new(surface, size);
         let config = Config::new().unwrap();
-        let test1_url = Url::parse("world://test_worlds/test1/test.wrld").unwrap();
-        let test2_url = Url::parse("world://test_worlds/test2/test.wrld").unwrap();
-        let test3_url = Url::parse("world://test_worlds/test3/test.wrld").unwrap();
-        let test4_url = Url::parse("world://test_worlds/test4/test.wrld").unwrap();
-        let test5_url = Url::parse("world://test_worlds/test5/test.wrld").unwrap();
-        let mut game = rt
+        let test1_url = Url::parse("game://games/test1/test.game").unwrap();
+        let test2_url = Url::parse("game://games/test2/test.game").unwrap();
+        let test3_url = Url::parse("game://games/test3/test.game").unwrap();
+        let test4_url = Url::parse("game://games/test4/test.game").unwrap();
+        let test5_url = Url::parse("game://games/test5/test.game").unwrap();
+        let mut app = rt
             .block_on(async move {
-                let mut game = GameView::new();
-                game.add_asset_plugin(config.asset.clone()).await?;
-                game.add_render_plugin(config.render.clone(), wgpu_instance, surface)
+                let mut app = App::default();
+                app.world.add_asset_plugin(config.asset.clone()).await?;
+                app.world
+                    .add_render_plugin(config.render.clone(), wgpu_instance, surface)
                     .await?;
-                game.add_input_plugin().await?;
-                Ok::<_, GameError>(game)
+                app.world.add_input_plugin().await?;
+                Ok::<_, AppError>(app)
             })
             .unwrap();
 
         let event_proxy = event_loop.create_proxy();
         tokio::task::spawn(logic(event_proxy));
 
+        rt.block_on(app.load_game_from_url(&test1_url)).unwrap();
+
         let mut prev_render_time = Instant::now();
         let mut is_closing = false;
-        //flame::start("frame");
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
@@ -118,23 +92,17 @@ async fn run() {
                 }
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::KeyboardInput { input, .. } => {
-                        let _ = game.inject_input(input);
+                        let _ = app.world.inject_input(input);
                         if input.state == ElementState::Pressed {
                             let alt = input.modifiers.shift();
                             match input.virtual_keycode {
                                 Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
-                                /*Some(VirtualKeyCode::F11) => {
-                                    flame::end("frame");
-                                    flame::clear();
-                                    flame::start("frame");
-                                },*/
-                                Some(VirtualKeyCode::Key0) => unload_world(&rt, &mut game, alt).unwrap(),
-                                Some(VirtualKeyCode::Key1) => load_world(&rt, &mut game, &test1_url, alt).unwrap(),
-                                Some(VirtualKeyCode::Key2) => load_world(&rt, &mut game, &test2_url, alt).unwrap(),
-                                Some(VirtualKeyCode::Key3) => load_world(&rt, &mut game, &test3_url, alt).unwrap(),
-                                Some(VirtualKeyCode::Key4) => load_world(&rt, &mut game, &test4_url, alt).unwrap(),
-                                Some(VirtualKeyCode::Key5) => load_world(&rt, &mut game, &test5_url, alt).unwrap(),
-                                //Some(VirtualKeyCode::F9) => game.gc(),
+                                Some(VirtualKeyCode::Key0) => rt.block_on(app.unload_game()).unwrap(),
+                                Some(VirtualKeyCode::Key1) => rt.block_on(app.load_game_from_url(&test1_url)).unwrap(),
+                                Some(VirtualKeyCode::Key2) => rt.block_on(app.load_game_from_url(&test2_url)).unwrap(),
+                                Some(VirtualKeyCode::Key3) => rt.block_on(app.load_game_from_url(&test3_url)).unwrap(),
+                                Some(VirtualKeyCode::Key4) => rt.block_on(app.load_game_from_url(&test4_url)).unwrap(),
+                                Some(VirtualKeyCode::Key5) => rt.block_on(app.load_game_from_url(&test5_url)).unwrap(),
                                 _ => {}
                             }
                         }
@@ -143,7 +111,7 @@ async fn run() {
                         *control_flow = ControlFlow::Exit;
                     }
                     _ => {
-                        //game.update();
+                        //world.update();
                     }
                 },
                 _ => {}
@@ -155,10 +123,7 @@ async fn run() {
             }
 
             if control_flow == &ControlFlow::Exit {
-                //flame::end("frame");
-                //use std::fs::File;
-                //flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
-                unload_world(&rt, &mut game, true).unwrap();
+                rt.block_on(app.unload_game()).unwrap();
                 is_closing = true;
                 return;
             }
@@ -168,24 +133,20 @@ async fn run() {
             let wait_millis = ((1000 / TARGET_FPS) as i64) - elapsed_time;
             if wait_millis > 0 {
                 // we have some time left from rendering
-                //log::trace!("wait untils next render: {}", wait_millis);
                 let new_inst = prev_render_time + std::time::Duration::from_millis(wait_millis as u64);
                 *control_flow = ControlFlow::WaitUntil(new_inst);
             } else {
                 // no time left
-                //log::trace!("elapsed time since last render: {} ({})", elapsed_time, 1000./(elapsed_time as f64));
-                /*if let Err(err) = game.refresh(size) {
+                if let Err(err) = app.world.render(size) {
                     log::warn!("Failed to render: {:?}", err);
-                }*/
-                //flame::end("frame");
-                //flame::start("frame");
+                }
                 *control_flow = ControlFlow::Poll;
                 prev_render_time = now;
             }
         })
     })
     .await
-    .unwrap();
+    .unwrap()
 }
 
 fn main() {

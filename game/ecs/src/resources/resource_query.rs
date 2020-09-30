@@ -1,15 +1,83 @@
 use crate::resources::{
-    MultiResourceRead, MultiResourceWrite, Resource, ResourceIndex, ResourceName, ResourceRead, ResourceWrite,
+    NamedResourceRead, NamedResourceWrite, Resource, ResourceIndex, ResourceName, ResourceRead, ResourceWrite,
     Resources,
 };
 use std::{
-    any::{self, TypeId},
+    any::TypeId,
     collections::{HashMap, HashSet},
     marker::PhantomData,
     ops::{Deref, DerefMut, Index, IndexMut},
 };
 
-/// Shared borrow of an unnamed resource
+/// Store resource names for each resource types.
+#[derive(Default, Debug)]
+pub struct ResourceClaims {
+    claims_by_query: HashMap<TypeId, (Vec<ResourceIndex>, Vec<ResourceIndex>)>,
+    all_immutable: HashSet<ResourceIndex>,
+    all_mutable: HashSet<ResourceIndex>,
+}
+
+impl ResourceClaims {
+    fn store_immutable(&mut self, idx: ResourceIndex) {
+        assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
+        self.all_immutable.insert(idx);
+    }
+
+    fn store_mutable(&mut self, idx: ResourceIndex) {
+        assert!(self.all_immutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
+        assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources multiple times for mutation
+        self.all_mutable.insert(idx);
+    }
+
+    pub fn add_claim<RId, I1, I2>(&mut self, immutable: I1, mutable: I2)
+    where
+        RId: 'static,
+        I1: IntoIterator<Item = ResourceIndex>,
+        I2: IntoIterator<Item = ResourceIndex>,
+    {
+        let rty = TypeId::of::<RId>();
+        assert!(self.claims_by_query.get(&rty).is_none());
+        let immutable = immutable
+            .into_iter()
+            .inspect(|idx| self.store_immutable(idx.clone()))
+            .collect();
+        let mutable = mutable
+            .into_iter()
+            .inspect(|idx| self.store_mutable(idx.clone()))
+            .collect();
+        let r = self.claims_by_query.insert(rty, (immutable, mutable));
+        assert!(r.is_none());
+    }
+
+    pub fn get_claims<RId: 'static>(&self) -> Option<&(Vec<ResourceIndex>, Vec<ResourceIndex>)> {
+        let rty = TypeId::of::<RId>();
+        self.claims_by_query.get(&rty)
+    }
+
+    pub fn is_claimed_immutable(&self, id: &ResourceIndex) -> bool {
+        self.all_immutable.contains(&id)
+    }
+
+    pub fn is_claimed_mutable(&self, id: &ResourceIndex) -> bool {
+        self.all_mutable.contains(&id)
+    }
+}
+
+pub trait ResourceQuery {
+    type Fetch: for<'a> FetchResource<'a>;
+    type Claim: ?Sized;
+
+    fn add_default_claim(resource_claims: &mut ResourceClaims);
+    fn add_extra_claim(claim: &Self::Claim, resource_claims: &mut ResourceClaims);
+}
+
+pub trait FetchResource<'a> {
+    type Item;
+
+    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item;
+}
+
+/// Shared borrow of a resource
 pub struct Res<'a, T: Resource>(pub(crate) ResourceRead<'a, T>);
 
 impl<'a, T: Resource> Deref for Res<'a, T> {
@@ -20,7 +88,33 @@ impl<'a, T: Resource> Deref for Res<'a, T> {
     }
 }
 
-/// Unique borrow of a single unnamed resource
+/// Helper to have uique type_id for each ResourceQuery implementation
+struct ResQuery<T>(PhantomData<T>);
+
+impl<'a, T: Resource> ResourceQuery for Res<'a, T> {
+    type Fetch = FetchResourceRead<T>;
+    type Claim = ();
+
+    fn add_default_claim(resource_claims: &mut ResourceClaims) {
+        resource_claims.add_claim::<ResQuery<T>, _, _>(Some(ResourceIndex::of::<T>(None)), None);
+    }
+
+    fn add_extra_claim(_claim: &Self::Claim, _resource_claims: &mut ResourceClaims) {
+    }
+}
+
+pub struct FetchResourceRead<T: Resource>(PhantomData<T>);
+
+impl<'a, T: Resource> FetchResource<'a> for FetchResourceRead<T> {
+    type Item = Res<'a, T>;
+
+    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
+        assert!(resource_claims.is_claimed_immutable(&ResourceIndex::of::<T>(None)));
+        Res(resources.get::<T>().unwrap())
+    }
+}
+
+/// Unique borrow of resource
 pub struct ResMut<'a, T: Resource>(pub(crate) ResourceWrite<'a, T>);
 
 impl<'a, T: Resource> Deref for ResMut<'a, T> {
@@ -37,171 +131,18 @@ impl<'a, T: Resource> DerefMut for ResMut<'a, T> {
     }
 }
 
-/// Shared borrow of multiple named resources.
-pub struct MultiRes<'a, T: Resource>(pub(crate) MultiResourceRead<'a, T>);
+/// Helper to have uique type_id for each ResourceQuery implementation
+struct ResMutQuery<T>(PhantomData<T>);
 
-impl<'a, T: Resource> MultiRes<'a, T> {
-    pub fn len(&self) -> usize {
-        self.0.len()
+impl<'a, T: Resource> ResourceQuery for ResMut<'a, T> {
+    type Fetch = FetchResourceWrite<T>;
+    type Claim = ();
+    
+    fn add_default_claim(resource_claims: &mut ResourceClaims) {
+        resource_claims.add_claim::<ResMutQuery<T>, _, _>(None, Some(ResourceIndex::of::<T>(None)));
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl<'a, T: Resource> Index<usize> for MultiRes<'a, T> {
-    type Output = T;
-
-    fn index(&self, idx: usize) -> &T {
-        &self.0[idx]
-    }
-}
-
-/// Unique borrow of multiple named resources.
-pub struct MultiResMut<'a, T: Resource>(pub(crate) MultiResourceWrite<'a, T>);
-
-impl<'a, T: Resource> MultiResMut<'a, T> {
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl<'a, T: Resource> Index<usize> for MultiResMut<'a, T> {
-    type Output = T;
-
-    fn index(&self, idx: usize) -> &T {
-        &self.0[idx]
-    }
-}
-
-impl<'a, T: Resource> IndexMut<usize> for MultiResMut<'a, T> {
-    fn index_mut(&mut self, idx: usize) -> &mut T {
-        &mut self.0[idx]
-    }
-}
-
-/// Store resource names for each resource types.
-#[derive(Default, Debug)]
-pub struct MultiResourceClaims {
-    immutable: HashMap<TypeId, Vec<Option<ResourceName>>>,
-    mutable: HashMap<TypeId, Vec<Option<ResourceName>>>,
-}
-
-/// Provides information about the resources a [System] reads and writes
-#[derive(Default)]
-pub struct ResourceAccess {
-    multi_claims: MultiResourceClaims,
-    all_immutable: HashSet<ResourceIndex>,
-    all_mutable: HashSet<ResourceIndex>,
-}
-
-impl ResourceAccess {
-    fn store_immutable(&mut self, idx: ResourceIndex) {
-        assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
-        self.all_immutable.insert(idx);
-    }
-
-    pub fn add_immutable_claim<T: Resource>(&mut self) {
-        self.store_immutable(ResourceIndex::of::<T>(None));
-    }
-
-    pub fn add_immutable_multi_claims<T: Resource>(&mut self, claims: &MultiResourceClaims) {
-        let ty = TypeId::of::<T>();
-        assert!(self.multi_claims.immutable.get(&ty).is_none()); // immutable multi resources claim already resolved for this type
-        log::debug!(
-            "Adding immutable claims to {} ({:?}) from {:?}",
-            any::type_name::<T>(),
-            ty,
-            claims
-        );
-        if let Some(names) = claims.immutable.get(&ty) {
-            let mut multi_entry = Vec::with_capacity(names.len());
-            for name in names {
-                let idx = ResourceIndex::of::<T>(name.clone());
-                multi_entry.push(name.clone());
-                self.store_immutable(idx);
-            }
-            let r = self.multi_claims.immutable.insert(ty, multi_entry);
-            assert!(r.is_none());
-        }
-    }
-
-    pub fn get_immutable_multi_claims(&self) -> &HashMap<TypeId, Vec<Option<ResourceName>>> {
-        &self.multi_claims.immutable
-    }
-
-    pub fn get_immutable_multi_names<T: Resource>(&self) -> Option<&[Option<ResourceName>]> {
-        let ty = TypeId::of::<T>();
-        self.multi_claims.immutable.get(&ty).map(|v| &v[..])
-    }
-
-    fn store_mutable(&mut self, idx: ResourceIndex) {
-        assert!(self.all_immutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
-        assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources multiple times for mutation
-        self.all_mutable.insert(idx);
-    }
-
-    pub fn add_mutable_claim<T: Resource>(&mut self) {
-        self.store_mutable(ResourceIndex::of::<T>(None));
-    }
-
-    pub fn add_mutable_multi_claims<T: Resource>(&mut self, claims: &MultiResourceClaims) {
-        let ty = TypeId::of::<T>();
-        log::debug!(
-            "Adding mutable claims to {} ({:?}) from {:?}",
-            any::type_name::<T>(),
-            ty,
-            claims
-        );
-        assert!(self.multi_claims.mutable.get(&ty).is_none()); // mutable multi resources claim already resolved for this type
-        if let Some(names) = claims.mutable.get(&ty) {
-            let mut multi_entry = Vec::with_capacity(names.len());
-            for name in names {
-                let idx = ResourceIndex::of::<T>(name.clone());
-                multi_entry.push(name.clone());
-                self.store_mutable(idx);
-            }
-            let r = self.multi_claims.mutable.insert(ty, multi_entry);
-            assert!(r.is_none());
-        }
-    }
-
-    pub fn get_mutable_multi_claims(&self) -> &HashMap<TypeId, Vec<Option<ResourceName>>> {
-        &self.multi_claims.mutable
-    }
-
-    pub fn get_mutable_multi_names<T: Resource>(&self) -> Option<&[Option<ResourceName>]> {
-        let ty = TypeId::of::<T>();
-        self.multi_claims.mutable.get(&ty).map(|v| &v[..])
-    }
-}
-
-pub trait FetchResource<'a> {
-    type Item;
-
-    /// Collect resource references
-    fn access(multi_claims: &MultiResourceClaims, resource_access: &mut ResourceAccess);
-
-    // Collect resource references
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_access: &'r ResourceAccess) -> Self::Item;
-}
-
-pub struct FetchResourceRead<T: Resource>(PhantomData<T>);
-
-impl<'a, T: Resource> FetchResource<'a> for FetchResourceRead<T> {
-    type Item = Res<'a, T>;
-
-    fn access(_multi_claims: &MultiResourceClaims, resource_access: &mut ResourceAccess) {
-        resource_access.add_immutable_claim::<T>();
-    }
-
-    fn fetch<'r: 'a>(resources: &'r Resources, _resource_access: &'r ResourceAccess) -> Self::Item {
-        Res(resources.get::<T>(&None).unwrap())
+    fn add_extra_claim(_claim: &Self::Claim, _resource_claims: &mut ResourceClaims) {
     }
 }
 
@@ -210,113 +151,112 @@ pub struct FetchResourceWrite<T: Resource>(PhantomData<T>);
 impl<'a, T: Resource> FetchResource<'a> for FetchResourceWrite<T> {
     type Item = ResMut<'a, T>;
 
-    fn access(_multi_resources: &MultiResourceClaims, resource_access: &mut ResourceAccess) {
-        resource_access.add_mutable_claim::<T>();
-    }
-
-    fn fetch<'r: 'a>(resources: &'r Resources, _resource_access: &'r ResourceAccess) -> Self::Item {
-        ResMut(resources.get_mut::<T>(&None).unwrap())
+    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
+        assert!(resource_claims.is_claimed_mutable(&ResourceIndex::of::<T>(None)));
+        ResMut(resources.get_mut::<T>().unwrap())
     }
 }
 
-pub struct FetchMultiResourceRead<T: Resource>(PhantomData<T>);
+/// Shared borrow of multiple named resources.
+pub struct NamedRes<'a, T: Resource>(pub(crate) NamedResourceRead<'a, T>);
 
-impl<'a, T: Resource> FetchResource<'a> for FetchMultiResourceRead<T> {
-    type Item = MultiRes<'a, T>;
-
-    fn access(multi_resources: &MultiResourceClaims, resource_access: &mut ResourceAccess) {
-        resource_access.add_immutable_multi_claims::<T>(multi_resources);
+impl<'a, T: Resource> NamedRes<'a, T> {
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_access: &'r ResourceAccess) -> Self::Item {
-        log::debug!(
-            "Fetch immutable resources for {} ({:?}) from {:?}",
-            any::type_name::<T>(),
-            TypeId::of::<T>(),
-            resource_access.get_immutable_multi_claims()
-        );
-        let names = resource_access.get_immutable_multi_names::<T>().unwrap();
-        MultiRes(resources.get_multi(names).unwrap())
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
-pub struct FetchMultiResourceWrite<T: Resource>(PhantomData<T>);
+impl<'a, T: Resource> Index<usize> for NamedRes<'a, T> {
+    type Output = T;
 
-impl<'a, T: Resource> FetchResource<'a> for FetchMultiResourceWrite<T> {
-    type Item = MultiResMut<'a, T>;
-
-    fn access(multi_resources: &MultiResourceClaims, resource_access: &mut ResourceAccess) {
-        resource_access.add_mutable_multi_claims::<T>(multi_resources);
-    }
-
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_access: &'r ResourceAccess) -> Self::Item {
-        log::debug!(
-            "Fetch mutable resources for {} ({:?}) from {:?}",
-            any::type_name::<T>(),
-            TypeId::of::<T>(),
-            resource_access.get_mutable_multi_claims()
-        );
-        let names = resource_access.get_mutable_multi_names::<T>().unwrap();
-        MultiResMut(resources.get_multi_mut::<T>(names).unwrap())
+    fn index(&self, idx: usize) -> &T {
+        &self.0[idx]
     }
 }
 
-pub trait ResourceQuery {
-    type Fetch: for<'a> FetchResource<'a>;
+/// Helper to have uique type_id for each ResourceQuery implementation
+struct NamedResQuery<T>(PhantomData<T>);
 
-    fn add_claim(resource_claims: &mut MultiResourceClaims, claims: &[Option<ResourceName>]);
-}
+impl<'a, T: Resource> ResourceQuery for NamedRes<'a, T> {
+    type Fetch = FetchNamedResourceRead<T>;
+    type Claim = [ResourceName];
 
-impl<'a, T: Resource> ResourceQuery for Res<'a, T> {
-    type Fetch = FetchResourceRead<T>;
+    fn add_default_claim(_resource_claims: &mut ResourceClaims) {
+    }
 
-    fn add_claim(_resource_claims: &mut MultiResourceClaims, _claims: &[Option<ResourceName>]) {
-        panic!("Use MultiRes to claim multiple named resources for read");
+    fn add_extra_claim(claim: &Self::Claim, resource_claims: &mut ResourceClaims) {
+        let immutable = claim.iter().map(|c| ResourceIndex::of::<T>(Some(c.clone()))).clone();
+        resource_claims.add_claim::<NamedResQuery<T>, _, _>(immutable, None);
     }
 }
 
-impl<'a, T: Resource> ResourceQuery for ResMut<'a, T> {
-    type Fetch = FetchResourceWrite<T>;
+pub struct FetchNamedResourceRead<T: Resource>(PhantomData<T>);
 
-    fn add_claim(_resource_claims: &mut MultiResourceClaims, _claims: &[Option<ResourceName>]) {
-        panic!("Use MultiResMut to claim multiple named resources for write");
+impl<'a, T: Resource> FetchResource<'a> for FetchNamedResourceRead<T> {
+    type Item = NamedRes<'a, T>;
+
+    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
+        let claims = resource_claims.get_claims::<NamedResQuery<T>>().unwrap();
+        let names = claims.0.iter().map(|x| x.name().unwrap().to_owned());
+        NamedRes(resources.get_with_names::<T, _>(names).unwrap())
     }
 }
 
-impl<'a, T: Resource> ResourceQuery for MultiRes<'a, T> {
-    type Fetch = FetchMultiResourceRead<T>;
+/// Unique borrow of multiple named resources.
+pub struct NamedResMut<'a, T: Resource>(pub(crate) NamedResourceWrite<'a, T>);
 
-    fn add_claim(resource_claims: &mut MultiResourceClaims, claims: &[Option<ResourceName>]) {
-        let ty = TypeId::of::<T>();
-        log::debug!(
-            "Claim immutable resources for {} ({:?}): {:?}",
-            any::type_name::<T>(),
-            ty,
-            claims
-        );
-        resource_claims
-            .immutable
-            .entry(ty)
-            .or_default()
-            .extend(claims.iter().cloned());
+impl<'a, T: Resource> NamedResMut<'a, T> {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
-impl<'a, T: Resource> ResourceQuery for MultiResMut<'a, T> {
-    type Fetch = FetchMultiResourceWrite<T>;
+impl<'a, T: Resource> Index<usize> for NamedResMut<'a, T> {
+    type Output = T;
 
-    fn add_claim(resource_claims: &mut MultiResourceClaims, claims: &[Option<ResourceName>]) {
-        let ty = TypeId::of::<T>();
-        log::debug!(
-            "Claim mutable resources for {} ({:?}): {:?}",
-            any::type_name::<T>(),
-            ty,
-            claims
-        );
-        resource_claims
-            .mutable
-            .entry(ty)
-            .or_default()
-            .extend(claims.iter().cloned());
+    fn index(&self, idx: usize) -> &T {
+        &self.0[idx]
+    }
+}
+
+impl<'a, T: Resource> IndexMut<usize> for NamedResMut<'a, T> {
+    fn index_mut(&mut self, idx: usize) -> &mut T {
+        &mut self.0[idx]
+    }
+}
+
+/// Helper to have uique type_id for each ResourceQuery implementation
+struct NamedResMutQuery<T>(PhantomData<T>);
+
+impl<'a, T: Resource> ResourceQuery for NamedResMut<'a, T> {
+    type Fetch = FetchNamedResourceWrite<T>;
+    type Claim = [ResourceName];
+
+    fn add_default_claim(_resource_claims: &mut ResourceClaims) {
+    }
+
+    fn add_extra_claim(claim: &Self::Claim, resource_claims: &mut ResourceClaims) {
+        let mutable = claim.iter().map(|c| ResourceIndex::of::<T>(Some(c.clone()))).clone();
+        resource_claims.add_claim::<NamedResMutQuery<T>, _, _>(None, mutable);
+    }
+}
+
+pub struct FetchNamedResourceWrite<T: Resource>(PhantomData<T>);
+
+impl<'a, T: Resource> FetchResource<'a> for FetchNamedResourceWrite<T> {
+    type Item = NamedResMut<'a, T>;
+
+    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
+        let claims = resource_claims.get_claims::<NamedResMutQuery<T>>().unwrap();
+        let names = claims.1.iter().map(|x| x.name().unwrap().to_owned());
+        NamedResMut(resources.get_mut_with_names::<T, _>(names).unwrap())
     }
 }

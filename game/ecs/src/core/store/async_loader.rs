@@ -135,7 +135,7 @@ where
         use tokio::{runtime::Handle, task};
         log::debug!("Starting async loader");
         task::spawn_blocking(move || {
-            Handle::current().block_on(task::LocalSet::new().run_until(async move {
+            Handle::current().block_on(task::LocalSet::default().run_until(async move {
                 task::spawn_local(async move {
                     self.run().await;
                 })

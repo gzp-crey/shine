@@ -67,10 +67,7 @@ impl FrameTarget {
 
     fn resolve(&mut self, device: &wgpu::Device, frame_size: (u32, u32), is_sampled: bool) -> Result<(), RenderError> {
         if self.is_dirty(frame_size, is_sampled) {
-            let compile_args = RenderTargetCompileExtra {
-                frame_size: frame_size,
-                is_sampled: is_sampled,
-            };
+            let compile_args = RenderTargetCompileExtra { frame_size, is_sampled };
             let render_target = self.descriptor.compile(device, compile_args);
             self.generation += 1;
             self.resolved = Some(ResolvedFrameTarget { render_target });
@@ -88,16 +85,18 @@ pub struct FrameTargets {
     generation: usize,
 }
 
-impl FrameTargets {
-    pub fn new() -> FrameTargets {
-        FrameTargets {
+impl Default for FrameTargets {
+    fn default() -> Self {
+        Self {
             frame_output: None,
             target_generation_start: HashMap::new(),
             targets: Vec::new(),
             generation: 0,
         }
     }
+}
 
+impl FrameTargets {
     pub fn set_frame_output(&mut self, frame_output: Option<FrameOutput>) {
         self.frame_output = frame_output;
     }
