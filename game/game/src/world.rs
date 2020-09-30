@@ -18,25 +18,39 @@ pub struct World {
 }
 
 impl World {
-    /// Helper to borrow immutable resources with a detailed error response
-    pub fn plugin_resource<T: Resource>(
-        &self,
-        plugin: &str,
-        name: &Option<ResourceName>,
-    ) -> Result<ResourceRead<'_, T>, WorldError> {
+    /// Helper to get a shared reference to a resources
+    pub fn plugin_resource<T: Resource>(&self, plugin: &str) -> Result<ResourceRead<'_, T>, WorldError> {
         self.resources
-            .get::<T>(name)
+            .get::<T>()
             .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
     }
 
-    /// Helper to borrow mutable resources with a detailed error response
-    pub fn plugin_resource_mut<T: Resource>(
+    /// Helper to get a shared reference to a resource with the given name
+    pub fn plugin_resource_with_name<T: Resource>(
         &self,
         plugin: &str,
-        name: &Option<ResourceName>,
+        name: &ResourceName,
+    ) -> Result<ResourceRead<'_, T>, WorldError> {
+        self.resources
+            .get_with_name::<T>(name)
+            .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
+    }
+
+    /// Helper to get an unique reference to a resource
+    pub fn plugin_resource_mut<T: Resource>(&self, plugin: &str) -> Result<ResourceWrite<'_, T>, WorldError> {
+        self.resources
+            .get_mut::<T>()
+            .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
+    }
+
+    /// Helper to get an unique reference to a resource with the given name
+    pub fn plugin_resource_mut_with_name<T: Resource>(
+        &self,
+        plugin: &str,
+        name: &ResourceName,
     ) -> Result<ResourceWrite<'_, T>, WorldError> {
         self.resources
-            .get_mut::<T>(name)
+            .get_mut_with_name::<T>(name)
             .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
     }
 

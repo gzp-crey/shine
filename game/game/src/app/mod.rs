@@ -20,7 +20,7 @@ pub struct App {
 impl App {
     pub async fn load_game_from_url(&mut self, url: &Url) -> Result<(), AppError> {
         let game = {
-            let assetio = self.world.plugin_resource::<AssetIO>("asset", &None)?;
+            let assetio = self.world.plugin_resource::<AssetIO>("asset")?;
             Game::from_url(&*assetio, url).await
         }?;
         self.load_game(game).await

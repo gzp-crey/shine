@@ -69,10 +69,10 @@ pub trait RenderPlugin {
 
 impl World {
     fn start_frame(&mut self, size: (u32, u32)) -> Result<(), RenderError> {
-        let mut surface = self.plugin_resource_mut::<Surface>("render", &None)?;
-        let mut context = self.plugin_resource_mut::<Context>("render", &None)?;
-        let mut frame_output = self.plugin_resource_mut::<FrameOutput>("render", &None)?;
-        let mut resources = self.plugin_resource_mut::<RenderResources>("render", &None)?;
+        let mut surface = self.plugin_resource_mut::<Surface>("render")?;
+        let mut context = self.plugin_resource_mut::<Context>("render")?;
+        let mut frame_output = self.plugin_resource_mut::<FrameOutput>("render")?;
+        let mut resources = self.plugin_resource_mut::<RenderResources>("render")?;
 
         surface.set_size(size);
         let (output_texture, descriptor) = context.create_frame(&surface)?;
@@ -83,8 +83,8 @@ impl World {
     }
 
     fn end_frame(&mut self) -> Result<(), RenderError> {
-        let mut context = self.plugin_resource_mut::<Context>("render", &None)?;
-        let mut frame_output = self.plugin_resource_mut::<FrameOutput>("render", &None)?;
+        let mut context = self.plugin_resource_mut::<Context>("render")?;
+        let mut frame_output = self.plugin_resource_mut::<FrameOutput>("render")?;
         context.submit_commands();
         frame_output.present();
         Ok(())
@@ -101,15 +101,15 @@ impl RenderPlugin for World {
         Box::pin(async move {
             log::info!("Adding render plugin");
 
-            let assetio = self.plugin_resource::<AssetIO>("asset", &None)?.clone();
+            let assetio = self.plugin_resource::<AssetIO>("asset")?.clone();
             let context = Context::new(wgpu_instance, &surface, &config)
                 .await
                 .map_err(|err| RenderError::device_error("Failed to create context", err))?;
 
-            self.resources.insert(None, surface);
-            self.resources.insert(None, context);
-            self.resources.insert(None, FrameOutput::default());
-            self.resources.insert(None, RenderResources::new(&assetio));
+            self.resources.insert(surface);
+            self.resources.insert(context);
+            self.resources.insert(FrameOutput::default());
+            self.resources.insert(RenderResources::new(&assetio));
 
             Ok(())
         })
@@ -117,10 +117,10 @@ impl RenderPlugin for World {
 
     fn remove_render_plugin(&mut self) -> RenderFuture<'_, Result<(), RenderError>> {
         Box::pin(async move {
-            let _ = self.resources.remove::<RenderResources>(&None);
-            let _ = self.resources.remove::<FrameOutput>(&None);
-            let _ = self.resources.remove::<Context>(&None);
-            let _ = self.resources.remove::<Surface>(&None);
+            let _ = self.resources.remove::<RenderResources>();
+            let _ = self.resources.remove::<FrameOutput>();
+            let _ = self.resources.remove::<Context>();
+            let _ = self.resources.remove::<Surface>();
 
             Ok(())
         })

@@ -74,9 +74,9 @@ impl InputPlugin for World {
     fn add_input_plugin(&mut self) -> InputFuture<'_, Result<(), InputError>> {
         Box::pin(async move {
             log::info!("Adding input plugin");
-            self.resources.insert(None, InputHandler::default());
-            self.resources.insert(None, CurrentInputState::default());
-            self.resources.insert(None, WrapInputMapper::wrap(mappers::Unmapped));
+            self.resources.insert(InputHandler::default());
+            self.resources.insert(CurrentInputState::default());
+            self.resources.insert(WrapInputMapper::wrap(mappers::Unmapped));
             Ok(())
         })
     }
@@ -84,17 +84,17 @@ impl InputPlugin for World {
     fn remove_input_plugin(&mut self) -> InputFuture<'_, Result<(), InputError>> {
         Box::pin(async move {
             log::info!("Removing input plugin");
-            let _ = self.resources.remove::<InputHandler>(&None);
-            let _ = self.resources.remove::<CurrentInputState>(&None);
-            let _ = self.resources.remove::<WrapInputMapper>(&None);
+            let _ = self.resources.remove::<InputHandler>();
+            let _ = self.resources.remove::<CurrentInputState>();
+            let _ = self.resources.remove::<WrapInputMapper>();
             Ok(())
         })
     }
 
     fn set_input_mapper<I: InputMapper>(&mut self, input_mapper: I) -> Result<(), InputError> {
-        let mut mapper = self.plugin_resource_mut::<WrapInputMapper>("input", &None)?;
-        let mut handler = self.plugin_resource_mut::<InputHandler>("input", &None)?;
-        let mut state = self.plugin_resource_mut::<CurrentInputState>("input", &None)?;
+        let mut mapper = self.plugin_resource_mut::<WrapInputMapper>("input")?;
+        let mut handler = self.plugin_resource_mut::<InputHandler>("input")?;
+        let mut state = self.plugin_resource_mut::<CurrentInputState>("input")?;
 
         *handler = InputHandler::default();
         *state = CurrentInputState::default();
@@ -104,8 +104,8 @@ impl InputPlugin for World {
     }
 
     fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), InputError> {
-        let mapper = self.plugin_resource::<WrapInputMapper>("input", &None)?;
-        let mut handler = self.plugin_resource_mut::<InputHandler>("input", &None)?;
+        let mapper = self.plugin_resource::<WrapInputMapper>("input")?;
+        let mut handler = self.plugin_resource_mut::<InputHandler>("input")?;
 
         handler.inject_input(&mapper, event.into());
         Ok(())

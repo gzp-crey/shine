@@ -25,14 +25,14 @@ impl AssetPlugin for World {
         Box::pin(async move {
             log::info!("Adding asset plugin");
             let assetio = AssetIO::new(config.virtual_schemes)?;
-            self.resources.insert(None, assetio);
+            self.resources.insert(assetio);
             Ok(())
         })
     }
 
     fn remove_asset_plugin(&mut self) -> AssetFuture<'_, Result<(), AssetError>> {
         Box::pin(async move {
-            let _ = self.resources.remove::<AssetIO>(&None);
+            let _ = self.resources.remove::<AssetIO>();
             Ok(())
         })
     }

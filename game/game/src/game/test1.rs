@@ -28,7 +28,7 @@ impl GameLifecycle for Test1 {
         Box::pin(async move {
             log::info!("Adding test1 scene to the world");
 
-            world.resources.insert(None, TestScene::new(&self));
+            world.resources.insert(TestScene::new(&self));
 
             {
                 let mut render_schedule = Schedule::default();
@@ -45,7 +45,7 @@ impl GameLifecycle for Test1 {
             log::info!("Removing test1 scene from the world");
 
             world.clear_stages();
-            let _ = world.resources.remove::<TestScene>(&None);
+            let _ = world.resources.remove::<TestScene>();
 
             Ok(())
         })

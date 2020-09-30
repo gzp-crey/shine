@@ -99,8 +99,7 @@ impl<'a, T: Resource> ResourceQuery for Res<'a, T> {
         resource_claims.add_claim::<ResQuery<T>, _, _>(Some(ResourceIndex::of::<T>(None)), None);
     }
 
-    fn add_extra_claim(_claim: &Self::Claim, _resource_claims: &mut ResourceClaims) {
-    }
+    fn add_extra_claim(_claim: &Self::Claim, _resource_claims: &mut ResourceClaims) {}
 }
 
 pub struct FetchResourceRead<T: Resource>(PhantomData<T>);
@@ -137,13 +136,12 @@ struct ResMutQuery<T>(PhantomData<T>);
 impl<'a, T: Resource> ResourceQuery for ResMut<'a, T> {
     type Fetch = FetchResourceWrite<T>;
     type Claim = ();
-    
+
     fn add_default_claim(resource_claims: &mut ResourceClaims) {
         resource_claims.add_claim::<ResMutQuery<T>, _, _>(None, Some(ResourceIndex::of::<T>(None)));
     }
 
-    fn add_extra_claim(_claim: &Self::Claim, _resource_claims: &mut ResourceClaims) {
-    }
+    fn add_extra_claim(_claim: &Self::Claim, _resource_claims: &mut ResourceClaims) {}
 }
 
 pub struct FetchResourceWrite<T: Resource>(PhantomData<T>);
@@ -185,8 +183,7 @@ impl<'a, T: Resource> ResourceQuery for NamedRes<'a, T> {
     type Fetch = FetchNamedResourceRead<T>;
     type Claim = [ResourceName];
 
-    fn add_default_claim(_resource_claims: &mut ResourceClaims) {
-    }
+    fn add_default_claim(_resource_claims: &mut ResourceClaims) {}
 
     fn add_extra_claim(claim: &Self::Claim, resource_claims: &mut ResourceClaims) {
         let immutable = claim.iter().map(|c| ResourceIndex::of::<T>(Some(c.clone()))).clone();
@@ -240,8 +237,7 @@ impl<'a, T: Resource> ResourceQuery for NamedResMut<'a, T> {
     type Fetch = FetchNamedResourceWrite<T>;
     type Claim = [ResourceName];
 
-    fn add_default_claim(_resource_claims: &mut ResourceClaims) {
-    }
+    fn add_default_claim(_resource_claims: &mut ResourceClaims) {}
 
     fn add_extra_claim(claim: &Self::Claim, resource_claims: &mut ResourceClaims) {
         let mutable = claim.iter().map(|c| ResourceIndex::of::<T>(Some(c.clone()))).clone();
