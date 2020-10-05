@@ -2,7 +2,7 @@ use crate::{
     app::GameSource,
     app::{AppError, GameFuture, GameLifecycle},
     assets::vertex,
-    render::{Context, FrameOutput, PipelineBindGroup, PipelineDependency, RenderResources},
+    render::{Context, PipelineBindGroup, PipelineDependency, RenderResources, RenderTargetRes},
     World,
 };
 use serde::{Deserialize, Serialize};
@@ -77,12 +77,7 @@ impl TestScene {
     }
 }
 
-fn render(
-    context: Res<Context>,
-    frame: Res<FrameOutput>,
-    resources: Res<RenderResources>,
-    mut scene: ResMut<TestScene>,
-) {
+fn render(context: Res<Context>, resources: Res<RenderResources>, target: RenderTargetRes, scene: ResMut<TestScene>) {
     log::error!("render");
     let device = context.device();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });

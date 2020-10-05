@@ -57,11 +57,11 @@ fn resource_access() {
     sh.schedule(sys3.system());
     sh.schedule(
         sys4.system()
-            .with_resources::<NamedRes<u8>>(&[
+            .with_resources::<NamedRes<u8>>(vec![
                 ResourceName::from_str("five").unwrap(),
                 ResourceName::from_str("six").unwrap(),
             ])
-            .with_resources::<NamedResMut<u16>>(&[ResourceName::from_str("16").unwrap()]),
+            .with_resources::<NamedResMut<u16>>(vec![ResourceName::from_str("16").unwrap()]),
     );
 
     log::info!("runing systems...");

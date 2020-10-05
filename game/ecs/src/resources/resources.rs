@@ -30,10 +30,10 @@ pub struct ResourceIndex {
 
 impl ResourceIndex {
     /// Returns the resource type ID of the given resource type.
-    pub fn of<T: Resource>(name: Option<ResourceName>) -> Self {
+    pub fn new<T: Resource>(name: Option<ResourceName>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
-            name,
+            name: name,
 
             #[cfg(debug_assertions)]
             type_name: any::type_name::<T>(),
@@ -139,7 +139,7 @@ impl<'a, T: Resource> Drop for ResourceWrite<'a, T> {
 
 /// Fetches multiple (distinct) shared resource references of the same resource type
 pub struct NamedResourceRead<'a, T: Resource> {
-    inner: Vec<ResourceRead<'a, T>>,
+    inner: Vec<(ResourceName, ResourceRead<'a, T>)>,
 }
 
 impl<'a, T: Resource> NamedResourceRead<'a, T> {
@@ -150,6 +150,10 @@ impl<'a, T: Resource> NamedResourceRead<'a, T> {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+
+    pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
+        self.inner.iter().position(|x| &x.0 == name)
+    }
 }
 
 impl<'a, T: Resource> Index<usize> for NamedResourceRead<'a, T> {
@@ -157,7 +161,7 @@ impl<'a, T: Resource> Index<usize> for NamedResourceRead<'a, T> {
 
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
-        &self.inner[idx]
+        &self.inner[idx].1
     }
 }
 
@@ -169,7 +173,7 @@ impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for NamedResourceRead<'a, T> 
 
 /// Fetches multiple (distinct) unique resource references of the same resource type
 pub struct NamedResourceWrite<'a, T: Resource> {
-    inner: Vec<ResourceWrite<'a, T>>,
+    inner: Vec<(ResourceName, ResourceWrite<'a, T>)>,
 }
 
 impl<'a, T: Resource> NamedResourceWrite<'a, T> {
@@ -180,6 +184,10 @@ impl<'a, T: Resource> NamedResourceWrite<'a, T> {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+
+    pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
+        self.inner.iter().position(|x| &x.0 == name)
+    }
 }
 
 impl<'a, T: Resource> Index<usize> for NamedResourceWrite<'a, T> {
@@ -187,14 +195,14 @@ impl<'a, T: Resource> Index<usize> for NamedResourceWrite<'a, T> {
 
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
-        &self.inner[idx]
+        &self.inner[idx].1
     }
 }
 
 impl<'a, T: Resource> IndexMut<usize> for NamedResourceWrite<'a, T> {
     #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        &mut self.inner[idx]
+        &mut self.inner[idx].1
     }
 }
 
@@ -297,7 +305,7 @@ impl UnsafeResources {
     /// Resources which are `!Send` must be retrieved or inserted only on the main thread.
     unsafe fn insert<T: Resource>(&mut self, name: Option<ResourceName>, resource: T) {
         self.map
-            .insert(ResourceIndex::of::<T>(name), ResourceCell::new(Box::new(resource)));
+            .insert(ResourceIndex::new::<T>(name), ResourceCell::new(Box::new(resource)));
     }
 
     /// # Safety
@@ -349,7 +357,7 @@ impl Resources {
 
     fn contains_impl<T: Resource>(&self, name: Option<&ResourceName>) -> bool {
         self.internal
-            .contains(&ResourceIndex::of::<T>(name.map(|n| n.to_owned())))
+            .contains(&ResourceIndex::new::<T>(name.map(|n| n.to_owned())))
     }
 
     /// Returns if type `T` exists in the store.
@@ -369,7 +377,7 @@ impl Resources {
         unsafe {
             let resource = self
                 .internal
-                .remove(&ResourceIndex::of::<T>(name.map(|n| n.to_owned())))?
+                .remove(&ResourceIndex::new::<T>(name.map(|n| n.to_owned())))?
                 .downcast::<T>()
                 .ok()?;
             Some(*resource)
@@ -390,7 +398,7 @@ impl Resources {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
         unsafe { self.internal.get(&type_id)?.get::<T>() }
     }
 
@@ -424,7 +432,7 @@ impl Resources {
     ) -> Option<NamedResourceRead<'_, T>> {
         let resources = names
             .into_iter()
-            .map(|name| self.get_with_name::<T>(&name))
+            .map(|name| self.get_with_name::<T>(&name).map(|x| (name, x)))
             .collect::<Option<Vec<_>>>()?;
         Some(NamedResourceRead { inner: resources })
     }
@@ -433,7 +441,7 @@ impl Resources {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
         unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
     }
 
@@ -467,7 +475,7 @@ impl Resources {
     ) -> Option<NamedResourceWrite<'_, T>> {
         let resources = names
             .into_iter()
-            .map(|name| self.get_mut_with_name::<T>(&name))
+            .map(|name| self.get_mut_with_name::<T>(&name).map(|x| (name, x)))
             .collect::<Option<Vec<_>>>()?;
         Some(NamedResourceWrite { inner: resources })
     }
@@ -484,7 +492,7 @@ impl<'a> SyncResources<'a> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
         unsafe { self.internal.get(&type_id)?.get::<T>() }
     }
 
@@ -512,14 +520,14 @@ impl<'a> SyncResources<'a> {
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_with_names<T: Resource + Sync>(&self, names: &[ResourceName]) -> Option<NamedResourceRead<'_, T>> {
-        let mut resources = Vec::with_capacity(names.len());
-        for name in names {
-            match self.get_with_name::<T>(name) {
-                Some(res) => resources.push(res),
-                None => return None,
-            }
-        }
+    pub fn get_with_names<T: Resource + Sync, I: IntoIterator<Item = ResourceName>>(
+        &self,
+        names: I,
+    ) -> Option<NamedResourceRead<'_, T>> {
+        let resources = names
+            .into_iter()
+            .map(|name| self.get_with_name::<T>(&name).map(|x| (name, x)))
+            .collect::<Option<Vec<_>>>()?;
         Some(NamedResourceRead { inner: resources })
     }
 
@@ -527,7 +535,7 @@ impl<'a> SyncResources<'a> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::of::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
         unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
     }
 
@@ -555,15 +563,14 @@ impl<'a> SyncResources<'a> {
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_mut_with_names<T: Resource + Send>(&self, names: &[ResourceName]) -> Option<NamedResourceWrite<'_, T>> {
-        log::debug!("get_multi: {:?}", names);
-        let mut resources = Vec::with_capacity(names.len());
-        for name in names {
-            match self.get_mut_with_name::<T>(name) {
-                Some(res) => resources.push(res),
-                None => return None,
-            }
-        }
+    pub fn get_mut_with_names<T: Resource + Send, I: IntoIterator<Item = ResourceName>>(
+        &self,
+        names: I,
+    ) -> Option<NamedResourceWrite<'_, T>> {
+        let resources = names
+            .into_iter()
+            .map(|name| self.get_mut_with_name::<T>(&name).map(|x| (name, x)))
+            .collect::<Option<Vec<_>>>()?;
         Some(NamedResourceWrite { inner: resources })
     }
 }

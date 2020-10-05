@@ -45,7 +45,7 @@ impl<Func, R> SystemBuilder<Func, R> {
     }
 
     #[must_use]
-    pub fn with_resources<T: ResourceQuery>(mut self, claims: &<T as ResourceQuery>::Claim) -> Self {
+    pub fn with_resources<T: ResourceQuery>(mut self, claims: <T as ResourceQuery>::Claim) -> Self {
         <T as ResourceQuery>::add_extra_claim(claims, &mut self.resource_claims);
         self
     }

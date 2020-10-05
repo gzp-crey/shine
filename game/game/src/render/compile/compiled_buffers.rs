@@ -1,12 +1,6 @@
-use crate::assets::IndexData;
-use crate::assets::VertexData;
+use crate::assets::{IndexData, VertexData};
+use crate::render::Compile;
 use wgpu::util::DeviceExt;
-
-pub trait Compile<E> {
-    type Compiled;
-
-    fn compile(&self, device: &wgpu::Device, extra: E) -> Self::Compiled;
-}
 
 impl Compile<()> for IndexData {
     type Compiled = wgpu::Buffer;

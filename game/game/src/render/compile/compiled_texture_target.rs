@@ -1,7 +1,7 @@
-use crate::assets::RenderTargetDescriptor;
+use crate::assets::TextureTargetDescriptor;
 use crate::render::Compile;
 
-pub struct CompiledRenderTarget {
+pub struct CompiledTextureTarget {
     pub format: wgpu::TextureFormat,
     pub size: (u32, u32),
     pub is_sampled: bool,
@@ -10,15 +10,14 @@ pub struct CompiledRenderTarget {
     pub view: wgpu::TextureView,
 }
 
-pub struct RenderTargetCompileExtra {
+pub struct TextureTargetCompileExtra {
     pub frame_size: (u32, u32),
-    pub is_sampled: bool,
 }
 
-impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
-    type Compiled = CompiledRenderTarget;
+impl Compile<TextureTargetCompileExtra> for TextureTargetDescriptor {
+    type Compiled = CompiledTextureTarget;
 
-    fn compile(&self, device: &wgpu::Device, extra: RenderTargetCompileExtra) -> Self::Compiled {
+    fn compile(&self, device: &wgpu::Device, extra: TextureTargetCompileExtra) -> Self::Compiled {
         let size = self.get_target_size(extra.frame_size);
 
         let extent = wgpu::Extent3d {
@@ -27,7 +26,7 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
             depth: 1,
         };
 
-        let usage = if extra.is_sampled {
+        let usage = if self.is_sampled {
             wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED
         } else {
             wgpu::TextureUsage::OUTPUT_ATTACHMENT
@@ -47,9 +46,9 @@ impl Compile<RenderTargetCompileExtra> for RenderTargetDescriptor {
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        CompiledRenderTarget {
+        CompiledTextureTarget {
             format: self.format,
-            is_sampled: extra.is_sampled,
+            is_sampled: self.is_sampled,
             size,
             texture,
             view,
