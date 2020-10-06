@@ -11,7 +11,7 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    pub fn schedule<State, R, Func: IntoSystem<State, R>>(&mut self, func: Func) {
+    pub fn schedule<R, Func: IntoSystem<R>>(&mut self, func: Func) {
         let system = func.into_system();
         self.systems.push(Arc::new(Mutex::new(system)));
     }

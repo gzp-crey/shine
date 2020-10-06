@@ -1,5 +1,5 @@
 use shine_ecs::{
-    resources::{NamedRes, NamedResMut, Res, ResMut, ResourceName, Resources},
+    resources::{NamedRes, NamedResClaim, NamedResMut, NamedResMutClaim, Res, ResMut, ResourceName, Resources},
     scheduler::{IntoSystemBuilder, Schedule},
 };
 use std::str::FromStr;
@@ -35,6 +35,10 @@ fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: NamedRes<u8>, r4: NamedResMut<u1
     assert!(r4[0] == 16);
 }
 
+fn dumpt<C>(a: &C) {
+    log::error!("{:#?}", std::any::type_name::<C>());
+}
+
 #[test]
 fn resource_access() {
     utils::init_logger();
@@ -55,14 +59,18 @@ fn resource_access() {
 
     sh.schedule(sys0.system());
     sh.schedule(sys3.system());
-    sh.schedule(
-        sys4.system()
-            .with_resources::<NamedRes<u8>>(vec![
-                ResourceName::from_str("five").unwrap(),
-                ResourceName::from_str("six").unwrap(),
-            ])
-            .with_resources::<NamedResMut<u16>>(vec![ResourceName::from_str("16").unwrap()]),
-    );
+    sh.schedule(sys4.system().claim(|claims| {
+        {
+            let x = claims.get_mut::<NamedResClaim<u8>, _>();
+            x.push(ResourceName::from_str("five").unwrap());
+            x.push(ResourceName::from_str("six").unwrap());
+        }
+
+        {
+            let x = claims.get_mut::<NamedResMutClaim<u16>, _>();
+            x.push(ResourceName::from_str("16").unwrap());
+        }
+    }));
 
     log::info!("runing systems...");
     sh.run(&mut resources);

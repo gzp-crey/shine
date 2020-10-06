@@ -1,108 +1,42 @@
 use crate::resources::{
-    NamedResourceRead, NamedResourceWrite, Resource, ResourceIndex, ResourceName, ResourceRead, ResourceWrite,
-    Resources,
+    NamedResourceRead, NamedResourceWrite, Resource, ResourceClaim, ResourceClaimScope, ResourceClaims, ResourceIndex,
+    ResourceName, ResourceRead, ResourceWrite, Resources,
 };
 use std::{
-    any::TypeId,
-    collections::{HashMap, HashSet},
     marker::PhantomData,
     ops::{Deref, DerefMut, Index, IndexMut},
 };
 
-#[derive(Debug, Clone, Copy)]
-pub enum ResourceClaimScope {
-    Default,
-    Extra,
-}
-
-#[derive(Default, Debug)]
-pub struct ResourceClaim {
-    pub immutable: Vec<ResourceIndex>,
-    pub mutable: Vec<ResourceIndex>,
-}
-
-impl ResourceClaim {
-    pub fn new<I1, I2>(immutable: I1, mutable: I2) -> Self
-    where
-        I1: IntoIterator<Item = ResourceIndex>,
-        I2: IntoIterator<Item = ResourceIndex>,
-    {
-        Self {
-            immutable: immutable.into_iter().collect(),
-            mutable: mutable.into_iter().collect(),
-        }
-    }
-}
-
-/// Store resource names for each resource types.
-#[derive(Default, Debug)]
-pub struct ResourceClaims {
-    default_claims: HashMap<TypeId, ResourceClaim>,
-    extra_claims: HashMap<TypeId, ResourceClaim>,
-    all_immutable: HashSet<ResourceIndex>,
-    all_mutable: HashSet<ResourceIndex>,
-}
-
-impl ResourceClaims {
-    fn store_immutable(&mut self, idx: ResourceIndex) {
-        assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
-        self.all_immutable.insert(idx);
-    }
-
-    fn store_mutable(&mut self, idx: ResourceIndex) {
-        assert!(self.all_immutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
-        assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources multiple times for mutation
-        self.all_mutable.insert(idx);
-    }
-
-    fn claim_for(&self, scope: ResourceClaimScope) -> &HashMap<TypeId, ResourceClaim> {
-        match scope {
-            ResourceClaimScope::Default => &self.default_claims,
-            ResourceClaimScope::Extra => &self.extra_claims,
-        }
-    }
-
-    fn claim_mut_for(&mut self, scope: ResourceClaimScope) -> &mut HashMap<TypeId, ResourceClaim> {
-        match scope {
-            ResourceClaimScope::Default => &mut self.default_claims,
-            ResourceClaimScope::Extra => &mut self.extra_claims,
-        }
-    }
-
-    pub fn add_claim<RId: 'static>(&mut self, scope: ResourceClaimScope, claim: ResourceClaim) {
-        let rty = TypeId::of::<RId>();
-        claim.immutable.iter().for_each(|x| self.store_immutable(x.clone()));
-        claim.mutable.iter().for_each(|x| self.store_mutable(x.clone()));
-        let r = self.claim_mut_for(scope).insert(rty, claim);
-        assert!(r.is_none());
-    }
-
-    pub fn get_claims<RId: 'static>(&self, scope: ResourceClaimScope) -> Option<&ResourceClaim> {
-        let rty = TypeId::of::<RId>();
-        self.claim_for(scope).get(&rty)
-    }
-
-    pub fn is_claimed_immutable(&self, id: &ResourceIndex) -> bool {
-        self.all_immutable.contains(&id)
-    }
-
-    pub fn is_claimed_mutable(&self, id: &ResourceIndex) -> bool {
-        self.all_mutable.contains(&id)
-    }
+pub trait IntoResourceClaim : 'static + Send + Sync {
+    fn into_claim(&self) -> ResourceClaim;
 }
 
 pub trait ResourceQuery {
-    type Fetch: for<'a> FetchResource<'a>;
-    type Claim;
+    type Fetch: for<'a> FetchResource<'a, Self::Claim>;
+    type Claim: Default + IntoResourceClaim;
 
-    fn add_default_claim(resource_claims: &mut ResourceClaims);
-    fn add_extra_claim(claim: Self::Claim, resource_claims: &mut ResourceClaims);
+    fn default_claims() -> ResourceClaim;
 }
 
-pub trait FetchResource<'a> {
+pub trait FetchResource<'a, Claim> {
     type Item;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item;
+    fn fetch<'r: 'a>(resources: &'r Resources, extra_claim: &'r Claim) -> Self::Item;
+}
+
+#[derive(Debug)]
+pub struct ResClaim<T: Resource>(PhantomData<fn(T)>);
+
+impl<T: Resource> Default for ResClaim<T> {
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<T: Resource> IntoResourceClaim for ResClaim<T> {
+    fn into_claim(&self) -> ResourceClaim {
+        ResourceClaim::none()
+    }
 }
 
 /// Shared borrow of a resource
@@ -117,29 +51,39 @@ impl<'a, T: Resource> Deref for Res<'a, T> {
 }
 
 impl<'a, T: Resource> ResourceQuery for Res<'a, T> {
+    type Claim = ResClaim<T>;
     type Fetch = FetchResourceRead<T>;
-    type Claim = ();
 
-    fn add_default_claim(resource_claims: &mut ResourceClaims) {
-        resource_claims.add_claim::<Self::Fetch>(
-            ResourceClaimScope::Default,
-            ResourceClaim::new(Some(ResourceIndex::new::<T>(None)), None),
-        );
+    fn default_claims() -> ResourceClaim {
+        ResourceClaim::new(Some(ResourceIndex::new::<T>(None)), None)
     }
-
-    fn add_extra_claim(_claim: Self::Claim, _resource_claims: &mut ResourceClaims) {}
 }
 
 pub struct FetchResourceRead<T: Resource>(PhantomData<T>);
 
-impl<'a, T: Resource> FetchResource<'a> for FetchResourceRead<T> {
+impl<'a, T: Resource> FetchResource<'a, ResClaim<T>> for FetchResourceRead<T> {
     type Item = Res<'a, T>;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
-        debug_assert!(resource_claims.is_claimed_immutable(&ResourceIndex::new::<T>(None)));
+    fn fetch<'r: 'a>(resources: &'r Resources, _extra_claim: &'r ResClaim<T>) -> Self::Item {
         Res(resources.get::<T>().unwrap())
     }
 }
+
+#[derive(Debug)]
+pub struct ResMutClaim<T: Resource>(PhantomData<fn(T)>);
+
+impl<T: Resource> Default for ResMutClaim<T> {
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<T: Resource> IntoResourceClaim for ResMutClaim<T> {
+    fn into_claim(&self) -> ResourceClaim {
+        ResourceClaim::none()
+    }
+}
+
 
 /// Unique borrow of resource
 pub struct ResMut<'a, T: Resource>(pub ResourceWrite<'a, T>);
@@ -159,32 +103,57 @@ impl<'a, T: Resource> DerefMut for ResMut<'a, T> {
 }
 
 impl<'a, T: Resource> ResourceQuery for ResMut<'a, T> {
+    type Claim = ResMutClaim<T>;
     type Fetch = FetchResourceWrite<T>;
-    type Claim = ();
 
-    fn add_default_claim(resource_claims: &mut ResourceClaims) {
-        resource_claims.add_claim::<Self::Fetch>(
-            ResourceClaimScope::Default,
-            ResourceClaim::new(None, Some(ResourceIndex::new::<T>(None))),
-        );
+    fn default_claims() -> ResourceClaim {
+        ResourceClaim::new(None, Some(ResourceIndex::new::<T>(None)))
     }
-
-    fn add_extra_claim(_claim: Self::Claim, _resource_claims: &mut ResourceClaims) {}
 }
 
 pub struct FetchResourceWrite<T: Resource>(PhantomData<T>);
 
-impl<'a, T: Resource> FetchResource<'a> for FetchResourceWrite<T> {
+impl<'a, T: Resource> FetchResource<'a, ResMutClaim<T>> for FetchResourceWrite<T> {
     type Item = ResMut<'a, T>;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
-        debug_assert!(resource_claims.is_claimed_mutable(&ResourceIndex::new::<T>(None)));
+    fn fetch<'r: 'a>(resources: &'r Resources, _extra_claim: &'r ResMutClaim<T>) -> Self::Item {
         ResMut(resources.get_mut::<T>().unwrap())
     }
 }
 
+/// List of resource names for the shared borrower, [NamedRes]
+#[derive(Debug)]
+pub struct NamedResClaim<T: Resource>(Vec<ResourceName>, PhantomData<fn(T)>);
+
+impl<T: Resource> Default for NamedResClaim<T> {
+    fn default() -> Self {
+        Self(Vec::new(), PhantomData)
+    }
+}
+
+impl<T: Resource> Deref for NamedResClaim<T> {
+    type Target = Vec<ResourceName>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Resource> DerefMut for NamedResClaim<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Resource> IntoResourceClaim for NamedResClaim<T> {
+    fn into_claim(&self) -> ResourceClaim {
+        let immutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
+        ResourceClaim::new(immutable, None)
+    }
+}
+
 /// Shared borrow of multiple named resources.
-pub struct NamedRes<'a, T: Resource>(pub NamedResourceRead<'a, T>);
+pub struct NamedRes<'a, T: Resource>(NamedResourceRead<'a, T>, &'a NamedResClaim<T>);
 
 impl<'a, T: Resource> NamedRes<'a, T> {
     pub fn len(&self) -> usize {
@@ -196,7 +165,7 @@ impl<'a, T: Resource> NamedRes<'a, T> {
     }
 
     pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
-        self.0.position_by_name(name)
+        self.1.iter().position(|x| x == name)
     }
 }
 
@@ -209,31 +178,58 @@ impl<'a, T: Resource> Index<usize> for NamedRes<'a, T> {
 }
 
 impl<'a, T: Resource> ResourceQuery for NamedRes<'a, T> {
+    type Claim = NamedResClaim<T>;
     type Fetch = FetchNamedResourceRead<T>;
-    type Claim = Vec<ResourceName>;
 
-    fn add_default_claim(_resource_claims: &mut ResourceClaims) {}
-
-    fn add_extra_claim(claim: Self::Claim, resource_claims: &mut ResourceClaims) {
-        let immutable = claim.into_iter().map(|c| ResourceIndex::new::<T>(Some(c)));
-        resource_claims.add_claim::<Self::Fetch>(ResourceClaimScope::Extra, ResourceClaim::new(immutable, None));
+    fn default_claims() -> ResourceClaim {
+        ResourceClaim::none()
     }
 }
 
 pub struct FetchNamedResourceRead<T: Resource>(PhantomData<T>);
 
-impl<'a, T: Resource> FetchResource<'a> for FetchNamedResourceRead<T> {
+impl<'a, T: Resource> FetchResource<'a, NamedResClaim<T>> for FetchNamedResourceRead<T> {
     type Item = NamedRes<'a, T>;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
-        let claims = resource_claims.get_claims::<Self>(ResourceClaimScope::Extra).unwrap();
-        let names = claims.immutable.iter().map(|x| x.name().unwrap().to_owned());
-        NamedRes(resources.get_with_names::<T, _>(names).unwrap())
+    fn fetch<'r: 'a>(resources: &'r Resources, extra_claim: &'r NamedResClaim<T>) -> Self::Item {
+        let resources = resources.get_with_names::<T, _>(extra_claim.iter()).unwrap();
+        NamedRes(resources, extra_claim)
+    }
+}
+
+/// List of resource names for the unique borrower, [NamedResMut]
+#[derive(Debug)]
+pub struct NamedResMutClaim<T: Resource>(Vec<ResourceName>, PhantomData<fn(T)>);
+
+impl<T: Resource> Default for NamedResMutClaim<T> {
+    fn default() -> Self {
+        Self(Vec::new(), PhantomData)
+    }
+}
+
+impl<T: Resource> Deref for NamedResMutClaim<T> {
+    type Target = Vec<ResourceName>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Resource> DerefMut for NamedResMutClaim<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Resource> IntoResourceClaim for NamedResMutClaim<T> {
+    fn into_claim(&self) -> ResourceClaim {
+        let mutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
+        ResourceClaim::new(None, mutable)
     }
 }
 
 /// Unique borrow of multiple named resources.
-pub struct NamedResMut<'a, T: Resource>(pub NamedResourceWrite<'a, T>);
+pub struct NamedResMut<'a, T: Resource>(NamedResourceWrite<'a, T>, &'a NamedResMutClaim<T>);
 
 impl<'a, T: Resource> NamedResMut<'a, T> {
     pub fn len(&self) -> usize {
@@ -245,7 +241,7 @@ impl<'a, T: Resource> NamedResMut<'a, T> {
     }
 
     pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
-        self.0.position_by_name(name)
+        self.1.iter().position(|x| x == name)
     }
 }
 
@@ -265,24 +261,20 @@ impl<'a, T: Resource> IndexMut<usize> for NamedResMut<'a, T> {
 
 impl<'a, T: Resource> ResourceQuery for NamedResMut<'a, T> {
     type Fetch = FetchNamedResourceWrite<T>;
-    type Claim = Vec<ResourceName>;
+    type Claim = NamedResMutClaim<T>;
 
-    fn add_default_claim(_resource_claims: &mut ResourceClaims) {}
-
-    fn add_extra_claim(claim: Self::Claim, resource_claims: &mut ResourceClaims) {
-        let mutable = claim.into_iter().map(|c| ResourceIndex::new::<T>(Some(c)));
-        resource_claims.add_claim::<Self::Fetch>(ResourceClaimScope::Extra, ResourceClaim::new(None, mutable));
+    fn default_claims() -> ResourceClaim {
+        ResourceClaim::none()
     }
 }
 
 pub struct FetchNamedResourceWrite<T: Resource>(PhantomData<T>);
 
-impl<'a, T: Resource> FetchResource<'a> for FetchNamedResourceWrite<T> {
+impl<'a, T: Resource> FetchResource<'a, NamedResMutClaim<T>> for FetchNamedResourceWrite<T> {
     type Item = NamedResMut<'a, T>;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, resource_claims: &'r ResourceClaims) -> Self::Item {
-        let claims = resource_claims.get_claims::<Self>(ResourceClaimScope::Extra).unwrap();
-        let names = claims.mutable.iter().map(|x| x.name().unwrap().to_owned());
-        NamedResMut(resources.get_mut_with_names::<T, _>(names).unwrap())
+    fn fetch<'r: 'a>(resources: &'r Resources, extra_claim: &'r NamedResMutClaim<T>) -> Self::Item {
+        let resources = resources.get_mut_with_names::<T, _>(extra_claim.iter()).unwrap();
+        NamedResMut(resources, extra_claim)
     }
 }

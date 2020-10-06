@@ -29,10 +29,17 @@ impl GameLifecycle for Test1 {
             log::info!("Adding test1 scene to the world");
 
             world.resources.insert(TestScene::new(&self));
+            world.resources.insert(TextureTarget::from_descriptor(frame));
+            world.resources.insert(RenderTarget::new());
 
             {
                 let mut render_schedule = Schedule::default();
-                render_schedule.schedule(render.system());
+                render_schedule.schedule(
+                    render
+                        .system()
+                        .with_render_target(desc)
+                        .with_named::<T>(vec!["1", "2", "3"]),
+                );
                 world.add_stage("render", render_schedule);
             }
 

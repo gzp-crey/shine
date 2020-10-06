@@ -1,5 +1,6 @@
 pub mod arena;
 pub mod async_task;
+pub mod hlist;
 pub mod ids;
 pub mod observer;
 pub mod spscstate;

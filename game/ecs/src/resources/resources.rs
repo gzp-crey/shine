@@ -139,7 +139,7 @@ impl<'a, T: Resource> Drop for ResourceWrite<'a, T> {
 
 /// Fetches multiple (distinct) shared resource references of the same resource type
 pub struct NamedResourceRead<'a, T: Resource> {
-    inner: Vec<(ResourceName, ResourceRead<'a, T>)>,
+    inner: Vec<ResourceRead<'a, T>>,
 }
 
 impl<'a, T: Resource> NamedResourceRead<'a, T> {
@@ -150,10 +150,6 @@ impl<'a, T: Resource> NamedResourceRead<'a, T> {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
-
-    pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
-        self.inner.iter().position(|x| &x.0 == name)
-    }
 }
 
 impl<'a, T: Resource> Index<usize> for NamedResourceRead<'a, T> {
@@ -161,7 +157,7 @@ impl<'a, T: Resource> Index<usize> for NamedResourceRead<'a, T> {
 
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
-        &self.inner[idx].1
+        &self.inner[idx]
     }
 }
 
@@ -173,7 +169,7 @@ impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for NamedResourceRead<'a, T> 
 
 /// Fetches multiple (distinct) unique resource references of the same resource type
 pub struct NamedResourceWrite<'a, T: Resource> {
-    inner: Vec<(ResourceName, ResourceWrite<'a, T>)>,
+    inner: Vec<ResourceWrite<'a, T>>,
 }
 
 impl<'a, T: Resource> NamedResourceWrite<'a, T> {
@@ -184,10 +180,6 @@ impl<'a, T: Resource> NamedResourceWrite<'a, T> {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
-
-    pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
-        self.inner.iter().position(|x| &x.0 == name)
-    }
 }
 
 impl<'a, T: Resource> Index<usize> for NamedResourceWrite<'a, T> {
@@ -195,14 +187,14 @@ impl<'a, T: Resource> Index<usize> for NamedResourceWrite<'a, T> {
 
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
-        &self.inner[idx].1
+        &self.inner[idx]
     }
 }
 
 impl<'a, T: Resource> IndexMut<usize> for NamedResourceWrite<'a, T> {
     #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        &mut self.inner[idx].1
+        &mut self.inner[idx]
     }
 }
 
@@ -215,7 +207,6 @@ impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for NamedResourceWrite<'a, T>
 /// A resource with its borrow state simmilar to RefCell but for resources.
 pub struct ResourceCell {
     data: UnsafeCell<Box<dyn Resource>>,
-    //access_id: AccessId,
     borrow_state: AtomicIsize,
 }
 
@@ -426,15 +417,15 @@ impl Resources {
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_with_names<T: Resource, I: IntoIterator<Item = ResourceName>>(
-        &self,
+    pub fn get_with_names<'a, T: Resource, I: IntoIterator<Item = &'a ResourceName>>(
+        &'a self,
         names: I,
     ) -> Option<NamedResourceRead<'_, T>> {
-        let resources = names
+        let inner = names
             .into_iter()
-            .map(|name| self.get_with_name::<T>(&name).map(|x| (name, x)))
+            .map(|name| self.get_with_name::<T>(name))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceRead { inner: resources })
+        Some(NamedResourceRead { inner })
     }
 
     fn get_mut_impl<T: Resource>(&self, name: Option<&ResourceName>) -> Option<ResourceWrite<'_, T>> {
@@ -469,15 +460,15 @@ impl Resources {
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_mut_with_names<T: Resource, I: IntoIterator<Item = ResourceName>>(
-        &self,
+    pub fn get_mut_with_names<'a, T: Resource, I: IntoIterator<Item = &'a ResourceName>>(
+        &'a self,
         names: I,
     ) -> Option<NamedResourceWrite<'_, T>> {
-        let resources = names
+        let inner = names
             .into_iter()
-            .map(|name| self.get_mut_with_name::<T>(&name).map(|x| (name, x)))
+            .map(|name| self.get_mut_with_name::<T>(name))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceWrite { inner: resources })
+        Some(NamedResourceWrite { inner })
     }
 }
 
@@ -524,11 +515,11 @@ impl<'a> SyncResources<'a> {
         &self,
         names: I,
     ) -> Option<NamedResourceRead<'_, T>> {
-        let resources = names
+        let inner = names
             .into_iter()
-            .map(|name| self.get_with_name::<T>(&name).map(|x| (name, x)))
+            .map(|name| self.get_with_name::<T>(&name))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceRead { inner: resources })
+        Some(NamedResourceRead { inner })
     }
 
     fn get_mut_impl<T: Resource + Send>(&self, name: Option<&ResourceName>) -> Option<ResourceWrite<'_, T>> {
@@ -567,10 +558,10 @@ impl<'a> SyncResources<'a> {
         &self,
         names: I,
     ) -> Option<NamedResourceWrite<'_, T>> {
-        let resources = names
+        let inner = names
             .into_iter()
-            .map(|name| self.get_mut_with_name::<T>(&name).map(|x| (name, x)))
+            .map(|name| self.get_mut_with_name::<T>(&name))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceWrite { inner: resources })
+        Some(NamedResourceWrite { inner })
     }
 }
