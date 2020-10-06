@@ -1,13 +1,19 @@
-use crate::resources::{
-    NamedResourceRead, NamedResourceWrite, Resource, ResourceClaim, ResourceClaimScope, ResourceClaims, ResourceIndex,
-    ResourceName, ResourceRead, ResourceWrite, Resources,
+use crate::{
+    core::ids::IdError,
+    resources::{
+        NamedResourceRead, NamedResourceWrite, Resource, ResourceClaim, ResourceIndex, ResourceName, ResourceRead,
+        ResourceWrite, Resources,
+    },
 };
 use std::{
+    convert::TryFrom,
+    fmt,
     marker::PhantomData,
     ops::{Deref, DerefMut, Index, IndexMut},
+    str::FromStr,
 };
 
-pub trait IntoResourceClaim : 'static + Send + Sync {
+pub trait IntoResourceClaim: 'static + Send + Sync {
     fn into_claim(&self) -> ResourceClaim;
 }
 
@@ -84,7 +90,6 @@ impl<T: Resource> IntoResourceClaim for ResMutClaim<T> {
     }
 }
 
-
 /// Unique borrow of resource
 pub struct ResMut<'a, T: Resource>(pub ResourceWrite<'a, T>);
 
@@ -122,8 +127,14 @@ impl<'a, T: Resource> FetchResource<'a, ResMutClaim<T>> for FetchResourceWrite<T
 }
 
 /// List of resource names for the shared borrower, [NamedRes]
-#[derive(Debug)]
 pub struct NamedResClaim<T: Resource>(Vec<ResourceName>, PhantomData<fn(T)>);
+
+impl<T: Resource> IntoResourceClaim for NamedResClaim<T> {
+    fn into_claim(&self) -> ResourceClaim {
+        let immutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
+        ResourceClaim::new(immutable, None)
+    }
+}
 
 impl<T: Resource> Default for NamedResClaim<T> {
     fn default() -> Self {
@@ -145,10 +156,25 @@ impl<T: Resource> DerefMut for NamedResClaim<T> {
     }
 }
 
-impl<T: Resource> IntoResourceClaim for NamedResClaim<T> {
-    fn into_claim(&self) -> ResourceClaim {
-        let immutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
-        ResourceClaim::new(immutable, None)
+impl<T: Resource> fmt::Debug for NamedResClaim<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut dbg = f.debug_tuple("NamedResClaim");
+        self.0.iter().for_each(|x| {
+            dbg.field(&x.as_str());
+        });
+        dbg.finish()
+    }
+}
+
+impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for NamedResClaim<T> {
+    type Error = IdError;
+
+    fn try_from(value: &'a [&'b str]) -> Result<Self, Self::Error> {
+        let names = value
+            .into_iter()
+            .map(|name| ResourceName::from_str(name))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self(names, PhantomData))
     }
 }
 
@@ -162,6 +188,10 @@ impl<'a, T: Resource> NamedRes<'a, T> {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    pub fn claim(&self) -> &NamedResClaim<T> {
+        &self.1
     }
 
     pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
@@ -198,8 +228,14 @@ impl<'a, T: Resource> FetchResource<'a, NamedResClaim<T>> for FetchNamedResource
 }
 
 /// List of resource names for the unique borrower, [NamedResMut]
-#[derive(Debug)]
 pub struct NamedResMutClaim<T: Resource>(Vec<ResourceName>, PhantomData<fn(T)>);
+
+impl<T: Resource> IntoResourceClaim for NamedResMutClaim<T> {
+    fn into_claim(&self) -> ResourceClaim {
+        let mutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
+        ResourceClaim::new(None, mutable)
+    }
+}
 
 impl<T: Resource> Default for NamedResMutClaim<T> {
     fn default() -> Self {
@@ -221,10 +257,25 @@ impl<T: Resource> DerefMut for NamedResMutClaim<T> {
     }
 }
 
-impl<T: Resource> IntoResourceClaim for NamedResMutClaim<T> {
-    fn into_claim(&self) -> ResourceClaim {
-        let mutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
-        ResourceClaim::new(None, mutable)
+impl<T: Resource> fmt::Debug for NamedResMutClaim<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut dbg = f.debug_tuple("NamedResMutClaim");
+        self.0.iter().for_each(|x| {
+            dbg.field(&x.as_str());
+        });
+        dbg.finish()
+    }
+}
+
+impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for NamedResMutClaim<T> {
+    type Error = IdError;
+
+    fn try_from(value: &'a [&'b str]) -> Result<Self, Self::Error> {
+        let names = value
+            .into_iter()
+            .map(|name| ResourceName::from_str(name))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self(names, PhantomData))
     }
 }
 
@@ -238,6 +289,10 @@ impl<'a, T: Resource> NamedResMut<'a, T> {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    pub fn claim(&self) -> &NamedResMutClaim<T> {
+        &self.1
     }
 
     pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {

@@ -1,13 +1,5 @@
-use crate::resources::{
-    NamedResourceRead, NamedResourceWrite, Resource, ResourceIndex, ResourceName, ResourceRead, ResourceWrite,
-    Resources,
-};
-use std::{
-    any::{Any, TypeId},
-    collections::{HashMap, HashSet},
-    marker::PhantomData,
-    ops::{Deref, DerefMut, Index, IndexMut},
-};
+use crate::resources::ResourceIndex;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ResourceClaimScope {

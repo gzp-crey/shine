@@ -18,17 +18,17 @@ impl<Head, Tail> HCons<Head, Tail> {
     #[inline(always)]
     pub fn get<T, Index>(&self) -> &T
     where
-        Self: Find<T, Index>,
+        Self: HFind<T, Index>,
     {
-        Find::get(self)
+        HFind::get(self)
     }
 
     #[inline(always)]
     pub fn get_mut<T, Index>(&mut self) -> &mut T
     where
-        Self: Find<T, Index>,
+        Self: HFind<T, Index>,
     {
-        Find::get_mut(self)
+        HFind::get_mut(self)
     }
 }
 
@@ -37,7 +37,7 @@ impl<Head, Tail> HCons<Head, Tail> {
 pub enum HHere {}
 /// Helper to destructure a HList and find Type location - work-to-be-done case
 #[allow(dead_code)]
-pub struct HThere<T>(std::marker::PhantomData<T>);
+pub struct HThere<T>(PhantomData<T>);
 
 impl Default for HNil {
     fn default() -> Self {
@@ -54,12 +54,12 @@ impl<T: Default, Tail: Default + HList> Default for HCons<T, Tail> {
 /// Trait to find T in the HList.
 /// If type is not found (or exists at multiple location) a cannot infer type for type
 /// parameter `TypeLocation` error is generated.
-pub trait Find<T, TypeLocation> {
+pub trait HFind<T, TypeLocation> {
     fn get(&self) -> &T;
     fn get_mut(&mut self) -> &mut T;
 }
 
-impl<T, Tail> Find<T, HHere> for HCons<T, Tail> {
+impl<T, Tail> HFind<T, HHere> for HCons<T, Tail> {
     fn get(&self) -> &T {
         &self.0
     }
@@ -68,9 +68,9 @@ impl<T, Tail> Find<T, HHere> for HCons<T, Tail> {
     }
 }
 
-impl<Head, T, Tail, TailIndex> Find<T, HThere<TailIndex>> for HCons<Head, Tail>
+impl<Head, T, Tail, TailIndex> HFind<T, HThere<TailIndex>> for HCons<Head, Tail>
 where
-    Tail: Find<T, TailIndex>,
+    Tail: HFind<T, TailIndex>,
 {
     fn get(&self) -> &T {
         self.1.get()

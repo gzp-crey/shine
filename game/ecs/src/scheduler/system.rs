@@ -1,9 +1,6 @@
 use crate::{
-    core::{
-        hlist::{Find, HCons, HList},
-        ids::SmallStringId,
-    },
-    hlist, hlist_type,
+    core::{hlist::HFind, ids::SmallStringId},
+    hlist_type,
     resources::{FetchResource, IntoResourceClaim, ResourceClaims, ResourceQuery, Resources},
 };
 use std::{any, borrow::Cow};
@@ -56,8 +53,11 @@ impl<Func, C, R> SystemBuilder<Func, C, R> {
     }
 
     #[must_use]
-    pub fn claim<F: FnOnce(&mut C)>(mut self, claim: F) -> Self {
-        (claim)(&mut self.claims);
+    pub fn with_claim<T, Index>(mut self, claim: T) -> Self
+    where
+        C: HFind<T, Index>,
+    {
+        *self.claims.get_mut() = claim;
         self
     }
 }
@@ -76,7 +76,7 @@ where
 impl<Func, Claims> System for SystemFn<Func, Claims>
 where
     Func: FnMut(&Resources, &Claims) + Send + Sync,
-    Claims: 'static + Send + Sync
+    Claims: 'static + Send + Sync,
 {
     fn type_name(&self) -> Cow<'static, str> {
         self.type_name.clone()
