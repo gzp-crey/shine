@@ -80,7 +80,7 @@ impl OnLoad for Model {
             }
 
             Ok(model_data) => {
-                self.model = Ok(Some(model_data.compile(context.device(), ())));
+                self.model = Ok(Some(model_data.compile(context.device())));
                 //self.listeners.notify_all();
                 log::debug!("[{:?}] Model compilation completed", load_token);
             }

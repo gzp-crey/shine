@@ -95,7 +95,7 @@ impl OnLoad for Texture {
                 log::warn!("[{:?}] Texture compilation failed: {:?}", load_token, err);
             }
 
-            Ok(texture_image) => match texture_image.compile(context.device(), ()) {
+            Ok(texture_image) => match texture_image.compile(context.device()) {
                 Ok((texture, init_command)) => {
                     context.queue().submit(init_command);
                     self.texture = Ok(Some(texture));

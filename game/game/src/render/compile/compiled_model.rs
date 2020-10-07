@@ -8,13 +8,13 @@ pub struct CompiledMesh {
     pub lod: [(usize, usize); MODEL_MAX_LOD_COUNT],
 }
 
-impl Compile<()> for MeshData {
+impl<'a> Compile for &'a MeshData {
     type Compiled = CompiledMesh;
 
-    fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
         CompiledMesh {
-            vertex_buffer: self.vertices.compile(device, ()),
-            index_buffer: self.indices.as_ref().map(|indices| indices.compile(device, ())),
+            vertex_buffer: self.vertices.compile(device),
+            index_buffer: self.indices.as_ref().map(|indices| indices.compile(device)),
             lod: self.lod,
         }
     }
@@ -25,12 +25,12 @@ pub struct CompiledModel {
     pub meshes: Vec<CompiledMesh>,
 }
 
-impl Compile<()> for ModelData {
+impl<'a> Compile for &'a ModelData {
     type Compiled = CompiledModel;
 
-    fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
         CompiledModel {
-            meshes: self.meshes.iter().map(|mesh| mesh.compile(device, ())).collect(),
+            meshes: self.meshes.iter().map(|mesh| mesh.compile(device)).collect(),
         }
     }
 }

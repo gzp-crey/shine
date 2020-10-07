@@ -21,10 +21,10 @@ fn create_sampler_descriptor(descriptor: &SamplerDescriptor) -> wgpu::SamplerDes
     }
 }
 
-impl Compile<()> for SamplerDescriptor {
+impl<'a> Compile for &'a SamplerDescriptor {
     type Compiled = wgpu::Sampler;
 
-    fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
         device.create_sampler(&create_sampler_descriptor(self))
     }
 }
@@ -48,10 +48,10 @@ fn get_texture_data_layout(descriptor: &Image) -> (wgpu::Extent3d, wgpu::Texture
     (size, layout)
 }
 
-impl Compile<()> for Image {
+impl<'a> Compile for &'a Image {
     type Compiled = Result<wgpu::Texture, AssetError>;
 
-    fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
         let size = wgpu::Extent3d {
             width: self.size.0,
             height: self.size.1,
@@ -79,11 +79,11 @@ pub struct CompiledTexture {
     pub sampler: wgpu::Sampler,
 }
 
-impl Compile<()> for TextureImage {
+impl<'a> Compile for &'a TextureImage {
     type Compiled = Result<(CompiledTexture, Option<wgpu::CommandBuffer>), AssetError>;
 
-    fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
-        let texture = self.image.compile(device, ())?;
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
+        let texture = self.image.compile(device)?;
 
         let init_cmd_buffer = if !self.data.is_empty() {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -110,7 +110,7 @@ impl Compile<()> for TextureImage {
             None
         };
 
-        let sampler = self.sampler.compile(device, ());
+        let sampler = self.sampler.compile(device);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         Ok((CompiledTexture { texture, view, sampler }, init_cmd_buffer))

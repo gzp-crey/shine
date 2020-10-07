@@ -6,13 +6,18 @@ pub struct CompiledShader {
     pub shader: wgpu::ShaderModule,
 }
 
-impl Compile<()> for (ShaderType, &[u8]) {
+pub struct ShaderCompile<'a> {
+    pub shader_type: ShaderType,
+    pub data: &'a [u8],
+}
+
+impl<'a> Compile for ShaderCompile<'a> {
     type Compiled = CompiledShader;
 
-    fn compile(&self, device: &wgpu::Device, _extra: ()) -> Self::Compiled {
-        let shader = device.create_shader_module(wgpu::util::make_spirv(self.1));
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
+        let shader = device.create_shader_module(wgpu::util::make_spirv(self.data));
         CompiledShader {
-            shader_type: self.0,
+            shader_type: self.shader_type,
             shader,
         }
     }

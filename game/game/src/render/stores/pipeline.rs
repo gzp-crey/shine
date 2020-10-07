@@ -3,7 +3,7 @@ use crate::{
         AssetError, AssetIO, IntoVertexTypeId, PipelineDescriptor, PipelineStateDescriptor, PipelineStateTypeId,
         ShaderType, Url, VertexBufferLayouts, VertexTypeId,
     },
-    render::{Compile, CompiledPipeline, Context, ShaderDependency, ShaderStore, ShaderStoreRead},
+    render::{Compile, CompiledPipeline, Context, PipelineCompile, ShaderDependency, ShaderStore, ShaderStoreRead},
 };
 use shine_ecs::core::{
     observer::{ObserveDispatcher, ObserverResult, Subscription},
@@ -154,14 +154,14 @@ impl Pipeline {
 
         // all dependency is ready, try to compile
         if let Some(descriptor) = &self.descriptor {
-            match descriptor.compile(
-                context.device(),
-                (context.swap_chain_format(), &self.vertex_layouts, |stage| match stage {
-                    ShaderType::Vertex => Ok(&vs.shader),
-                    ShaderType::Fragment => Ok(&fs.shader),
-                    _ => unreachable!(),
-                }),
-            ) {
+            let pipeline_compile = PipelineCompile {
+                descriptor,
+                color_state_format: context.swap_chain_format(),
+                vertex_layouts: &self.vertex_layouts,
+                vertex_shader: &vs.shader,
+                fragment_shader: &fs.shader,
+            };
+            match pipeline_compile.compile(context.device()) {
                 Ok(pipeline) => {
                     self.pipeline = Ok(Some(pipeline));
                     log::debug!("[{:?}] Pipeline compilation completed", load_token);

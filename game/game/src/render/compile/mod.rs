@@ -1,7 +1,9 @@
-pub trait Compile<E> {
+/// Trait for render resource compilation. Once a resource is compiled, the
+/// source can be thrown away.
+pub trait Compile {
     type Compiled;
 
-    fn compile(&self, device: &wgpu::Device, extra: E) -> Self::Compiled;
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled;
 }
 
 mod compiled_buffers;

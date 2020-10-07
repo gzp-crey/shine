@@ -36,7 +36,7 @@ pub struct DepthAttachementDescriptor {
     pub stencil_operation: StencilAttachementOperation,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct RenderTargetDescriptor {
     pub colors: Vec<ColorAttachementDescriptor>,
     pub depth: Option<DepthAttachementDescriptor>,

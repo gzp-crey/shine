@@ -1,6 +1,6 @@
 use crate::{
     assets::{
-        AssetError, PipelineDescriptor, PipelineUniform, PipelineUniformLayout, ShaderType, Uniform, UniformScope,
+        AssetError, PipelineDescriptor, PipelineUniform, PipelineUniformLayout, Uniform, UniformScope,
         VertexBufferLayout, VertexStage,
     },
     render::Compile,
@@ -113,8 +113,6 @@ impl CompiledPipeline {
     }
 }
 
-type CompileExtra<'a, F> = (wgpu::TextureFormat, &'a [VertexBufferLayout], F);
-
 impl PipelineDescriptor {
     fn create_attribute_descriptors(
         &self,
@@ -203,20 +201,29 @@ impl PipelineDescriptor {
     }
 }
 
-impl<'a, F> Compile<CompileExtra<'a, F>> for PipelineDescriptor
-where
-    F: FnMut(ShaderType) -> Result<&'a wgpu::ShaderModule, AssetError>,
-{
+pub struct PipelineCompile<'a> {
+    pub descriptor: &'a PipelineDescriptor,
+    pub color_state_format: wgpu::TextureFormat,
+    pub vertex_layouts: &'a [VertexBufferLayout],
+
+    pub vertex_shader: &'a wgpu::ShaderModule,
+    pub fragment_shader: &'a wgpu::ShaderModule,
+}
+
+impl<'a> Compile for PipelineCompile<'a> {
     type Compiled = Result<CompiledPipeline, AssetError>;
 
-    fn compile(
-        &self,
-        device: &wgpu::Device,
-        (color_state_format, vertex_layouts, mut get_shader): CompileExtra<'a, F>,
-    ) -> Self::Compiled {
-        self.vertex_stage.check_vertex_layouts(&vertex_layouts)?;
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
+        let PipelineCompile {
+            descriptor,
+            color_state_format,
+            vertex_layouts,
+            vertex_shader,
+            fragment_shader,
+        } = self;
+        descriptor.vertex_stage.check_vertex_layouts(&vertex_layouts)?;
 
-        let vertex_buffers = self.create_attribute_descriptors(&vertex_layouts)?;
+        let vertex_buffers = descriptor.create_attribute_descriptors(&vertex_layouts)?;
         let vertex_buffers: Vec<_> = vertex_buffers
             .iter()
             .map(|(stride, attributes)| wgpu::VertexBufferDescriptor {
@@ -231,9 +238,9 @@ where
         };
         log::trace!("Vertex state: {:#?}", vertex_state);
 
-        let auto_bind_group_layout = self.create_bind_group_layout(device, UniformScope::Auto)?;
-        let global_bind_group_layout = self.create_bind_group_layout(device, UniformScope::Global)?;
-        let local_bind_group_layout = self.create_bind_group_layout(device, UniformScope::Local)?;
+        let auto_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Auto)?;
+        let global_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Global)?;
+        let local_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Local)?;
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
@@ -248,15 +255,15 @@ where
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
-            primitive_topology: self.primitive_topology,
+            primitive_topology: descriptor.primitive_topology,
 
             vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: get_shader(ShaderType::Vertex)?,
+                module: vertex_shader,
                 entry_point: "main",
             },
 
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: get_shader(ShaderType::Fragment)?,
+                module: fragment_shader,
                 entry_point: "main",
             }),
 

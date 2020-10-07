@@ -34,44 +34,42 @@ impl TargetIndex {
     }
 }
 
-struct ResolvedRenderTarget {
+struct Inner {
     color_target_indices: Vec<TargetIndex>,
     depth_target_index: Option<TargetIndex>,
     pipeline_state: PipelineStateDescriptor,
 }
 
+#[derive(Default)]
 pub struct RenderTarget {
-    descriptor: RenderTargetDescriptor,
-    resolved: Option<ResolvedRenderTarget>,
+    inner: Option<Inner>,
 }
 
 impl RenderTarget {
-    fn from_descriptor(descriptor: RenderTargetDescriptor) -> Self {
-        Self {
-            descriptor,
-            resolved: None,
-        }
-    }
-
-    fn is_dirty(&mut self, _frame_target: &FrameTargetResMut, texture_targets: &TextureTargetsResMut) -> bool {
-        if let Some(resolved) = &mut self.resolved {
-            if let Some(depth_target) = &mut resolved.depth_target_index {
+    fn is_dirty(
+        &mut self,
+        descriptor: &RenderTargetDescriptor,
+        _frame_target: &FrameTargetResMut,
+        texture_targets: &TextureTargetsResMut,
+    ) -> bool {
+        if let Some(inner) = &mut self.inner {
+            if let Some(depth_target) = &mut inner.depth_target_index {
                 if texture_targets[depth_target.index].generation() != depth_target.generation {
                     log::debug!(
                         "TextureTarget {:?} changed, RenderTarget re-compile required (depth)",
-                        self.descriptor.depth.as_ref().map(|depth| &depth.target),
+                        descriptor.depth.as_ref().map(|depth| &depth.target),
                     );
                     return true;
                 }
             }
 
-            for (color_idx, color_target) in resolved.color_target_indices.iter_mut().enumerate() {
+            for (color_idx, color_target) in inner.color_target_indices.iter_mut().enumerate() {
                 if color_target.is_texture_target() {
                     // texture target
                     if texture_targets[color_target.index].generation() != color_target.generation {
                         log::debug!(
                             "TextureTarget {:?} changed, RenderTarget re-compile required (color({}))",
-                            &self.descriptor.colors[color_idx].target,
+                            &descriptor.colors[color_idx].target,
                             color_idx
                         );
                         return true;
@@ -88,16 +86,21 @@ impl RenderTarget {
     }
 
     pub fn release(&mut self) {
-        self.resolved = None;
+        self.inner = None;
     }
 
-    pub fn resolve(&mut self, frame_target: &FrameTargetResMut, texture_targets: &TextureTargetsResMut) {
-        if !self.is_dirty(frame_target, texture_targets) {
+    pub fn resolve(
+        &mut self,
+        descriptor: &RenderTargetDescriptor,
+        frame_target: &FrameTargetResMut,
+        texture_targets: &TextureTargetsResMut,
+    ) {
+        if !self.is_dirty(descriptor, frame_target, texture_targets) {
             return;
         }
 
         // resolve depth
-        let (depth_state, depth_target_index) = if let Some(depth) = &self.descriptor.depth {
+        let (depth_state, depth_target_index) = if let Some(depth) = &descriptor.depth {
             let target_index = texture_targets.position_by_name(&depth.target).unwrap();
             let texture_target = &texture_targets[target_index];
             let target_index = TargetIndex::texture_target(texture_target.generation(), target_index);
@@ -118,9 +121,9 @@ impl RenderTarget {
         };
 
         // resolve colors
-        let mut color_target_indices = Vec::with_capacity(self.descriptor.colors.len());
-        let mut color_states = Vec::with_capacity(self.descriptor.colors.len());
-        for color in self.descriptor.colors.iter() {
+        let mut color_target_indices = Vec::with_capacity(descriptor.colors.len());
+        let mut color_states = Vec::with_capacity(descriptor.colors.len());
+        for color in descriptor.colors.iter() {
             let (state, target_index) = if let Some(color_target) = &color.target {
                 // texture target
                 let target_index = texture_targets.position_by_name(color_target).unwrap();
@@ -148,7 +151,7 @@ impl RenderTarget {
             color_states.push(state);
         }
 
-        self.resolved = Some(ResolvedRenderTarget {
+        self.inner = Some(Inner {
             color_target_indices,
             depth_target_index,
             pipeline_state: PipelineStateDescriptor {
@@ -159,6 +162,11 @@ impl RenderTarget {
     }
 }
 
+pub struct RenderTargetClaim {
+    pub name: ResourceName,
+    pub descriptor: RenderTargetDescriptor,
+}
+/*
 /// Unique borrow of a render target
 pub struct RenderTargetRes<'a> {
     render_target: NamedResMut<'a, RenderTarget>,
@@ -168,24 +176,22 @@ pub struct RenderTargetRes<'a> {
 
 impl<'a> ResourceQuery for RenderTargetRes<'a> {
     type Fetch = FetchRenderTarget;
-    type Claim = (ResourceName, Vec<ResourceName>);
+    type Claim = Option<RenderTargetClaim>;
 
-    fn add_default_claim(resource_claims: &mut ResourceClaims) {
-        resource_claims.add_claim::<Self::Fetch>(
-            ResourceClaimScope::Default,
-            ResourceClaim::new(None, Some(ResourceIndex::new::<FrameTarget>(None))),
-        );
+    fn default_claim()  -> ResourceClaim {
+        ResourceClaim::new(None, Some(ResourceIndex::new::<FrameTarget>(None))),
     }
+}
 
-    fn add_extra_claim(claim: Self::Claim, resource_claims: &mut ResourceClaims) {
-        let (render_target_name, texture_target_names) = claim;
-        let render_target = Some(ResourceIndex::new::<RenderTarget>(Some(render_target_name)));
-        let texture_targets = texture_target_names
-            .into_iter()
-            .map(|name| ResourceIndex::new::<TextureTarget>(Some(name)));
-        let claims = render_target.into_iter().chain(texture_targets);
-        resource_claims.add_claim::<Self::Fetch>(ResourceClaimScope::Extra, ResourceClaim::new(None, claims));
-    }
+
+fn add_extra_claim(claim: Self::Claim, resource_claims: &mut ResourceClaims) {
+    let (render_target_name, texture_target_names) = claim;
+    let render_target = Some(ResourceIndex::new::<RenderTarget>(Some(render_target_name)));
+    let texture_targets = texture_target_names
+        .into_iter()
+        .map(|name| ResourceIndex::new::<TextureTarget>(Some(name)));
+    let claims = render_target.into_iter().chain(texture_targets);
+    resource_claims.add_claim::<Self::Fetch>(ResourceClaimScope::Extra, ResourceClaim::new(None, claims));
 }
 
 pub struct FetchRenderTarget;
@@ -209,3 +215,4 @@ impl<'a> FetchResource<'a> for FetchRenderTarget {
         }
     }
 }
+*/

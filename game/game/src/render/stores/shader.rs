@@ -1,6 +1,6 @@
 use crate::{
     assets::{AssetError, AssetIO, ShaderType, Url},
-    render::{Compile, CompiledShader, Context},
+    render::{Compile, CompiledShader, Context, ShaderCompile},
 };
 use shine_ecs::core::{
     observer::{ObserveDispatcher, Subscription},
@@ -93,7 +93,11 @@ impl OnLoad for Shader {
             }
 
             Ok((ty, spirv)) => {
-                let shader = (ty, &spirv[..]).compile(context.device(), ());
+                let shader = ShaderCompile {
+                    shader_type: ty,
+                    data: &spirv[..],
+                }
+                .compile(context.device());
                 self.shader = Ok(Some(shader));
                 log::debug!("[{:?}] Shader compilation completed", load_token);
                 self.dispatcher.notify_all(ShaderEvent::Loaded);

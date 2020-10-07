@@ -10,15 +10,17 @@ pub struct CompiledTextureTarget {
     pub view: wgpu::TextureView,
 }
 
-pub struct TextureTargetCompileExtra {
+pub struct TextureTargetCompile<'a> {
+    pub descriptor: &'a TextureTargetDescriptor,
     pub frame_size: (u32, u32),
 }
 
-impl Compile<TextureTargetCompileExtra> for TextureTargetDescriptor {
+impl<'a> Compile for TextureTargetCompile<'a> {
     type Compiled = CompiledTextureTarget;
 
-    fn compile(&self, device: &wgpu::Device, extra: TextureTargetCompileExtra) -> Self::Compiled {
-        let size = self.get_target_size(extra.frame_size);
+    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
+        let TextureTargetCompile { descriptor, frame_size } = self;
+        let size = descriptor.get_target_size(frame_size);
 
         let extent = wgpu::Extent3d {
             width: size.0,
@@ -26,7 +28,7 @@ impl Compile<TextureTargetCompileExtra> for TextureTargetDescriptor {
             depth: 1,
         };
 
-        let usage = if self.is_sampled {
+        let usage = if descriptor.is_sampled {
             wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED
         } else {
             wgpu::TextureUsage::OUTPUT_ATTACHMENT
@@ -39,7 +41,7 @@ impl Compile<TextureTargetCompileExtra> for TextureTargetDescriptor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: self.format,
+            format: descriptor.format,
             usage,
             label: None,
         });
@@ -47,8 +49,8 @@ impl Compile<TextureTargetCompileExtra> for TextureTargetDescriptor {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         CompiledTextureTarget {
-            format: self.format,
-            is_sampled: self.is_sampled,
+            format: descriptor.format,
+            is_sampled: descriptor.is_sampled,
             size,
             texture,
             view,

@@ -1,6 +1,6 @@
 use crate::{
     assets::TextureTargetDescriptor,
-    render::{Compile, CompiledTextureTarget, RenderError, TextureTargetCompileExtra},
+    render::{Compile, CompiledTextureTarget, RenderError, TextureTargetCompile},
 };
 use shine_ecs::resources::{NamedRes, NamedResMut};
 
@@ -47,8 +47,11 @@ impl TextureTarget {
 
     pub fn resolve(&mut self, device: &wgpu::Device, frame_size: (u32, u32)) -> Result<(), RenderError> {
         if self.is_dirty(frame_size) {
-            let compile_args = TextureTargetCompileExtra { frame_size };
-            let render_target = self.descriptor.compile(device, compile_args);
+            let render_target = TextureTargetCompile {
+                descriptor: &self.descriptor,
+                frame_size,
+            }
+            .compile(device);
             self.generation += 1;
             self.resolved = Some(ResolvedTextureTarget { render_target });
         }

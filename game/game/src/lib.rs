@@ -5,10 +5,10 @@
 mod world;
 pub use self::world::*;
 
-pub mod app;
+//pub mod app;
 pub mod assets;
 pub mod components;
-pub mod game;
+//pub mod game;
 pub mod input;
 pub mod render;
 
