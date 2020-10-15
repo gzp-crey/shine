@@ -1,8 +1,8 @@
 use crate::{
     core::ids::IdError,
     resources::{
-        NamedResourceRead, NamedResourceWrite, Resource, ResourceClaim, ResourceIndex, ResourceName, ResourceRead,
-        ResourceWrite, Resources,
+        Resource, ResourceClaim, ResourceHandle, ResourceId, ResourceRead, ResourceTag, ResourceWrite, Resources,
+        TaggedResourceRead, TaggedResourceWrite,
     },
 };
 use std::{
@@ -61,7 +61,7 @@ impl<'a, T: Resource> ResourceQuery for Res<'a, T> {
     type Fetch = FetchResourceRead<T>;
 
     fn default_claims() -> ResourceClaim {
-        ResourceClaim::new(Some(ResourceIndex::new::<T>(None)), None)
+        ResourceClaim::new(Some(ResourceHandle::new::<T>(ResourceId::Global)), None)
     }
 }
 
@@ -112,7 +112,7 @@ impl<'a, T: Resource> ResourceQuery for ResMut<'a, T> {
     type Fetch = FetchResourceWrite<T>;
 
     fn default_claims() -> ResourceClaim {
-        ResourceClaim::new(None, Some(ResourceIndex::new::<T>(None)))
+        ResourceClaim::new(None, Some(ResourceHandle::new::<T>(ResourceId::Global)))
     }
 }
 
@@ -126,39 +126,42 @@ impl<'a, T: Resource> FetchResource<'a, ResMutClaim<T>> for FetchResourceWrite<T
     }
 }
 
-/// List of resource names for the shared borrower, [NamedRes]
-pub struct NamedResClaim<T: Resource>(Vec<ResourceName>, PhantomData<fn(T)>);
+/// List of resource tags for the shared borrower, [Tag]
+pub struct TagClaim<T: Resource>(Vec<ResourceTag>, PhantomData<fn(T)>);
 
-impl<T: Resource> IntoResourceClaim for NamedResClaim<T> {
+impl<T: Resource> IntoResourceClaim for TagClaim<T> {
     fn into_claim(&self) -> ResourceClaim {
-        let immutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
+        let immutable = self
+            .0
+            .iter()
+            .map(|c| ResourceHandle::new::<T>(ResourceId::Tag(c.clone())));
         ResourceClaim::new(immutable, None)
     }
 }
 
-impl<T: Resource> Default for NamedResClaim<T> {
+impl<T: Resource> Default for TagClaim<T> {
     fn default() -> Self {
         Self(Vec::new(), PhantomData)
     }
 }
 
-impl<T: Resource> Deref for NamedResClaim<T> {
-    type Target = Vec<ResourceName>;
+impl<T: Resource> Deref for TagClaim<T> {
+    type Target = Vec<ResourceTag>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<T: Resource> DerefMut for NamedResClaim<T> {
+impl<T: Resource> DerefMut for TagClaim<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<T: Resource> fmt::Debug for NamedResClaim<T> {
+impl<T: Resource> fmt::Debug for TagClaim<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut dbg = f.debug_tuple("NamedResClaim");
+        let mut dbg = f.debug_tuple("TagClaim");
         self.0.iter().for_each(|x| {
             dbg.field(&x.as_str());
         });
@@ -166,22 +169,34 @@ impl<T: Resource> fmt::Debug for NamedResClaim<T> {
     }
 }
 
-impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for NamedResClaim<T> {
+impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for TagClaim<T> {
     type Error = IdError;
 
     fn try_from(value: &'a [&'b str]) -> Result<Self, Self::Error> {
-        let names = value
+        let tags = value
             .into_iter()
-            .map(|name| ResourceName::from_str(name))
+            .map(|tag| ResourceTag::from_str(tag))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self(names, PhantomData))
+        Ok(Self(tags, PhantomData))
     }
 }
 
-/// Shared borrow of multiple named resources.
-pub struct NamedRes<'a, T: Resource>(NamedResourceRead<'a, T>, &'a NamedResClaim<T>);
+impl<'a, 'b, T: Resource, const N: usize> TryFrom<&'a [&'b str; N]> for TagClaim<T> {
+    type Error = IdError;
 
-impl<'a, T: Resource> NamedRes<'a, T> {
+    fn try_from(value: &'a [&'b str; N]) -> Result<Self, Self::Error> {
+        let tags = value
+            .into_iter()
+            .map(|tag| ResourceTag::from_str(tag))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self(tags, PhantomData))
+    }
+}
+
+/// Shared borrow of multiple tagged resources.
+pub struct Tag<'a, T: Resource>(TaggedResourceRead<'a, T>, &'a TagClaim<T>);
+
+impl<'a, T: Resource> Tag<'a, T> {
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -190,16 +205,16 @@ impl<'a, T: Resource> NamedRes<'a, T> {
         self.0.is_empty()
     }
 
-    pub fn claim(&self) -> &NamedResClaim<T> {
+    pub fn claim(&self) -> &TagClaim<T> {
         &self.1
     }
 
-    pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
-        self.1.iter().position(|x| x == name)
+    pub fn position_by_tag(&self, tag: &ResourceTag) -> Option<usize> {
+        self.1.iter().position(|x| x == tag)
     }
 }
 
-impl<'a, T: Resource> Index<usize> for NamedRes<'a, T> {
+impl<'a, T: Resource> Index<usize> for Tag<'a, T> {
     type Output = T;
 
     fn index(&self, idx: usize) -> &T {
@@ -207,59 +222,62 @@ impl<'a, T: Resource> Index<usize> for NamedRes<'a, T> {
     }
 }
 
-impl<'a, T: Resource> ResourceQuery for NamedRes<'a, T> {
-    type Claim = NamedResClaim<T>;
-    type Fetch = FetchNamedResourceRead<T>;
+impl<'a, T: Resource> ResourceQuery for Tag<'a, T> {
+    type Claim = TagClaim<T>;
+    type Fetch = FetchTaggedResourceRead<T>;
 
     fn default_claims() -> ResourceClaim {
         ResourceClaim::none()
     }
 }
 
-pub struct FetchNamedResourceRead<T: Resource>(PhantomData<T>);
+pub struct FetchTaggedResourceRead<T: Resource>(PhantomData<T>);
 
-impl<'a, T: Resource> FetchResource<'a, NamedResClaim<T>> for FetchNamedResourceRead<T> {
-    type Item = NamedRes<'a, T>;
+impl<'a, T: Resource> FetchResource<'a, TagClaim<T>> for FetchTaggedResourceRead<T> {
+    type Item = Tag<'a, T>;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, extra_claim: &'r NamedResClaim<T>) -> Self::Item {
-        let resources = resources.get_with_names::<T, _>(extra_claim.iter()).unwrap();
-        NamedRes(resources, extra_claim)
+    fn fetch<'r: 'a>(resources: &'r Resources, extra_claim: &'r TagClaim<T>) -> Self::Item {
+        let resources = resources.get_with_tags::<T, _>(extra_claim.iter()).unwrap();
+        Tag(resources, extra_claim)
     }
 }
 
-/// List of resource names for the unique borrower, [NamedResMut]
-pub struct NamedResMutClaim<T: Resource>(Vec<ResourceName>, PhantomData<fn(T)>);
+/// List of resource tags for the unique borrower, [TagMut]
+pub struct TagMutClaim<T: Resource>(Vec<ResourceTag>, PhantomData<fn(T)>);
 
-impl<T: Resource> IntoResourceClaim for NamedResMutClaim<T> {
+impl<T: Resource> IntoResourceClaim for TagMutClaim<T> {
     fn into_claim(&self) -> ResourceClaim {
-        let mutable = self.0.iter().map(|c| ResourceIndex::new::<T>(Some(c.clone())));
+        let mutable = self
+            .0
+            .iter()
+            .map(|c| ResourceHandle::new::<T>(ResourceId::Tag(c.clone())));
         ResourceClaim::new(None, mutable)
     }
 }
 
-impl<T: Resource> Default for NamedResMutClaim<T> {
+impl<T: Resource> Default for TagMutClaim<T> {
     fn default() -> Self {
         Self(Vec::new(), PhantomData)
     }
 }
 
-impl<T: Resource> Deref for NamedResMutClaim<T> {
-    type Target = Vec<ResourceName>;
+impl<T: Resource> Deref for TagMutClaim<T> {
+    type Target = Vec<ResourceTag>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<T: Resource> DerefMut for NamedResMutClaim<T> {
+impl<T: Resource> DerefMut for TagMutClaim<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<T: Resource> fmt::Debug for NamedResMutClaim<T> {
+impl<T: Resource> fmt::Debug for TagMutClaim<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut dbg = f.debug_tuple("NamedResMutClaim");
+        let mut dbg = f.debug_tuple("TagMutClaim");
         self.0.iter().for_each(|x| {
             dbg.field(&x.as_str());
         });
@@ -267,22 +285,22 @@ impl<T: Resource> fmt::Debug for NamedResMutClaim<T> {
     }
 }
 
-impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for NamedResMutClaim<T> {
+impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for TagMutClaim<T> {
     type Error = IdError;
 
     fn try_from(value: &'a [&'b str]) -> Result<Self, Self::Error> {
-        let names = value
+        let tags = value
             .into_iter()
-            .map(|name| ResourceName::from_str(name))
+            .map(|tag| ResourceTag::from_str(tag))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self(names, PhantomData))
+        Ok(Self(tags, PhantomData))
     }
 }
 
-/// Unique borrow of multiple named resources.
-pub struct NamedResMut<'a, T: Resource>(NamedResourceWrite<'a, T>, &'a NamedResMutClaim<T>);
+/// Unique borrow of multiple tagged resources.
+pub struct TagMut<'a, T: Resource>(TaggedResourceWrite<'a, T>, &'a TagMutClaim<T>);
 
-impl<'a, T: Resource> NamedResMut<'a, T> {
+impl<'a, T: Resource> TagMut<'a, T> {
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -291,16 +309,16 @@ impl<'a, T: Resource> NamedResMut<'a, T> {
         self.0.is_empty()
     }
 
-    pub fn claim(&self) -> &NamedResMutClaim<T> {
+    pub fn claim(&self) -> &TagMutClaim<T> {
         &self.1
     }
 
-    pub fn position_by_name(&self, name: &ResourceName) -> Option<usize> {
-        self.1.iter().position(|x| x == name)
+    pub fn position_by_tag(&self, tag: &ResourceTag) -> Option<usize> {
+        self.1.iter().position(|x| x == tag)
     }
 }
 
-impl<'a, T: Resource> Index<usize> for NamedResMut<'a, T> {
+impl<'a, T: Resource> Index<usize> for TagMut<'a, T> {
     type Output = T;
 
     fn index(&self, idx: usize) -> &T {
@@ -308,28 +326,28 @@ impl<'a, T: Resource> Index<usize> for NamedResMut<'a, T> {
     }
 }
 
-impl<'a, T: Resource> IndexMut<usize> for NamedResMut<'a, T> {
+impl<'a, T: Resource> IndexMut<usize> for TagMut<'a, T> {
     fn index_mut(&mut self, idx: usize) -> &mut T {
         &mut self.0[idx]
     }
 }
 
-impl<'a, T: Resource> ResourceQuery for NamedResMut<'a, T> {
-    type Fetch = FetchNamedResourceWrite<T>;
-    type Claim = NamedResMutClaim<T>;
+impl<'a, T: Resource> ResourceQuery for TagMut<'a, T> {
+    type Fetch = FetchTaggedResourceWrite<T>;
+    type Claim = TagMutClaim<T>;
 
     fn default_claims() -> ResourceClaim {
         ResourceClaim::none()
     }
 }
 
-pub struct FetchNamedResourceWrite<T: Resource>(PhantomData<T>);
+pub struct FetchTaggedResourceWrite<T: Resource>(PhantomData<T>);
 
-impl<'a, T: Resource> FetchResource<'a, NamedResMutClaim<T>> for FetchNamedResourceWrite<T> {
-    type Item = NamedResMut<'a, T>;
+impl<'a, T: Resource> FetchResource<'a, TagMutClaim<T>> for FetchTaggedResourceWrite<T> {
+    type Item = TagMut<'a, T>;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, extra_claim: &'r NamedResMutClaim<T>) -> Self::Item {
-        let resources = resources.get_mut_with_names::<T, _>(extra_claim.iter()).unwrap();
-        NamedResMut(resources, extra_claim)
+    fn fetch<'r: 'a>(resources: &'r Resources, extra_claim: &'r TagMutClaim<T>) -> Self::Item {
+        let resources = resources.get_mut_with_tags::<T, _>(extra_claim.iter()).unwrap();
+        TagMut(resources, extra_claim)
     }
 }

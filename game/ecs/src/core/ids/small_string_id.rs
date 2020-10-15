@@ -1,6 +1,7 @@
 use crate::core::ids::IdError;
 use serde::{de, ser};
 use std::{
+    convert::TryFrom,
     fmt,
     marker::PhantomData,
     str::{self, FromStr},
@@ -36,6 +37,14 @@ impl<const N: usize> FromStr for SmallStringId<N> {
         } else {
             Err(IdError::ParseError(s.to_owned()))
         }
+    }
+}
+
+impl<const N: usize> TryFrom<&str> for SmallStringId<N> {
+    type Error = IdError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_str(s)
     }
 }
 

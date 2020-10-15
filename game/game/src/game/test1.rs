@@ -30,15 +30,14 @@ impl GameLifecycle for Test1 {
 
             world.resources.insert(TestScene::new(&self));
             world.resources.insert(TextureTarget::from_descriptor(frame));
-            world.resources.insert(RenderTarget::new());
+
+            let (claim, res) = RenderTarget::new(name, desc);
+            world.resources.insert(res);
 
             {
                 let mut render_schedule = Schedule::default();
                 render_schedule.schedule(
-                    render
-                        .system()
-                        .with_render_target(desc)
-                        .with_named::<T>(vec!["1", "2", "3"]),
+                    render_system(claim)
                 );
                 world.add_stage("render", render_schedule);
             }
@@ -59,14 +58,6 @@ impl GameLifecycle for Test1 {
     }
 }
 
-impl Test1 {
-    pub fn render_system(&mut self) -> Schedule {
-        let mut schedule = Schedule::default();
-        schedule.schedule(render.system());
-        schedule
-    }
-}
-
 /// Resources for the test
 struct TestScene {
     pipeline: PipelineDependency,
@@ -83,6 +74,12 @@ impl TestScene {
         }
     }
 }
+
+fn render_system(claim: RenderTargetClaim) -> Box<dyn System> {
+    render
+        .system()
+        .with_claim::<RenderTargetRes>(claim)
+}                        
 
 fn render(context: Res<Context>, resources: Res<RenderResources>, target: RenderTargetRes, scene: ResMut<TestScene>) {
     log::error!("render");

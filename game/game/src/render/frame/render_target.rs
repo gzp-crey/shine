@@ -163,9 +163,19 @@ impl RenderTarget {
 }
 
 pub struct RenderTargetClaim {
-    pub name: ResourceName,
-    pub descriptor: RenderTargetDescriptor,
+    name: Option<ResourceName>,
+    descriptor: Option<RenderTargetDescriptor>,
 }
+
+impl IntoResourceClaim for RenderTargetClaim {
+    fn into_claim(&self) -> ResourceClaim {
+        //let render_target = Some(ResourceIndex::new::<RenderTarget>(Some(render_target_name)));
+        //let color_targets = descriptor.map(|descriptor| descriptor.colors.target)
+        //let depth_targets = descriptor.map(|descriptor| descriptor.depth.target)
+        ResourceClaim::none()
+    }
+}
+
 /*
 /// Unique borrow of a render target
 pub struct RenderTargetRes<'a> {

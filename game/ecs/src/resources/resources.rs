@@ -9,6 +9,7 @@ use std::{
     any::{self, TypeId},
     cell::UnsafeCell,
     collections::HashMap,
+    convert::TryInto,
     fmt,
     hash::Hasher,
     marker::PhantomData,
@@ -16,57 +17,67 @@ use std::{
     sync::atomic::{self, AtomicIsize},
 };
 
-pub type ResourceName = SmallStringId<16>;
+pub type ResourceTag = SmallStringId<16>;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SystemId(usize);
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ResourceId {
+    Global,
+    Tag(ResourceTag),
+    System(SystemId),
+}
 
 /// Unique ID for a resource.
 #[derive(Clone, Debug, Eq, PartialOrd, Ord)]
-pub struct ResourceIndex {
+pub struct ResourceHandle {
     type_id: TypeId,
-    name: Option<ResourceName>,
+    id: ResourceId,
 
     #[cfg(debug_assertions)]
     type_name: &'static str,
 }
 
-impl ResourceIndex {
+impl ResourceHandle {
     /// Returns the resource type ID of the given resource type.
-    pub fn new<T: Resource>(name: Option<ResourceName>) -> Self {
+    pub fn new<T: Resource>(id: ResourceId) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
-            name: name,
+            id,
 
             #[cfg(debug_assertions)]
             type_name: any::type_name::<T>(),
         }
     }
 
-    pub fn name(&self) -> Option<&ResourceName> {
-        self.name.as_ref()
+    pub fn id(&self) -> &ResourceId {
+        &self.id
     }
 }
 
-impl std::hash::Hash for ResourceIndex {
+impl std::hash::Hash for ResourceHandle {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.type_id.hash(state);
-        self.name.hash(state);
+        self.id.hash(state);
     }
 }
 
-impl PartialEq for ResourceIndex {
+impl PartialEq for ResourceHandle {
     fn eq(&self, other: &Self) -> bool {
-        self.type_id.eq(&other.type_id) && self.name == other.name
+        self.type_id.eq(&other.type_id) && self.id == other.id
     }
 }
 
-impl fmt::Display for ResourceIndex {
+impl fmt::Display for ResourceHandle {
     #[cfg(debug_assertions)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}[{:?}]", self.type_name, self.name)
+        write!(f, "{}[{:?}]", self.type_name, self.id)
     }
 
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}[{:?}]", self.type_id, self.name)
+        write!(f, "{:?}[{:?}]", self.type_id, self.id)
     }
 }
 
@@ -138,11 +149,11 @@ impl<'a, T: Resource> Drop for ResourceWrite<'a, T> {
 }
 
 /// Fetches multiple (distinct) shared resource references of the same resource type
-pub struct NamedResourceRead<'a, T: Resource> {
+pub struct TaggedResourceRead<'a, T: Resource> {
     inner: Vec<ResourceRead<'a, T>>,
 }
 
-impl<'a, T: Resource> NamedResourceRead<'a, T> {
+impl<'a, T: Resource> TaggedResourceRead<'a, T> {
     pub fn len(&self) -> usize {
         self.inner.len()
     }
@@ -152,7 +163,7 @@ impl<'a, T: Resource> NamedResourceRead<'a, T> {
     }
 }
 
-impl<'a, T: Resource> Index<usize> for NamedResourceRead<'a, T> {
+impl<'a, T: Resource> Index<usize> for TaggedResourceRead<'a, T> {
     type Output = T;
 
     #[inline]
@@ -161,18 +172,18 @@ impl<'a, T: Resource> Index<usize> for NamedResourceRead<'a, T> {
     }
 }
 
-impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for NamedResourceRead<'a, T> {
+impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for TaggedResourceRead<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(&self.inner).finish()
     }
 }
 
 /// Fetches multiple (distinct) unique resource references of the same resource type
-pub struct NamedResourceWrite<'a, T: Resource> {
+pub struct TaggedResourceWrite<'a, T: Resource> {
     inner: Vec<ResourceWrite<'a, T>>,
 }
 
-impl<'a, T: Resource> NamedResourceWrite<'a, T> {
+impl<'a, T: Resource> TaggedResourceWrite<'a, T> {
     pub fn len(&self) -> usize {
         self.inner.len()
     }
@@ -182,7 +193,7 @@ impl<'a, T: Resource> NamedResourceWrite<'a, T> {
     }
 }
 
-impl<'a, T: Resource> Index<usize> for NamedResourceWrite<'a, T> {
+impl<'a, T: Resource> Index<usize> for TaggedResourceWrite<'a, T> {
     type Output = T;
 
     #[inline]
@@ -191,14 +202,14 @@ impl<'a, T: Resource> Index<usize> for NamedResourceWrite<'a, T> {
     }
 }
 
-impl<'a, T: Resource> IndexMut<usize> for NamedResourceWrite<'a, T> {
+impl<'a, T: Resource> IndexMut<usize> for TaggedResourceWrite<'a, T> {
     #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
         &mut self.inner[idx]
     }
 }
 
-impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for NamedResourceWrite<'a, T> {
+impl<'a, T: 'a + Resource + fmt::Debug> fmt::Debug for TaggedResourceWrite<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(&self.inner).finish()
     }
@@ -281,31 +292,31 @@ impl ResourceCell {
 /// but _does not_ ensure that `!Sync` resources aren't accessed across threads.
 #[derive(Default)]
 pub struct UnsafeResources {
-    map: HashMap<ResourceIndex, ResourceCell>,
+    map: HashMap<ResourceHandle, ResourceCell>,
 }
 
 unsafe impl Send for UnsafeResources {}
 unsafe impl Sync for UnsafeResources {}
 
 impl UnsafeResources {
-    fn contains(&self, type_id: &ResourceIndex) -> bool {
+    fn contains(&self, type_id: &ResourceHandle) -> bool {
         self.map.contains_key(type_id)
     }
 
     /// # Safety
     /// Resources which are `!Send` must be retrieved or inserted only on the main thread.
-    unsafe fn insert<T: Resource>(&mut self, name: Option<ResourceName>, resource: T) {
+    unsafe fn insert<T: Resource>(&mut self, id: ResourceId, resource: T) {
         self.map
-            .insert(ResourceIndex::new::<T>(name), ResourceCell::new(Box::new(resource)));
+            .insert(ResourceHandle::new::<T>(id), ResourceCell::new(Box::new(resource)));
     }
 
     /// # Safety
     /// Resources which are `!Send` must be retrieved or inserted only on the main thread.
-    unsafe fn remove(&mut self, type_id: &ResourceIndex) -> Option<Box<dyn Resource>> {
+    unsafe fn remove(&mut self, type_id: &ResourceHandle) -> Option<Box<dyn Resource>> {
         self.map.remove(type_id).map(|cell| cell.into_inner())
     }
 
-    fn get(&self, type_id: &ResourceIndex) -> Option<&ResourceCell> {
+    fn get(&self, type_id: &ResourceHandle) -> Option<&ResourceCell> {
         self.map.get(type_id)
     }
 }
@@ -327,48 +338,63 @@ impl Resources {
         }
     }
 
-    fn insert_impl<T: Resource>(&mut self, name: Option<ResourceName>, value: T) {
+    fn insert_impl<T: Resource>(&mut self, id: ResourceId, value: T) {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
-            self.internal.insert(name, value);
+            self.internal.insert(id, value);
         }
     }
 
     /// Inserts the instance of `T` into the store.
     pub fn insert<T: Resource>(&mut self, value: T) {
-        self.insert_impl(None, value);
+        self.insert_impl(ResourceId::Global, value);
     }
 
-    /// Inserts the instance of `T` with the given name into the store.
-    pub fn insert_with_name<T: Resource>(&mut self, name: ResourceName, value: T) {
-        self.insert_impl(Some(name), value);
+    /// Inserts the instance of `T` with the given tag into the store.
+    pub fn insert_with_tag<T: Resource>(&mut self, tag: ResourceTag, value: T) {
+        self.insert_impl(ResourceId::Tag(tag), value);
     }
 
-    fn contains_impl<T: Resource>(&self, name: Option<&ResourceName>) -> bool {
-        self.internal
-            .contains(&ResourceIndex::new::<T>(name.map(|n| n.to_owned())))
+    /// Inserts the instance of `T` with the given tag into the store.
+    pub fn insert_with_try_tag<G: TryInto<ResourceTag>, T: Resource>(
+        &mut self,
+        tag: G,
+        value: T,
+    ) -> Result<(), <G as TryInto<ResourceTag>>::Error> {
+        self.insert_impl(ResourceId::Tag(tag.try_into()?), value);
+        Ok(())
+    }
+
+    /*/// Inserts the instance of `T` for each system. As resource is created on
+    /// demand when requested, T have to implement Default.
+    pub fn insert_local<T: Default + Resource>(&mut self) {
+        unimplemented!()
+    }*/
+
+    fn contains_impl<T: Resource>(&self, id: ResourceId) -> bool {
+        self.internal.contains(&ResourceHandle::new::<T>(id))
     }
 
     /// Returns if type `T` exists in the store.
     pub fn contains<T: Resource>(&self) -> bool {
-        self.contains_impl::<T>(None)
+        self.contains_impl::<T>(ResourceId::Global)
     }
 
-    /// Returns if type `T` with the given name exists in the store.
-    pub fn contains_with_name<T: Resource>(&self, name: &ResourceName) -> bool {
-        self.contains_impl::<T>(Some(name))
+    /// Returns if type `T` with the given tag exists in the store.
+    pub fn contains_with_tag<T: Resource>(&self, tag: &ResourceTag) -> bool {
+        self.contains_impl::<T>(ResourceId::Tag(tag.to_owned()))
     }
 
-    fn remove_impl<T: Resource>(&mut self, name: Option<&ResourceName>) -> Option<T> {
+    fn remove_impl<T: Resource>(&mut self, id: ResourceId) -> Option<T> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
             let resource = self
                 .internal
-                .remove(&ResourceIndex::new::<T>(name.map(|n| n.to_owned())))?
+                .remove(&ResourceHandle::new::<T>(id))?
                 .downcast::<T>()
                 .ok()?;
             Some(*resource)
@@ -377,19 +403,19 @@ impl Resources {
 
     /// Removes the type `T` from this store if it exists.    
     pub fn remove<T: Resource>(&mut self) -> Option<T> {
-        self.remove_impl::<T>(None)
+        self.remove_impl::<T>(ResourceId::Global)
     }
 
-    /// Removes the type `T` with the given name from this store if it exists.    
-    pub fn remove_with_name<T: Resource>(&mut self, name: &ResourceName) -> Option<T> {
-        self.remove_impl::<T>(Some(name))
+    /// Removes the type `T` with the given tag from this store if it exists.    
+    pub fn remove_with_tag<T: Resource>(&mut self, tag: &ResourceTag) -> Option<T> {
+        self.remove_impl::<T>(ResourceId::Tag(tag.to_owned()))
     }
 
-    fn get_impl<T: Resource>(&self, name: Option<&ResourceName>) -> Option<ResourceRead<'_, T>> {
+    fn get_impl<T: Resource>(&self, id: ResourceId) -> Option<ResourceRead<'_, T>> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceHandle::new::<T>(id);
         unsafe { self.internal.get(&type_id)?.get::<T>() }
     }
 
@@ -399,40 +425,40 @@ impl Resources {
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
     pub fn get<T: Resource>(&self) -> Option<ResourceRead<'_, T>> {
-        self.get_impl::<T>(None)
+        self.get_impl::<T>(ResourceId::Global)
     }
 
-    /// Retrieve an shared reference to a `T` with the give name from the store if it exists.
+    /// Retrieve an shared reference to a `T` with the give tag from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_with_name<T: Resource>(&self, name: &ResourceName) -> Option<ResourceRead<'_, T>> {
-        self.get_impl::<T>(Some(name))
+    pub fn get_with_tag<T: Resource>(&self, tag: &ResourceTag) -> Option<ResourceRead<'_, T>> {
+        self.get_impl::<T>(ResourceId::Tag(tag.to_owned()))
     }
 
-    /// Retrieve a list of shared reference to `T` with the given names from the store
+    /// Retrieve a list of shared reference to `T` with the given tags from the store
     /// if it all of them exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_with_names<'a, T: Resource, I: IntoIterator<Item = &'a ResourceName>>(
+    pub fn get_with_tags<'a, T: Resource, I: IntoIterator<Item = &'a ResourceTag>>(
         &'a self,
-        names: I,
-    ) -> Option<NamedResourceRead<'_, T>> {
-        let inner = names
+        tags: I,
+    ) -> Option<TaggedResourceRead<'_, T>> {
+        let inner = tags
             .into_iter()
-            .map(|name| self.get_with_name::<T>(name))
+            .map(|tag| self.get_with_tag::<T>(tag))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceRead { inner })
+        Some(TaggedResourceRead { inner })
     }
 
-    fn get_mut_impl<T: Resource>(&self, name: Option<&ResourceName>) -> Option<ResourceWrite<'_, T>> {
+    fn get_mut_impl<T: Resource>(&self, id: ResourceId) -> Option<ResourceWrite<'_, T>> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceHandle::new::<T>(id);
         unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
     }
 
@@ -442,33 +468,33 @@ impl Resources {
     /// # Panics
     /// Panics if the resource is already borrowed.
     pub fn get_mut<T: Resource>(&self) -> Option<ResourceWrite<'_, T>> {
-        self.get_mut_impl::<T>(None)
+        self.get_mut_impl::<T>(ResourceId::Global)
     }
 
-    /// Retrieve a unique reference to a `T` with the given name from the store if it exists.
+    /// Retrieve a unique reference to a `T` with the given tag from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed.
-    pub fn get_mut_with_name<T: Resource>(&self, name: &ResourceName) -> Option<ResourceWrite<'_, T>> {
-        self.get_mut_impl::<T>(Some(name))
+    pub fn get_mut_with_tag<T: Resource>(&self, tag: &ResourceTag) -> Option<ResourceWrite<'_, T>> {
+        self.get_mut_impl::<T>(ResourceId::Tag(tag.to_owned()))
     }
 
-    /// Retrieve a list of unique references to `T` with the given names from the store
+    /// Retrieve a list of unique references to `T` with the given tags from the store
     /// if it all of them exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_mut_with_names<'a, T: Resource, I: IntoIterator<Item = &'a ResourceName>>(
+    pub fn get_mut_with_tags<'a, T: Resource, I: IntoIterator<Item = &'a ResourceTag>>(
         &'a self,
-        names: I,
-    ) -> Option<NamedResourceWrite<'_, T>> {
-        let inner = names
+        tags: I,
+    ) -> Option<TaggedResourceWrite<'_, T>> {
+        let inner = tags
             .into_iter()
-            .map(|name| self.get_mut_with_name::<T>(name))
+            .map(|tag| self.get_mut_with_tag::<T>(tag))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceWrite { inner })
+        Some(TaggedResourceWrite { inner })
     }
 }
 
@@ -479,11 +505,11 @@ pub struct SyncResources<'a> {
 }
 
 impl<'a> SyncResources<'a> {
-    fn get_impl<T: Resource + Sync>(&self, name: Option<&ResourceName>) -> Option<ResourceRead<'_, T>> {
+    fn get_impl<T: Resource + Sync>(&self, id: ResourceId) -> Option<ResourceRead<'_, T>> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceHandle::new::<T>(id);
         unsafe { self.internal.get(&type_id)?.get::<T>() }
     }
 
@@ -493,40 +519,40 @@ impl<'a> SyncResources<'a> {
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
     pub fn get<T: Resource + Sync>(&self) -> Option<ResourceRead<'_, T>> {
-        self.get_impl::<T>(None)
+        self.get_impl::<T>(ResourceId::Global)
     }
 
-    /// Retrieve an shared reference to a `T` with the give name from the store if it exists.
+    /// Retrieve an shared reference to a `T` with the give tag from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_with_name<T: Resource + Sync>(&self, name: &ResourceName) -> Option<ResourceRead<'_, T>> {
-        self.get_impl::<T>(Some(name))
+    pub fn get_with_tag<T: Resource + Sync>(&self, tag: &ResourceTag) -> Option<ResourceRead<'_, T>> {
+        self.get_impl::<T>(ResourceId::Tag(tag.to_owned()))
     }
 
-    /// Retrieve a list of shared reference to `T` with the given names from the store
+    /// Retrieve a list of shared reference to `T` with the given tags from the store
     /// if it all of them exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_with_names<T: Resource + Sync, I: IntoIterator<Item = ResourceName>>(
-        &self,
-        names: I,
-    ) -> Option<NamedResourceRead<'_, T>> {
-        let inner = names
+    pub fn get_with_tags<'t, T: Resource + Sync, I: IntoIterator<Item = &'t ResourceTag>>(
+        &'t self,
+        tags: I,
+    ) -> Option<TaggedResourceRead<'_, T>> {
+        let inner = tags
             .into_iter()
-            .map(|name| self.get_with_name::<T>(&name))
+            .map(|tag| self.get_with_tag::<T>(tag))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceRead { inner })
+        Some(TaggedResourceRead { inner })
     }
 
-    fn get_mut_impl<T: Resource + Send>(&self, name: Option<&ResourceName>) -> Option<ResourceWrite<'_, T>> {
+    fn get_mut_impl<T: Resource + Send>(&self, id: ResourceId) -> Option<ResourceWrite<'_, T>> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        let type_id = &ResourceIndex::new::<T>(name.map(|n| n.to_owned()));
+        let type_id = &ResourceHandle::new::<T>(id);
         unsafe { self.internal.get(&type_id)?.get_mut::<T>() }
     }
 
@@ -536,32 +562,32 @@ impl<'a> SyncResources<'a> {
     /// # Panics
     /// Panics if the resource is already borrowed.
     pub fn get_mut<T: Resource + Send>(&self) -> Option<ResourceWrite<'_, T>> {
-        self.get_mut_impl::<T>(None)
+        self.get_mut_impl::<T>(ResourceId::Global)
     }
 
-    /// Retrieve a unique reference to a `T` with the given name from the store if it exists.
+    /// Retrieve a unique reference to a `T` with the given tag from the store if it exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed.
-    pub fn get_mut_with_name<T: Resource + Send>(&self, name: &ResourceName) -> Option<ResourceWrite<'_, T>> {
-        self.get_mut_impl::<T>(Some(name))
+    pub fn get_mut_with_tag<T: Resource + Send>(&self, tag: &ResourceTag) -> Option<ResourceWrite<'_, T>> {
+        self.get_mut_impl::<T>(ResourceId::Tag(tag.to_owned()))
     }
 
-    /// Retrieve a list of unique references to `T` with the given names from the store
+    /// Retrieve a list of unique references to `T` with the given tags from the store
     /// if it all of them exists.
     /// Otherwise, return `None`.
     ///
     /// # Panics
     /// Panics if the resource is already borrowed mutably.
-    pub fn get_mut_with_names<T: Resource + Send, I: IntoIterator<Item = ResourceName>>(
-        &self,
-        names: I,
-    ) -> Option<NamedResourceWrite<'_, T>> {
-        let inner = names
+    pub fn get_mut_with_tags<'t, T: Resource + Send, I: IntoIterator<Item = &'t ResourceTag>>(
+        &'t self,
+        tags: I,
+    ) -> Option<TaggedResourceWrite<'_, T>> {
+        let inner = tags
             .into_iter()
-            .map(|name| self.get_mut_with_name::<T>(&name))
+            .map(|tag| self.get_mut_with_tag::<T>(tag))
             .collect::<Option<Vec<_>>>()?;
-        Some(NamedResourceWrite { inner })
+        Some(TaggedResourceWrite { inner })
     }
 }

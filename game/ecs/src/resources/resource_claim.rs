@@ -1,4 +1,4 @@
-use crate::resources::ResourceIndex;
+use crate::resources::ResourceHandle;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy)]
@@ -9,8 +9,8 @@ pub enum ResourceClaimScope {
 
 #[derive(Default, Debug)]
 pub struct ResourceClaim {
-    pub immutable: Vec<ResourceIndex>,
-    pub mutable: Vec<ResourceIndex>,
+    pub immutable: Vec<ResourceHandle>,
+    pub mutable: Vec<ResourceHandle>,
 }
 
 impl ResourceClaim {
@@ -23,8 +23,8 @@ impl ResourceClaim {
 
     pub fn new<I1, I2>(immutable: I1, mutable: I2) -> Self
     where
-        I1: IntoIterator<Item = ResourceIndex>,
-        I2: IntoIterator<Item = ResourceIndex>,
+        I1: IntoIterator<Item = ResourceHandle>,
+        I2: IntoIterator<Item = ResourceHandle>,
     {
         Self {
             immutable: immutable.into_iter().collect(),
@@ -33,20 +33,20 @@ impl ResourceClaim {
     }
 }
 
-/// Store resource names for each resource types.
+/// Shared an unique resource requests
 #[derive(Default, Debug)]
 pub struct ResourceClaims {
-    all_immutable: HashSet<ResourceIndex>,
-    all_mutable: HashSet<ResourceIndex>,
+    all_immutable: HashSet<ResourceHandle>,
+    all_mutable: HashSet<ResourceHandle>,
 }
 
 impl ResourceClaims {
-    fn store_immutable(&mut self, idx: ResourceIndex) {
+    fn store_immutable(&mut self, idx: ResourceHandle) {
         assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
         self.all_immutable.insert(idx);
     }
 
-    fn store_mutable(&mut self, idx: ResourceIndex) {
+    fn store_mutable(&mut self, idx: ResourceHandle) {
         assert!(self.all_immutable.get(&idx).is_none()); // claimed a resources both as mutable and immutable
         assert!(self.all_mutable.get(&idx).is_none()); // claimed a resources multiple times for mutation
         self.all_mutable.insert(idx);
@@ -58,11 +58,11 @@ impl ResourceClaims {
         mutable.into_iter().for_each(|x| self.store_mutable(x));
     }
 
-    pub fn is_claimed_immutable(&self, id: &ResourceIndex) -> bool {
+    pub fn is_claimed_immutable(&self, id: &ResourceHandle) -> bool {
         self.all_immutable.contains(&id)
     }
 
-    pub fn is_claimed_mutable(&self, id: &ResourceIndex) -> bool {
+    pub fn is_claimed_mutable(&self, id: &ResourceHandle) -> bool {
         self.all_mutable.contains(&id)
     }
 }

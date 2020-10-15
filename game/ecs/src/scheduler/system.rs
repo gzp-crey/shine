@@ -1,9 +1,9 @@
 use crate::{
     core::{hlist::HFind, ids::SmallStringId},
     hlist_type,
-    resources::{FetchResource, IntoResourceClaim, ResourceClaims, ResourceQuery, Resources},
+    resources::{FetchResource, IntoResourceClaim, ResourceClaims, ResourceQuery, Resources, TagClaim, TagMutClaim},
 };
-use std::{any, borrow::Cow};
+use std::{any, borrow::Cow, convert::TryFrom};
 
 pub type SystemName = SmallStringId<16>;
 
@@ -58,6 +58,46 @@ impl<Func, C, R> SystemBuilder<Func, C, R> {
         C: HFind<T, Index>,
     {
         *self.claims.get_mut() = claim;
+        self
+    }
+}
+
+/// Helper trait to set the tags for shared tagged resource claims
+pub trait WithTag<C, Index> {
+    fn with_tag<Claim: 'static>(self, claim: &[&str]) -> Self
+    where
+        Self: Sized,
+        C: HFind<TagClaim<Claim>, Index>;
+}
+
+impl<Func, C, R, Index> WithTag<C, Index> for SystemBuilder<Func, C, R> {
+    fn with_tag<Claim: 'static>(mut self, claim: &[&str]) -> Self
+    where
+        Self: Sized,
+        C: HFind<TagClaim<Claim>, Index>,
+    {
+        *self.claims.get_mut() = TagClaim::<Claim>::try_from(claim).unwrap();
+        self
+    }
+}
+
+/// Trait to set the tags for unique tagged resource claims
+pub trait WithTagMut<C, Index> {
+    fn with_tag_mut<Claim>(self, claim: &[&str]) -> Self
+    where
+        Self: Sized,
+        Claim: 'static,
+        C: HFind<TagMutClaim<Claim>, Index>;
+}
+
+impl<Func, C, R, Index> WithTagMut<C, Index> for SystemBuilder<Func, C, R> {
+    fn with_tag_mut<Claim: 'static>(mut self, claim: &[&str]) -> Self
+    where
+        Self: Sized,
+        Claim: 'static,
+        C: HFind<TagMutClaim<Claim>, Index>,
+    {
+        *self.claims.get_mut() = TagMutClaim::<Claim>::try_from(claim).unwrap();
         self
     }
 }

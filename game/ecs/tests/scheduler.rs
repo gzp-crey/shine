@@ -1,8 +1,7 @@
 use shine_ecs::{
-    resources::{NamedRes, NamedResClaim, NamedResMut, NamedResMutClaim, Res, ResMut, ResourceName, Resources},
-    scheduler::{IntoSystemBuilder, Schedule},
+    resources::{Res, ResMut, Resources, Tag, TagMut},
+    scheduler::{prelude::*, Schedule},
 };
-use std::{convert::TryInto, str::FromStr};
 
 mod utils;
 
@@ -19,7 +18,7 @@ fn sys3(r1: Res<usize>, r2: ResMut<String>, r3: Res<u8>) {
     assert!(*r3 == 3);
 }
 
-fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: NamedRes<u8>, r4: NamedResMut<u16>) {
+fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: Tag<u8>, r4: TagMut<u16>) {
     log::info!("claims: u8: {:?}", r3.claim());
     log::info!("claims: u16: {:?}", r4.claim());
     log::info!("r1={:?}", &*r1);
@@ -45,9 +44,9 @@ fn resource_access() {
     resources.insert(1usize);
     resources.insert(2u32);
     resources.insert(3u8);
-    resources.insert_with_name(ResourceName::from_str("five").unwrap(), 5u8);
-    resources.insert_with_name(ResourceName::from_str("six").unwrap(), 6u8);
-    resources.insert_with_name(ResourceName::from_str("16").unwrap(), 16u16);
+    resources.insert_with_try_tag("five", 5u8).unwrap();
+    resources.insert_with_try_tag("six", 6u8).unwrap();
+    resources.insert_with_try_tag("16", 16u16).unwrap();
     resources.insert(4u16);
     resources.insert("string".to_string());
 
@@ -58,8 +57,8 @@ fn resource_access() {
     sh.schedule(sys3.system());
     sh.schedule(
         sys4.system()
-            .with_claim::<NamedResClaim<u8>, _>(["five", "six"][..].try_into().unwrap())
-            .with_claim::<NamedResMutClaim<u16>, _>(["16"][..].try_into().unwrap()),
+            .with_tag::<u8>(&["five", "six"])
+            .with_tag_mut::<u16>(&["16"]),
     );
 
     log::info!("runing systems...");
