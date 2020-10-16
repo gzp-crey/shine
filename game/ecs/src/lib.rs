@@ -7,8 +7,5 @@
 #![allow(clippy::match_like_matches_macro)]
 
 pub mod core;
-pub mod resources;
-pub mod scheduler;
+pub mod ecs;
 pub mod utils;
-
-pub use hecs;

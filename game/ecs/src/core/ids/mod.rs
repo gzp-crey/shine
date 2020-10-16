@@ -2,8 +2,6 @@ mod small_string_id;
 pub use self::small_string_id::*;
 mod interval_id;
 pub use self::interval_id::*;
-//mod atomic_sequence_id;
-//pub use self::atomic_sequence_id::*;
 
 use thiserror::Error;
 

@@ -2,7 +2,7 @@ use crate::{
     assets::TextureTargetDescriptor,
     render::{Compile, CompiledTextureTarget, RenderError, TextureTargetCompile},
 };
-use shine_ecs::resources::{NamedRes, NamedResMut};
+use shine_ecs::resources::{Tag, TagMut};
 
 struct ResolvedTextureTarget {
     render_target: CompiledTextureTarget,
@@ -59,5 +59,5 @@ impl TextureTarget {
     }
 }
 
-pub type TextureTargetsRes<'a> = NamedRes<'a, TextureTarget>;
-pub type TextureTargetsResMut<'a> = NamedResMut<'a, TextureTarget>;
+pub type TextureTargetsRes<'a> = Tag<'a, TextureTarget>;
+pub type TextureTargetsResMut<'a> = TagMut<'a, TextureTarget>;

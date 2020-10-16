@@ -1,6 +1,6 @@
 use crate::{
     assets::{AssetError, AssetIO},
-    render::{Context, FrameTarget, RenderResources, Surface},
+    render::{Context, FrameTarget, RenderStores, Surface},
     World, WorldError,
 };
 use serde::{Deserialize, Serialize};
@@ -72,7 +72,7 @@ impl World {
         let mut surface = self.plugin_resource_mut::<Surface>("render")?;
         let mut context = self.plugin_resource_mut::<Context>("render")?;
         let mut frame_output = self.plugin_resource_mut::<FrameTarget>("render")?;
-        let mut resources = self.plugin_resource_mut::<RenderResources>("render")?;
+        let mut resources = self.plugin_resource_mut::<RenderStores>("render")?;
 
         surface.set_size(size);
         let (output_texture, descriptor) = context.create_frame(&surface)?;
@@ -109,7 +109,7 @@ impl RenderPlugin for World {
             self.resources.insert(surface);
             self.resources.insert(context);
             self.resources.insert(FrameTarget::default());
-            self.resources.insert(RenderResources::new(&assetio));
+            self.resources.insert(RenderStores::new(&assetio));
 
             Ok(())
         })
@@ -117,7 +117,7 @@ impl RenderPlugin for World {
 
     fn remove_render_plugin(&mut self) -> RenderFuture<'_, Result<(), RenderError>> {
         Box::pin(async move {
-            let _ = self.resources.remove::<RenderResources>();
+            let _ = self.resources.remove::<RenderStores>();
             let _ = self.resources.remove::<FrameTarget>();
             let _ = self.resources.remove::<Context>();
             let _ = self.resources.remove::<Surface>();

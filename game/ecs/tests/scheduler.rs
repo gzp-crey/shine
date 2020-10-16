@@ -1,6 +1,7 @@
-use shine_ecs::{
+use shine_ecs::ecs::{
+    prelude::*,
     resources::{Res, ResMut, Resources, Tag, TagMut},
-    scheduler::{prelude::*, Schedule},
+    scheduler::Schedule,
 };
 
 mod utils;
@@ -53,14 +54,15 @@ fn resource_access() {
     log::info!("registering systems...");
     let mut sh = Schedule::default();
 
-    sh.schedule(sys0.system());
-    sh.schedule(sys3.system());
+    sh.schedule(sys0.system()).unwrap();
+    sh.schedule(sys3.system()).unwrap();
     sh.schedule(
         sys4.system()
             .with_tag::<u8>(&["five", "six"])
             .with_tag_mut::<u16>(&["16"]),
-    );
+    )
+    .unwrap();
 
     log::info!("runing systems...");
-    sh.run(&mut resources);
+    sh.run(&mut resources).unwrap();
 }

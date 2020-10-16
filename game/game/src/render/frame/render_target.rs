@@ -3,8 +3,8 @@ use crate::{
     render::{FrameTarget, FrameTargetResMut, TextureTarget, TextureTargetsResMut},
 };
 use shine_ecs::resources::{
-    FetchResource, NamedResMut, ResourceClaim, ResourceClaimScope, ResourceClaims, ResourceIndex, ResourceName,
-    ResourceQuery, Resources,
+    FetchResource, IntoResourceClaim, ResourceClaim, ResourceClaimScope, ResourceClaims, ResourceQuery, ResourceTag,
+    Resources, TagMut,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,10 +42,20 @@ struct Inner {
 
 #[derive(Default)]
 pub struct RenderTarget {
+    descriptor: RenderTargetDescriptor,
     inner: Option<Inner>,
 }
 
 impl RenderTarget {
+    fn new(tag: ResourceTag, descriptor: RenderTargetDescriptor) -> (RenderTarget, RenderTargetClaim) {
+        let claim = RenderTargetClaim::from_descriptor(tag, descriptor);
+        let target = Self {
+            descriptor,
+            inner: None,
+        };
+        (target, claim)
+    }
+
     fn is_dirty(
         &mut self,
         descriptor: &RenderTargetDescriptor,
@@ -162,9 +172,26 @@ impl RenderTarget {
     }
 }
 
+struct ClaimInner {
+    tag: ResourceTag,
+    depth_texture: Option<ResourceTag>,
+    color_textures: Vec<ResourceTag>,
+}
+
+#[derive(Default, Debug)]
 pub struct RenderTargetClaim {
-    name: Option<ResourceName>,
-    descriptor: Option<RenderTargetDescriptor>,
+    inner: Option<ClaimInner>,
+}
+
+impl RenderTargetClaim {
+    fn from_descriptor(tag: ResourceTag, descriptor: RenderTargetDescriptor) -> Self {
+        let inner = ClaimInner {
+            tag,
+            depth_texture: descriptor.depth.map(|depth| depth.texture.clone()),
+            color_textures: descriptor.colors.iter().map(|color| color.texture.clone()).collect(),
+        };
+        Self { inner: Some(inner) }
+    }
 }
 
 impl IntoResourceClaim for RenderTargetClaim {

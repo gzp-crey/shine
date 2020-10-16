@@ -11,7 +11,7 @@ mod frame;
 pub use self::frame::*;
 mod stores;
 pub use self::stores::*;
-mod render_resources;
-pub use self::render_resources::*;
+mod render_stores;
+pub use self::render_stores::*;
 
 //pub mod systems;

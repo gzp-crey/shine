@@ -1,5 +1,5 @@
 use shine_ecs::{
-    resources::{Resource, ResourceName, ResourceRead, ResourceWrite, Resources},
+    resources::{Resource, ResourceRead, ResourceTag, ResourceWrite, Resources},
     scheduler::Schedule,
 };
 use std::{any, collections::HashMap};
@@ -25,14 +25,14 @@ impl World {
             .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
     }
 
-    /// Helper to get a shared reference to a resource with the given name
-    pub fn plugin_resource_with_name<T: Resource>(
+    /// Helper to get a shared reference to a resource with the given tag
+    pub fn plugin_resource_with_tag<T: Resource>(
         &self,
         plugin: &str,
-        name: &ResourceName,
+        tag: &ResourceTag,
     ) -> Result<ResourceRead<'_, T>, WorldError> {
         self.resources
-            .get_with_name::<T>(name)
+            .get_with_tag::<T>(tag)
             .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
     }
 
@@ -43,14 +43,14 @@ impl World {
             .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
     }
 
-    /// Helper to get an unique reference to a resource with the given name
-    pub fn plugin_resource_mut_with_name<T: Resource>(
+    /// Helper to get an unique reference to a resource with the given tag
+    pub fn plugin_resource_mut_with_tag<T: Resource>(
         &self,
         plugin: &str,
-        name: &ResourceName,
+        tag: &ResourceTag,
     ) -> Result<ResourceWrite<'_, T>, WorldError> {
         self.resources
-            .get_mut_with_name::<T>(name)
+            .get_mut_with_tag::<T>(tag)
             .ok_or_else(|| WorldError::MissingPlugin(plugin.into(), any::type_name::<T>().into()))
     }
 

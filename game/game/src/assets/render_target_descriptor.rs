@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
-use shine_ecs::resources::ResourceName;
+use shine_ecs::resources::ResourceTag;
 
-pub type TextureTargetName = ResourceName;
+pub type TextureTargetTag = ResourceTag;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ColorAttachementDescriptor {
-    /// The name of the TextureTarget resource to use or None to render to the FrameTarget
-    pub target: Option<TextureTargetName>,
+    /// The tag of the TextureTarget resource to use or None to render to the FrameTarget
+    pub target: Option<TextureTargetTag>,
     pub operation: wgpu::Operations<wgpu::Color>,
     pub alpha_blend: wgpu::BlendDescriptor,
     pub color_blend: wgpu::BlendDescriptor,
@@ -31,7 +31,7 @@ pub struct DepthAttachementOperation {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DepthAttachementDescriptor {
-    pub target: TextureTargetName,
+    pub target: TextureTargetTag,
     pub depth_operation: DepthAttachementOperation,
     pub stencil_operation: StencilAttachementOperation,
 }
