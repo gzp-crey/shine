@@ -325,6 +325,10 @@ impl<'store, T: Resource> Clone for ResourceStoreRead<'store, T> {
 }
 
 impl<'store, T: Resource> ResourceStoreRead<'store, T> {
+    pub fn get<'cell>(&self) -> Result<ResourceRead<'store, 'cell, T>, ECSError> {
+        self.get_with_id(&ResourceId::Global)
+    }
+
     pub fn get_with_id<'cell>(&self, id: &ResourceId) -> Result<ResourceRead<'store, 'cell, T>, ECSError> {
         let cell = self
             .inner
@@ -336,10 +340,6 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             _store: self.clone(),
             cell,
         })
-    }
-
-    pub fn get<'cell>(&self) -> Result<ResourceRead<'store, 'cell, T>, ECSError> {
-        self.get_with_id(&ResourceId::Global)
     }
 
     pub fn get_with_ids<'cell, 'i, I: IntoIterator<Item = &'i ResourceId>>(
@@ -362,6 +362,10 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         })
     }
 
+    pub fn get_mut<'cell>(&self) -> Result<ResourceWrite<'store, 'cell, T>, ECSError> {
+        self.get_mut_with_id(&ResourceId::Global)
+    }
+
     pub fn get_mut_with_id<'cell>(&self, id: &ResourceId) -> Result<ResourceWrite<'store, 'cell, T>, ECSError> {
         let cell = self
             .inner
@@ -373,10 +377,6 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             _store: self.clone(),
             cell,
         })
-    }
-
-    pub fn get_mut<'cell>(&self) -> Result<ResourceWrite<'store, 'cell, T>, ECSError> {
-        self.get_mut_with_id(&ResourceId::Global)
     }
 
     pub fn get_mut_with_ids<'cell, 'i, I: IntoIterator<Item = &'i ResourceId>>(
@@ -649,6 +649,12 @@ impl Resources {
         unsafe { self.internal.write_store::<T>() }
     }
 
+    pub fn get<'cell, 'store: 'cell, 'r: 'store, T: Resource>(
+        &'r self,
+    ) -> Result<ResourceRead<'store, 'cell, T>, ECSError> {
+        self.get_with_id::<T>(&ResourceId::Global)
+    }
+
     pub fn get_with_id<'cell, 'store: 'cell, 'r: 'store, T: Resource>(
         &'r self,
         id: &ResourceId,
@@ -661,10 +667,22 @@ impl Resources {
             .get_with_id(id)
     }
 
-    pub fn get<'cell, 'store: 'cell, 'r: 'store, T: Resource>(
+    pub fn get_with_ids<'cell, 'store: 'cell, 'r: 'store, 'i, T: Resource, I: IntoIterator<Item = &'i ResourceId>>(
         &'r self,
-    ) -> Result<ResourceRead<'store, 'cell, T>, ECSError> {
-        self.get_with_id::<T>(&ResourceId::Global)
+        ids: I,
+    ) -> Result<ResourceMultiRead<'store, 'cell, T>, ECSError> {
+        // safety:
+        // this type is !Send and !Sync, and so can only be accessed from the thread which
+        // owns the resources collection
+        unsafe { self.internal.read_store::<T>() }
+            .ok_or_else(|| ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))?
+            .get_with_ids(ids)
+    }
+
+    pub fn get_mut<'cell, 'store: 'cell, 'r: 'store, T: Resource>(
+        &'r self,
+    ) -> Result<ResourceWrite<'store, 'cell, T>, ECSError> {
+        self.get_mut_with_id::<T>(&ResourceId::Global)
     }
 
     pub fn get_mut_with_id<'cell, 'store: 'cell, 'r: 'store, T: Resource>(
@@ -679,9 +697,15 @@ impl Resources {
             .get_mut_with_id(id)
     }
 
-    pub fn get_mut<'cell, 'store: 'cell, 'r: 'store, T: Resource>(
+    pub fn get_mut_with_ids<'cell, 'store: 'cell, 'r: 'store, 'i, T: Resource, I: IntoIterator<Item = &'i ResourceId>>(
         &'r self,
-    ) -> Result<ResourceWrite<'store, 'cell, T>, ECSError> {
-        self.get_mut_with_id::<T>(&ResourceId::Global)
+        ids: I,
+    ) -> Result<ResourceMultiWrite<'store, 'cell, T>, ECSError> {
+        // safety:
+        // this type is !Send and !Sync, and so can only be accessed from the thread which
+        // owns the resources collection
+        unsafe { self.internal.read_store::<T>() }
+            .ok_or_else(|| ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))?
+            .get_mut_with_ids(ids)
     }
 }

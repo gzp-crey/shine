@@ -104,7 +104,6 @@ fn multi_test_core(case: MultiTestCase) {
 
     let ida = ResourceId::Tag(ResourceTag::from_str("a").unwrap());
     let idb = ResourceId::Tag(ResourceTag::from_str("b").unwrap());
-    let gid = ResourceId::Global;
 
     let mut resources = Resources::default();
     resources.insert(TestOne("one".to_string()));
@@ -125,7 +124,9 @@ fn multi_test_core(case: MultiTestCase) {
 
     {
         log::info!("get after get");
-        let _ids = test_one_store.get_with_ids(&[ida.clone(), idb.clone()]).unwrap();
+        let test_one_res = resources.get_with_ids::<TestOne, _>(&[ida.clone(), idb.clone()]).unwrap();
+        assert_eq!(test_one_res[0].0, "one_a");
+        assert_eq!(test_one_res[1].0, "one_b");
         assert_eq!(resources.get::<TestOne>().unwrap().0, "one");
         assert_eq!(resources.get_with_id::<TestOne>(&ida).unwrap().0, "one_a");
         assert_eq!(resources.get_with_id::<TestOne>(&idb).unwrap().0, "one_b");
@@ -139,7 +140,9 @@ fn multi_test_core(case: MultiTestCase) {
     {
         log::info!("get after get_mut");
 
-        let _ids = test_one_store.get_mut_with_ids(&[ida.clone(), idb.clone()]).unwrap();
+        let test_one_res = test_one_store.get_mut_with_ids(&[ida.clone(), idb.clone()]).unwrap();
+        assert_eq!(test_one_res[0].0, "one_a");
+        assert_eq!(test_one_res[1].0, "one_b");
         {
             assert_eq!(resources.get::<TestOne>().unwrap().0, "one");
         }
