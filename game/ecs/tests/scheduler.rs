@@ -1,3 +1,5 @@
+#![cfg(off)]
+
 use shine_ecs::ecs::{
     prelude::*,
     resources::{Res, ResMut, Resources, Tag, TagMut},

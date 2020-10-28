@@ -1,4 +1,4 @@
-use shine_ecs::resources::{Res, ResMut};
+use shine_ecs::ecs::resources::{Res, ResMut};
 
 struct Inner {
     frame: wgpu::SwapChainTexture,

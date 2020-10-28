@@ -2,7 +2,7 @@ use crate::{
     assets::{PipelineStateDescriptor, RenderTargetDescriptor},
     render::{FrameTarget, FrameTargetResMut, TextureTarget, TextureTargetsResMut},
 };
-use shine_ecs::resources::{
+use shine_ecs::ecs::resources::{
     FetchResource, IntoResourceClaim, ResourceClaim, ResourceClaimScope, ResourceClaims, ResourceQuery, ResourceTag,
     Resources, TagMut,
 };

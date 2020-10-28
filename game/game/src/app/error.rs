@@ -1,4 +1,5 @@
 use crate::{assets::AssetError, input::InputError, render::RenderError, WorldError};
+use shine_ecs::ecs::ECSError;
 use config::ConfigError;
 use thiserror::Error;
 
@@ -6,6 +7,9 @@ use thiserror::Error;
 pub enum AppError {
     #[error("Configuration error")]
     Config(#[from] ConfigError),
+
+    #[error("Entity system error")]
+    ECSError(#[from] ECSError),
 
     #[error(transparent)]
     World(#[from] WorldError),

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shine_ecs::resources::ResourceTag;
+use shine_ecs::ecs::resources::ResourceTag;
 
 pub type TextureTargetTag = ResourceTag;
 
