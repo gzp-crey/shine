@@ -226,7 +226,7 @@
                 "test",
                 "--features",
                 "native",
-                "--test", "resources",
+                "--test", "resource_manage",
                 "--",
                 "--nocapture",
                 "--test-threads=1"

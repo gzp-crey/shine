@@ -78,13 +78,13 @@ fn simple_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource store for resources::simple_test_core::TestTwo already borrowed as immutable")]
+#[should_panic(expected = "Resource store for resource_rw::simple_test_core::TestTwo already borrowed as immutable")]
 fn simple_test_fail_1() {
     simple_test_core(SimpleTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resources::simple_test_core::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_rw::simple_test_core::TestOne already borrowed as immutable")]
 fn simple_test_fail_2() {
     simple_test_core(SimpleTestCase::Panic2);
 }
@@ -124,7 +124,9 @@ fn multi_test_core(case: MultiTestCase) {
 
     {
         log::info!("get after get");
-        let test_one_res = resources.get_with_ids::<TestOne, _>(&[ida.clone(), idb.clone()]).unwrap();
+        let test_one_res = resources
+            .get_with_ids::<TestOne, _>(&[ida.clone(), idb.clone()])
+            .unwrap();
         assert_eq!(test_one_res[0].0, "one_a");
         assert_eq!(test_one_res[1].0, "one_b");
         assert_eq!(resources.get::<TestOne>().unwrap().0, "one");
@@ -159,13 +161,13 @@ fn multi_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource of resources::multi_test_core::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_rw::multi_test_core::TestOne already borrowed as immutable")]
 fn multi_test_core_fail_1() {
     multi_test_core(MultiTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resources::multi_test_core::TestOne already borrowed as mutable")]
+#[should_panic(expected = "Resource of resource_rw::multi_test_core::TestOne already borrowed as mutable")]
 fn multi_test_core_fail_2() {
     multi_test_core(MultiTestCase::Panic2);
 }

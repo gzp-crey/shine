@@ -7,9 +7,12 @@ pub enum ECSError {
     #[error("Resource store for {0} not found")]
     ResourceTypeNotFound(Cow<'static, str>),
 
+    #[error("Resource of {0} not found by handle")]
+    ResourceHandleNotFound(Cow<'static, str>),
+
     #[error("Resource {0} {1:?} not found")]
     ResourceNotFound(Cow<'static, str>, ResourceId),
-    
+
     #[error("Invalid resource claim")]
     ResourceClaimError,
 }

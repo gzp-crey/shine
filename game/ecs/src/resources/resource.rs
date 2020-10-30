@@ -3,16 +3,22 @@
 //! Use resources to share persistent data between systems or to provide a system with state
 //! external to entities.
 
-use crate::{core::arena::Arena, core::ids::SmallStringId, ECSError};
+use crate::{
+    core::arena::Arena,
+    core::ids::SmallStringId,
+    resources::{ResourceMultiRead, ResourceMultiWrite, ResourceRead, ResourceWrite},
+    ECSError,
+};
 use downcast_rs::{impl_downcast, Downcast};
 use std::{
     any::{self, TypeId},
     cell::UnsafeCell,
     collections::HashMap,
-    fmt,
     marker::PhantomData,
-    ops::{Deref, DerefMut, Index, IndexMut},
-    sync::atomic::{self, AtomicIsize, AtomicUsize},
+    sync::{
+        atomic::{self, AtomicIsize, AtomicUsize},
+        Arc, Mutex,
+    },
 };
 
 const DEFAULT_PAGE_SIZE: usize = 16;
@@ -32,195 +38,19 @@ pub enum ResourceId {
 
 /// Blanket trait for resource types.
 pub trait Resource: 'static {}
-
 impl<T> Resource for T where T: 'static {}
 
-/// Shared reference to a resource
-pub struct ResourceRead<'store, 'cell, T>
-where
-    'store: 'cell,
-    T: Resource,
-{
-    /// Keep a readlock on the store, to avoid any "structural" change in the map
-    _store: ResourceStoreRead<'store, T>,
-    cell: &'cell ResourceCell<T>,
-}
-
-impl<'cell, 'store: 'cell, T: Resource> Deref for ResourceRead<'store, 'cell, T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.cell.ptr }
-    }
-}
-
-impl<'cell, 'store: 'cell, T: 'cell + Resource + fmt::Debug> fmt::Debug for ResourceRead<'store, 'cell, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.deref())
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource> Drop for ResourceRead<'store, 'cell, T> {
-    fn drop(&mut self) {
-        self.cell.read_unlock();
-    }
-}
-
-/// Unique reference to a resource
-pub struct ResourceWrite<'store, 'cell, T>
-where
-    'store: 'cell,
-    T: Resource,
-{
-    /// Keep a readlock on the store, to avoid any "structural" change in the map
-    _store: ResourceStoreRead<'store, T>,
-    cell: &'cell ResourceCell<T>,
-}
-
-impl<'cell, 'store: 'cell, T: 'cell + Resource> Deref for ResourceWrite<'store, 'cell, T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.cell.ptr }
-    }
-}
-
-impl<'cell, 'store: 'cell, T: 'cell + Resource> DerefMut for ResourceWrite<'store, 'cell, T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.cell.ptr }
-    }
-}
-
-impl<'cell, 'store: 'cell, T: 'cell + Resource + fmt::Debug> fmt::Debug for ResourceWrite<'store, 'cell, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.deref())
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource> Drop for ResourceWrite<'store, 'cell, T> {
-    fn drop(&mut self) {
-        self.cell.write_unlock();
-    }
-}
-
-/// Shared reference to multiple resources of the same type
-pub struct ResourceMultiRead<'store, 'cell, T>
-where
-    'store: 'cell,
-    T: Resource,
-{
-    /// Keep a readlock on the store, to avoid any "structural" change in the map
-    _store: ResourceStoreRead<'store, T>,
-    cells: Vec<&'cell ResourceCell<T>>,
-}
-
-impl<'cell, 'store: 'cell, T: Resource> ResourceMultiRead<'store, 'cell, T> {
-    pub fn len(&self) -> usize {
-        self.cells.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.cells.is_empty()
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource> Index<usize> for ResourceMultiRead<'store, 'cell, T> {
-    type Output = T;
-
-    #[inline]
-    fn index(&self, idx: usize) -> &Self::Output {
-        unsafe { &*self.cells[idx].ptr }
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource + fmt::Debug> fmt::Debug for ResourceMultiRead<'store, 'cell, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries((0..self.len()).map(|i| &self[i])).finish()
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource> Drop for ResourceMultiRead<'store, 'cell, T> {
-    fn drop(&mut self) {
-        self.cells.iter().for_each(|cell| cell.read_unlock());
-    }
-}
-
-/// Unique reference to multiple resources of the same type (with different id)
-pub struct ResourceMultiWrite<'store, 'cell, T>
-where
-    'store: 'cell,
-    T: Resource,
-{
-    /// Keep a readlock on the store, to avoid any "structural" change in the map
-    _store: ResourceStoreRead<'store, T>,
-    cells: Vec<&'cell ResourceCell<T>>,
-}
-
-impl<'cell, 'store: 'cell, T: Resource> ResourceMultiWrite<'store, 'cell, T> {
-    pub fn len(&self) -> usize {
-        self.cells.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.cells.is_empty()
-    }
-}
-/*
-struct ResourceMultiWriteIterator<'r, 'store, 'cell, T>
-where
-    'store: 'cell,
-    T: Resource
-{
-    res: &'r ResourceMultiWrite<'store, 'cell, T>,
-    id: usize
-}
-
-impl<'r, 'cell, 'store: 'cell, T: Resource> IntoIterator for &'r ResourceMultiWrite<'store, 'cell, T> {
-    type Item = &'r T;
-
-
-}
-*/
-impl<'cell, 'store: 'cell, T: Resource> Index<usize> for ResourceMultiWrite<'store, 'cell, T> {
-    type Output = T;
-
-    #[inline]
-    fn index(&self, idx: usize) -> &Self::Output {
-        unsafe { &*self.cells[idx].ptr }
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource> IndexMut<usize> for ResourceMultiWrite<'store, 'cell, T> {
-    #[inline]
-    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        unsafe { &mut *self.cells[idx].ptr }
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource + fmt::Debug> fmt::Debug for ResourceMultiWrite<'store, 'cell, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries((0..self.len()).map(|i| &self[i])).finish()
-    }
-}
-
-impl<'cell, 'store: 'cell, T: Resource> Drop for ResourceMultiWrite<'store, 'cell, T> {
-    fn drop(&mut self) {
-        self.cells.iter().for_each(|cell| cell.write_unlock());
-    }
-}
-
 /// Storage of single resource instance
-struct ResourceCell<T: Resource> {
+pub(crate) struct ResourceCell<T: Resource> {
     arena_alloc: usize,
-    ptr: *mut T,
-    borrow_state: AtomicIsize,
+    pub(crate) ptr: *mut T,
+    pub(crate) borrow_state: AtomicIsize,
+    /// Counts the handlebased references
+    pub(crate) ref_counter: Option<Arc<AtomicUsize>>,
 }
 
 impl<T: Resource> ResourceCell<T> {
-    fn read_lock(&self) {
+    pub fn read_lock(&self) {
         loop {
             let read = self.borrow_state.load(atomic::Ordering::SeqCst);
             if read < 0 {
@@ -237,11 +67,11 @@ impl<T: Resource> ResourceCell<T> {
         }
     }
 
-    fn read_unlock(&self) {
+    pub fn read_unlock(&self) {
         self.borrow_state.fetch_sub(1, atomic::Ordering::Relaxed);
     }
 
-    fn write_lock(&self) {
+    pub fn write_lock(&self) {
         let borrowed = self.borrow_state.compare_and_swap(0, -1, atomic::Ordering::SeqCst);
         match borrowed {
             0 => {}
@@ -250,7 +80,7 @@ impl<T: Resource> ResourceCell<T> {
         }
     }
 
-    fn write_unlock(&self) {
+    pub fn write_unlock(&self) {
         self.borrow_state.fetch_add(1, atomic::Ordering::Relaxed);
     }
 }
@@ -260,15 +90,21 @@ pub struct ResourceStore<T: Resource> {
     generation: usize,
     arena: Arena<T>,
     map: HashMap<ResourceId, ResourceCell<T>>,
+    manage: Option<ResourceManage<T>>,
 }
 
 impl<T: Resource> ResourceStore<T> {
-    fn new() -> Self {
+    fn new(manage: Option<ResourceManage<T>>) -> Self {
         Self {
             generation: STORE_UNIQUE_ID.fetch_add(1, atomic::Ordering::Relaxed), //todo: atomic inc
             arena: Arena::new(DEFAULT_PAGE_SIZE),
             map: Default::default(),
+            manage,
         }
+    }
+
+    pub fn generation(&self) -> usize {
+        self.generation
     }
 
     pub fn contains(&self, id: &ResourceId) -> bool {
@@ -277,25 +113,42 @@ impl<T: Resource> ResourceStore<T> {
 
     /// # Safety
     /// Resources which are `!Send` must be retrieved or inserted only on the main thread.
-    unsafe fn insert(&mut self, id: ResourceId, resource: T) {
+    pub(crate) unsafe fn insert(&mut self, id: ResourceId, resource: T) {
         let (arena_alloc, resource) = self.arena.allocate(resource);
+        let ref_counter = self.manage.as_ref().map(|_| Arc::new(AtomicUsize::new(0)));
         self.map.insert(
             id,
             ResourceCell {
                 arena_alloc,
                 ptr: resource as *mut _,
                 borrow_state: AtomicIsize::new(0),
+                ref_counter,
             },
         );
     }
 
     /// # Safety
     /// Resources which are `!Send` must be retrieved or inserted only on the main thread.
-    unsafe fn remove(&mut self, id: &ResourceId) -> Option<T> {
+    pub(crate) unsafe fn remove(&mut self, id: &ResourceId) -> Option<T> {
         let cell = self.map.remove(id);
         cell.map(|cell| {
             assert!(cell.borrow_state.load(atomic::Ordering::Relaxed) == 0);
             self.arena.deallocate(cell.arena_alloc)
+        })
+    }
+
+    /// # Safety
+    /// - Types which are !Sync should only be retrieved on the thread which owns the resource
+    ///   collection.
+    /// - The cell is allocated in the arena and "pined" in memory
+    ///   the created cell is either dropped when there are no more references (in gc)
+    ///   or moved into the map (in bake)
+    pub(crate) unsafe fn get_cell(&self, id: &ResourceId) -> Option<&ResourceCell<T>> {
+        self.map.get(id).or_else(|| {
+            // try to create resource if a builder is provided
+            self.manage
+                .as_ref()
+                .map(|manage| std::mem::transmute(manage.get_or_create(id)))
         })
     }
 }
@@ -304,6 +157,29 @@ impl<T: Resource> ResourceStore<T> {
 trait StoreCast: Downcast {}
 impl<T: Resource> StoreCast for ResourceStore<T> {}
 impl_downcast!(StoreCast);
+
+struct ResourceManage<T: Resource> {
+    /// Resources created while store was read locked.
+    pending: Mutex<HashMap<ResourceId, ResourceCell<T>>>,
+    build: Box<dyn Fn(&ResourceId) -> T>,
+    _ph: PhantomData<T>,
+}
+
+impl<T: Resource> ResourceManage<T> {
+    fn new<F: 'static + Fn(&ResourceId) -> T>(build: F) -> Self {
+        Self {
+            pending: Mutex::new(Default::default()),
+            build: Box::new(build),
+            _ph: PhantomData,
+        }
+    }
+
+    fn get_or_create(&self, id: &ResourceId) -> &ResourceCell<T> {
+        let pending = self.pending.lock().unwrap();
+        //pendig.got_or_insert(id)
+        unimplemented!()
+    }
+}
 
 /// Shared access to the container of the resources of a single type.
 /// This accessor ensures, no new resources are created and thus
@@ -325,87 +201,21 @@ impl<'store, T: Resource> Clone for ResourceStoreRead<'store, T> {
 }
 
 impl<'store, T: Resource> ResourceStoreRead<'store, T> {
-    pub fn get<'cell>(&self) -> Result<ResourceRead<'store, 'cell, T>, ECSError> {
-        self.get_with_id(&ResourceId::Global)
+    /// Return the unique id of the store
+    pub fn generation(&self) -> usize {
+        self.inner.generation()
     }
 
-    pub fn get_with_id<'cell>(&self, id: &ResourceId) -> Result<ResourceRead<'store, 'cell, T>, ECSError> {
-        let cell = self
-            .inner
-            .map
-            .get(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
-        cell.read_lock();
-        Ok(ResourceRead {
-            _store: self.clone(),
-            cell,
-        })
-    }
-
-    pub fn get_with_ids<'cell, 'i, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiRead<'store, 'cell, T>, ECSError> {
-        let cells = ids
-            .into_iter()
-            .map(|id| {
-                self.inner
-                    .map
-                    .get(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        cells.iter().for_each(|cell| cell.read_lock());
-        Ok(ResourceMultiRead {
-            _store: self.clone(),
-            cells,
-        })
-    }
-
-    pub fn get_mut<'cell>(&self) -> Result<ResourceWrite<'store, 'cell, T>, ECSError> {
-        self.get_mut_with_id(&ResourceId::Global)
-    }
-
-    pub fn get_mut_with_id<'cell>(&self, id: &ResourceId) -> Result<ResourceWrite<'store, 'cell, T>, ECSError> {
-        let cell = self
-            .inner
-            .map
-            .get(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
-        cell.write_lock();
-        Ok(ResourceWrite {
-            _store: self.clone(),
-            cell,
-        })
-    }
-
-    pub fn get_mut_with_ids<'cell, 'i, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiWrite<'store, 'cell, T>, ECSError> {
-        let cells = ids
-            .into_iter()
-            .map(|id| {
-                self.inner
-                    .map
-                    .get(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        cells.iter().for_each(|cell| cell.write_lock());
-        Ok(ResourceMultiWrite {
-            _store: self.clone(),
-            cells,
-        })
-    }
-}
-
-impl<'store, T: Resource> Deref for ResourceStoreRead<'store, T> {
-    type Target = ResourceStore<T>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.inner
+    /// Get a reference to a cell. The returned reference can outlive
+    /// &self as it is bound to the lifetime of the store ('store). As a comparision
+    /// check [ResourceStoreWrite::get_cell]
+    pub(crate) fn get_cell<'cell>(&self, id: &ResourceId) -> Option<&'cell ResourceCell<T>>
+    where
+        'store: 'cell,
+    {
+        // saftey:
+        //  ResourceStoreRead ensure the Send and Sync properties
+        unsafe { self.inner.get_cell(id) }
     }
 }
 
@@ -421,19 +231,17 @@ pub struct ResourceStoreWrite<'store, T: Resource> {
     inner: &'store mut ResourceStore<T>,
 }
 
-impl<'store, T: 'store + Resource> Deref for ResourceStoreWrite<'store, T> {
-    type Target = ResourceStore<T>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &*self.inner
+impl<'store, T: Resource> ResourceStoreWrite<'store, T> {
+    /// Return the unique id of the store
+    pub fn generation(&self) -> usize {
+        self.inner.generation()
     }
-}
 
-impl<'store, T: 'store + Resource> DerefMut for ResourceStoreWrite<'store, T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut ResourceStore<T> {
-        &mut *self.inner
+    /// Get a reference to a cell. The returned reference can outlive &self
+    /// as other calls may mutate the store and hence cell could point to
+    /// invalid memory location. As a comparision check [ResourceStoreRead::get_cell]
+    pub(crate) fn get_cell(&self, id: &ResourceId) -> Option<&ResourceCell<T>> {
+        unsafe { self.inner.get_cell(id) }
     }
 }
 
@@ -450,9 +258,9 @@ struct ResourceStoreCell {
 }
 
 impl ResourceStoreCell {
-    fn new<T: Resource>() -> Self {
+    fn new<T: Resource>(manage: Option<ResourceManage<T>>) -> Self {
         Self {
-            resources: UnsafeCell::new(Box::new(ResourceStore::<T>::new())),
+            resources: UnsafeCell::new(Box::new(ResourceStore::<T>::new(manage))),
             borrow_state: AtomicIsize::new(0),
         }
     }
@@ -564,11 +372,21 @@ unsafe impl Sync for UnsafeResources {}
 impl UnsafeResources {
     /// # Safety
     /// Resources which are `!Send` must be retrieved or inserted only on the main thread.
+    unsafe fn create_managed<T: Resource>(&mut self, manage: ResourceManage<T>) {
+        let ty = TypeId::of::<T>();
+        // Managed store have to be registered using the insert_managed
+        // function before instances of the resource can be added
+        assert!(self.map.get(&ty).is_none());
+        self.map.insert(ty, ResourceStoreCell::new::<T>(Some(manage)));
+    }
+
+    /// # Safety
+    /// Resources which are `!Send` must be retrieved or inserted only on the main thread.
     unsafe fn insert<T: Resource>(&mut self, id: ResourceId, resource: T) {
         let ty = TypeId::of::<T>();
         self.map
             .entry(ty)
-            .or_insert_with(ResourceStoreCell::new::<T>)
+            .or_insert_with(|| ResourceStoreCell::new::<T>(None))
             .insert::<T>(id, resource);
     }
 
@@ -620,6 +438,16 @@ impl Resources {
     /// Inserts the instance of `T` into the store.
     pub fn insert<T: Resource>(&mut self, value: T) {
         self.insert_with_id(ResourceId::Global, value);
+    }
+
+    /// Insert a managed resource, that allow
+    /// - ref counter based garbage collection
+    /// - creation from id
+    /// - TBD: configurable async (background) loading
+    pub fn insert_managed<T: Resource, F: 'static + Fn(&ResourceId) -> T>(&mut self, build: F) {
+        unsafe {
+            self.internal.create_managed::<T>(ResourceManage::new(build));
+        }
     }
 
     /// Removes the instance of `T` with the given id from this store if it exists.    
@@ -697,7 +525,14 @@ impl Resources {
             .get_mut_with_id(id)
     }
 
-    pub fn get_mut_with_ids<'cell, 'store: 'cell, 'r: 'store, 'i, T: Resource, I: IntoIterator<Item = &'i ResourceId>>(
+    pub fn get_mut_with_ids<
+        'cell,
+        'store: 'cell,
+        'r: 'store,
+        'i,
+        T: Resource,
+        I: IntoIterator<Item = &'i ResourceId>,
+    >(
         &'r self,
         ids: I,
     ) -> Result<ResourceMultiWrite<'store, 'cell, T>, ECSError> {
