@@ -6,5 +6,5 @@ pub mod observer;
 pub mod spscstate;
 pub mod store;
 
-mod display_error;
-pub use self::display_error::*;
+mod error_string;
+pub use self::error_string::*;

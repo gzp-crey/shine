@@ -226,9 +226,10 @@
                 "test",
                 "--features",
                 "native",
-                "--test", "resource_manage",
+                "--test", "resource_handle",
+                "--test", "resource_access",
                 "--",
-                "--nocapture",
+                //"--nocapture",
                 "--test-threads=1"
             ],
             "options": {

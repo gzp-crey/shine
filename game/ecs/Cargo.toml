@@ -15,9 +15,11 @@ futures = "0.3"
 thiserror = "1.0"
 
 serde = "1.0"
+bincode = "1.3"
 downcast-rs = "1.2"
 hecs = "0.2"
 fxhash = "0.2"
+
 
 
 # native

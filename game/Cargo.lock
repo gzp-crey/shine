@@ -2611,6 +2611,7 @@ dependencies = [
 name = "shine-ecs"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "downcast-rs",
  "env_logger",
  "futures",

@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 mod utils;
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone)]
 enum SimpleTestCase {
     Happy,
     Panic1,
@@ -43,9 +43,10 @@ fn simple_test_core(case: SimpleTestCase) {
         let test_two_store = resources.get_store::<TestTwo>().unwrap();
         let not_sync_store = resources.get_store::<NotSync>().unwrap();
 
-        if case == SimpleTestCase::Panic1 {
+        if let SimpleTestCase::Panic1 = case {
             // should panic
             let _ = resources.get_store_mut::<TestTwo>().unwrap();
+            unreachable!()
         }
 
         assert!(test_one_store.contains(&gid));
@@ -53,7 +54,7 @@ fn simple_test_core(case: SimpleTestCase) {
         assert_eq!(resources.get::<TestOne>().unwrap().0, "one");
         assert_eq!(resources.get_mut::<TestOne>().unwrap().0, "one");
 
-        if case == SimpleTestCase::Panic2 {
+        if let SimpleTestCase::Panic2 = case {
             let _r = resources.get::<TestOne>().unwrap();
             let _ = resources.get_mut::<TestOne>(); // should panic
         }
@@ -78,18 +79,20 @@ fn simple_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource store for resource_rw::simple_test_core::TestTwo already borrowed as immutable")]
+#[should_panic(
+    expected = "Resource store for resource_access::simple_test_core::TestTwo already borrowed as immutable"
+)]
 fn simple_test_fail_1() {
     simple_test_core(SimpleTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_rw::simple_test_core::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_access::simple_test_core::TestOne already borrowed as immutable")]
 fn simple_test_fail_2() {
     simple_test_core(SimpleTestCase::Panic2);
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone)]
 enum MultiTestCase {
     Happy,
     Panic1,
@@ -102,8 +105,8 @@ fn multi_test_core(case: MultiTestCase) {
     struct TestOne(String);
     struct TestTwo(String);
 
-    let ida = ResourceId::Tag(ResourceTag::from_str("a").unwrap());
-    let idb = ResourceId::Tag(ResourceTag::from_str("b").unwrap());
+    let ida = ResourceId::from_tag("a").unwrap();
+    let idb = ResourceId::from_tag("b").unwrap();
 
     let mut resources = Resources::default();
     resources.insert(TestOne("one".to_string()));
@@ -134,7 +137,7 @@ fn multi_test_core(case: MultiTestCase) {
         assert_eq!(resources.get_with_id::<TestOne>(&idb).unwrap().0, "one_b");
 
         assert_eq!(resources.get_mut::<TestOne>().unwrap().0, "one");
-        if case == MultiTestCase::Panic1 {
+        if let MultiTestCase::Panic1 = case {
             let _ = resources.get_mut_with_id::<TestOne>(&ida);
         }
     }
@@ -149,8 +152,9 @@ fn multi_test_core(case: MultiTestCase) {
             assert_eq!(resources.get::<TestOne>().unwrap().0, "one");
         }
 
-        if case == MultiTestCase::Panic2 {
+        if let MultiTestCase::Panic2 = case {
             let _ = resources.get_with_id::<TestOne>(&ida);
+            unreachable!()
         }
     }
 }
@@ -161,13 +165,13 @@ fn multi_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_rw::multi_test_core::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_access::multi_test_core::TestOne already borrowed as immutable")]
 fn multi_test_core_fail_1() {
     multi_test_core(MultiTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_rw::multi_test_core::TestOne already borrowed as mutable")]
+#[should_panic(expected = "Resource of resource_access::multi_test_core::TestOne already borrowed as mutable")]
 fn multi_test_core_fail_2() {
     multi_test_core(MultiTestCase::Panic2);
 }
