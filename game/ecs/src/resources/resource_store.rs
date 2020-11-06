@@ -1,8 +1,3 @@
-//! Contains types related to defining shared resources which can be accessed inside systems.
-//!
-//! Use resources to share persistent data between systems or to provide a system with state
-//! external to entities.
-
 use crate::{
     resources::{
         Resource, ResourceCell, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite, ResourceRead,
@@ -20,30 +15,36 @@ use std::{
     },
 };
 
-/// Atomic cunter to generate unique id for each store, thus ResourceHandle can be bound
+/// Atomic cuonter to generate unique id for each store, thus ResourceHandle can be bound
 /// to a store
 static STORE_UNIQUE_ID: AtomicUsize = AtomicUsize::new(0);
 
 /// Store resources of the same type (with different id)
 pub(crate) struct ResourceStore<T: Resource> {
     generation: usize,
-    map: HashMap<ResourceId, Arc<ResourceCell<T>>>,
+    resource_map: HashMap<ResourceId, Arc<ResourceCell<T>>>,
     pending: Mutex<HashMap<ResourceId, Arc<ResourceCell<T>>>>,
 
     /// Optional functor to create missing resources from id
     build: Option<Box<dyn Fn(&ResourceId) -> T>>,
+    /// Optional functor to call during bake
+    post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
     /// Remove unreferenced resources during maintain
     auto_gc: bool,
 }
 
 impl<T: Resource> ResourceStore<T> {
-    fn new(build: Option<Box<dyn Fn(&ResourceId) -> T>>) -> Self {
+    fn new(
+        build: Option<Box<dyn Fn(&ResourceId) -> T>>,
+        post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
+    ) -> Self {
         let auto_gc = build.is_some();
         Self {
             generation: STORE_UNIQUE_ID.fetch_add(1, atomic::Ordering::Relaxed),
-            map: Default::default(),
+            resource_map: Default::default(),
             pending: Mutex::new(Default::default()),
             build,
+            post_process,
             auto_gc,
         }
     }
@@ -58,26 +59,29 @@ impl<T: Resource> ResourceStore<T> {
     /// As this operation does not touch the resources itself, it is safe to call for any resources on any thread
     /// dispite of the Send, Sync properties.
     pub fn contains(&self, id: &ResourceId) -> bool {
-        self.map.contains_key(id) // stored in the usual map
+        self.resource_map.contains_key(id) // stored in the usual map
          || self.build.is_some() // has a builder, thus it will be constructed even is it does not exists at the moment
     }
 
-    /// Insert a new resource. If a resource with the given id already exists,
-    /// all the handles are invalidated.
+    /// Insert a new resource. If a resource with the given id already exists, all the handles
+    /// are invalidated. The other type of references and accessors are not effected as they
+    /// should not exist by the design of the API.
     /// # Safety
     /// Resources which are `!Send` must be retrieved or inserted only on the thread owning the resources.
     pub unsafe fn insert(&mut self, id: ResourceId, resource: T) -> Option<T> {
         let out = self.remove(&id);
-        self.map.insert(id, ResourceCell::new(resource));
+        self.resource_map.insert(id, ResourceCell::new(resource));
         out
     }
 
-    /// Remove a resource and invalidate all the handles.
+    /// Remove a resource and invalidate all the handles. The other type of references and accessors
+    /// are not effected as they should not exist by the design of the API.
+    /// of the API.
     /// # Safety
     /// Resources which are `!Send` must be retrieved or inserted only on the thread owning the resources.
     pub unsafe fn remove(&mut self, id: &ResourceId) -> Option<T> {
         let cell = self.pending.lock().unwrap().remove(&id);
-        let cell = cell.or_else(|| self.map.remove(&id));
+        let cell = cell.or_else(|| self.resource_map.remove(&id));
 
         if let Some(cell) = cell {
             // No accessor may exits as that would require a &self which contradicts to
@@ -97,7 +101,7 @@ impl<T: Resource> ResourceStore<T> {
     /// but as it is allowed to create new resources, this function should be called only from
     /// thread owning resource.
     pub unsafe fn get_cell(&self, id: &ResourceId) -> Option<Arc<ResourceCell<T>>> {
-        self.map.get(id).cloned().or_else(|| {
+        self.resource_map.get(id).cloned().or_else(|| {
             self.build.as_ref().map(|build| {
                 let mut pending = self.pending.lock().unwrap();
                 let cell = pending
@@ -108,37 +112,44 @@ impl<T: Resource> ResourceStore<T> {
         })
     }
 
-    /// # Safety
-    /// Types which are !Sync should only be retrieved on the thread which owns the resource collection.
-    pub unsafe fn batch_process<'i, I, F>(&mut self, handles: I, process: F)
-    where
-        I: IntoIterator<Item = &'i ResourceHandle<T>>,
-        F: Fn(&mut T),
-    {
-        for handle in handles {
-            if let Some(cell) = handle.upgrade() {
-                if handle.generation() == self.generation {
-                    debug_assert!(Arc::ptr_eq(self.map.get(&handle.id()).unwrap(), &cell));
-                    cell.write_lock();
-                    (process)(cell.write());
-                    cell.write_unlock();
-                }
-            }
-        }
-    }
-
     /// Move resources from pending into the permanent map.
     /// # Safety
-    /// As this operation moves only the
-    /// Arc object, but cell remains pinned in memory, it is safe to call for any resources on any thread
-    /// dispite of the Send, Sync properties.
-    pub fn bake(&mut self) {
+    /// Types which are !Sync should only be retrieved or inserted on the thread which owns the resource collection.
+    /// Without the bake_postprocess functor it would be safe to call from any thread as it'd move only the
+    /// Arc object, but the resource'd not be touched.
+    pub unsafe fn bake(&mut self) {
         {
             let mut pending = self.pending.lock().unwrap();
-            self.map.extend(pending.drain());
+            self.resource_map.extend(pending.drain());
         }
         if self.auto_gc {
-            self.map.retain(|_, entry| entry.hash_handle());
+            self.resource_map.retain(|_, entry| entry.hash_handle());
+        }
+        if let Some(post_process) = &self.post_process {
+            (post_process)(&mut ResourceBakeContext {
+                generation: self.generation,
+                resource_map: &mut self.resource_map,
+            });
+        }
+    }
+}
+
+pub struct ResourceBakeContext<'store, T: Resource> {
+    generation: usize,
+    resource_map: &'store mut HashMap<ResourceId, Arc<ResourceCell<T>>>,
+}
+
+impl<'store, T: Resource> ResourceBakeContext<'store, T> {
+    pub fn process_by_handle<F: Fn(&mut T)>(&self, handle: &ResourceHandle<T>, process: F) {
+        if let Some(cell) = handle.upgrade() {
+            if handle.generation() == self.generation {
+                debug_assert!(Arc::ptr_eq(self.resource_map.get(&handle.id()).unwrap(), &cell));
+                cell.write_lock();
+                // safety:
+                //  this type is constructed only if the required Send and Sync properties are fullfiled
+                (process)(unsafe { cell.write() });
+                cell.write_unlock();
+            }
         }
     }
 }
@@ -150,9 +161,12 @@ pub(crate) struct ResourceStoreCell<T: Resource> {
 }
 
 impl<T: Resource> ResourceStoreCell<T> {
-    pub fn new(build: Option<Box<dyn Fn(&ResourceId) -> T>>) -> Self {
+    pub fn new(
+        build: Option<Box<dyn Fn(&ResourceId) -> T>>,
+        post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
+    ) -> Self {
         Self {
-            store: UnsafeCell::new(ResourceStore::new(build)),
+            store: UnsafeCell::new(ResourceStore::new(build, post_process)),
             borrow_state: AtomicIsize::new(0),
         }
     }
@@ -252,7 +266,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
 
     fn get_cell(&self, id: &ResourceId) -> Option<Arc<ResourceCell<T>>> {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.store().get_cell(id) }
     }
 
@@ -273,7 +287,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         let store = self.clone();
         let cell = store
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?;
         Ok(ResourceRead::new(store, cell))
     }
 
@@ -287,7 +301,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             .map(|id| {
                 store
                     .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
+                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiRead::new(store, cells))
@@ -301,7 +315,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         let store = self.clone();
         let cell = store
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?;
         Ok(ResourceWrite::new(store, cell))
     }
 
@@ -315,7 +329,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             .map(|id| {
                 store
                     .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
+                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiWrite::new(store, cells))
@@ -324,27 +338,27 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
     pub fn get_handle(&self, id: &ResourceId) -> Result<ResourceHandle<T>, ECSError> {
         let cell = self
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?;
         Ok(ResourceHandle::new(self.generation(), &cell, id))
     }
 
     pub fn at(&self, handle: &ResourceHandle<T>) -> Result<ResourceRead<'store, T>, ECSError> {
         if handle.generation() != self.generation() {
-            Err(ECSError::ResourceHandleAlien)
+            Err(ECSError::ResourceExpired)
         } else if let Some(cell) = handle.upgrade() {
             Ok(ResourceRead::new(self.clone(), cell))
         } else {
-            Err(ECSError::ResourceHandleNotFound(any::type_name::<T>().into()))
+            Err(ECSError::ResourceNotFound(any::type_name::<T>().into(), None))
         }
     }
 
     pub fn at_mut(&self, handle: &ResourceHandle<T>) -> Result<ResourceWrite<'store, T>, ECSError> {
         if handle.generation() != self.generation() {
-            Err(ECSError::ResourceHandleAlien)
+            Err(ECSError::ResourceExpired)
         } else if let Some(cell) = handle.upgrade() {
             Ok(ResourceWrite::new(self.clone(), cell))
         } else {
-            Err(ECSError::ResourceHandleNotFound(any::type_name::<T>().into()))
+            Err(ECSError::ResourceNotFound(any::type_name::<T>().into(), None))
         }
     }
 }
@@ -386,32 +400,21 @@ impl<'store, T: Resource> ResourceStoreWrite<'store, T> {
 
     pub fn insert(&mut self, id: ResourceId, resource: T) -> Option<T> {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.store_mut().insert(id, resource) }
     }
 
     pub fn remove(&mut self, id: &ResourceId) -> Option<T> {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.store_mut().remove(id) }
     }
 
     pub fn bake(&mut self) {
-        self.store_mut().bake();
-    }
-
-    pub fn bake_with_process<'i, I, F>(&mut self, handles: I, process: F)
-    where
-        I: IntoIterator<Item = &'i ResourceHandle<T>>,
-        F: Fn(&mut T),
-    {
-        let store = self.store_mut();
-        store.bake();
-        
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe {
-            store.batch_process(handles, process);
+            self.store_mut().bake();
         }
     }
 }

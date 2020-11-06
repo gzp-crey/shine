@@ -1,13 +1,8 @@
-//! Contains types related to defining shared resources which can be accessed inside systems.
-//!
-//! Use resources to share persistent data between systems or to provide a system with state
-//! external to entities.
-
 use crate::resources::ResourceStoreCell;
 use crate::{
     resources::{
-        Resource, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite, ResourceRead, ResourceStoreRead,
-        ResourceStoreWrite, ResourceWrite,
+        Resource, ResourceBakeContext, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite, ResourceRead,
+        ResourceStoreRead, ResourceStoreWrite, ResourceWrite,
     },
     ECSError,
 };
@@ -27,7 +22,7 @@ impl_downcast!(GeneralResourceStoreCell);
 /// respected.
 #[derive(Default)]
 struct UnsafeResources {
-    map: HashMap<TypeId, Box<dyn GeneralResourceStoreCell>>,
+    store_map: HashMap<TypeId, Box<dyn GeneralResourceStoreCell>>,
 }
 
 /*unsafe impl Send for UnsafeResources {}
@@ -36,25 +31,39 @@ unsafe impl Sync for UnsafeResources {}*/
 impl UnsafeResources {
     /// # Safety
     /// Resources which are `!Send` must be retrieved or created only on the thread owning the resource
-    unsafe fn create_managed<T: Resource>(&mut self, build: Option<Box<dyn Fn(&ResourceId) -> T>>) {
+    unsafe fn register<T: Resource>(
+        &mut self,
+        build: Option<Box<dyn Fn(&ResourceId) -> T>>,
+        post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
+    ) {
         let ty = TypeId::of::<T>();
-        // Managed store have to be registered using the insert_managed
+        // Managed store have to be registered using the register
         // function before instances of the resource can be added
-        assert!(self.map.get(&ty).is_none());
-        self.map.insert(ty, Box::new(ResourceStoreCell::new(build)));
+        assert!(
+            self.store_map.get(&ty).is_none(),
+            "Resource store for {} already created",
+            any::type_name::<T>()
+        );
+        self.store_map
+            .insert(ty, Box::new(ResourceStoreCell::new(build, post_process)));
+    }
+
+    unsafe fn unregister<T: Resource>(&mut self) {
+        let ty = TypeId::of::<T>();
+        let _ = self.store_map.remove(&ty);
     }
 
     /// # Safety
     /// Resources which are `!Send` must be retrieved or created only on the thread owning the resource
-    unsafe fn insert<T: Resource>(&mut self, id: ResourceId, resource: T) {
+    unsafe fn insert<T: Resource>(&mut self, id: ResourceId, resource: T) -> Option<T> {
         let ty = TypeId::of::<T>();
         let cell = self
-            .map
+            .store_map
             .entry(ty)
-            .or_insert_with(|| Box::new(ResourceStoreCell::<T>::new(None)))
+            .or_insert_with(|| Box::new(ResourceStoreCell::<T>::new(None, None)))
             .downcast_mut::<ResourceStoreCell<T>>()
             .expect("Downcast error");
-        ResourceStoreWrite::new(cell).insert(id, resource);
+        ResourceStoreWrite::new(cell).insert(id, resource)
     }
 
     /// # Safety
@@ -68,7 +77,7 @@ impl UnsafeResources {
     unsafe fn read_store<T: Resource>(&self) -> Option<ResourceStoreRead<'_, T>> {
         let ty = TypeId::of::<T>();
         let cell = self
-            .map
+            .store_map
             .get(&ty)?
             .downcast_ref::<ResourceStoreCell<T>>()
             .expect("Downcast error");
@@ -80,7 +89,7 @@ impl UnsafeResources {
     unsafe fn write_store<T: Resource>(&self) -> Option<ResourceStoreWrite<'_, T>> {
         let ty = TypeId::of::<T>();
         let cell = self
-            .map
+            .store_map
             .get(&ty)?
             .downcast_ref::<ResourceStoreCell<T>>()
             .expect("Downcast error");
@@ -105,32 +114,56 @@ impl Resources {
         }
     }*/
 
-    /// Inserts an instance of `T` into the store with the given id
-    pub fn insert_with_id<T: Resource>(&mut self, id: ResourceId, value: T) {
+    /// Register a new type of resource with the given managed configuration.
+    /// todo: make parameter a struct ResourceConfigure{...}, with default init
+    pub fn register<T: Resource, Create, PostProc>(&mut self, build: Create, post_process: PostProc)
+    where
+        Create: 'static + Fn(&ResourceId) -> T,
+        for<'a> PostProc: 'static + Fn(&mut ResourceBakeContext<'a, T>),
+    {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
-            self.internal.insert(id, value);
+            self.internal
+                .register(Some(Box::new(build)), Some(Box::new(post_process)));
         }
     }
 
-    /// Inserts the instance of `T` into the store.
-    pub fn insert<T: Resource>(&mut self, value: T) {
-        self.insert_with_id(ResourceId::Global, value);
-    }
-
-    /// Register resource type that can be created from id on demand.
-    pub fn insert_managed<T: Resource, F: 'static + Fn(&ResourceId) -> T>(&mut self, build: F) {
+    /// Unregister and release all the resources of the given type. This operation also invalidates
+    /// all the handles. The other type of references and accessors
+    /// are not effected as they should not exist by the design of the API.
+    pub fn unregister<T: Resource>(&mut self) {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
-            self.internal.create_managed(Some(Box::new(build)));
+            self.internal.unregister::<T>();
         }
     }
 
-    /// Removes the instance of `T` with the given id from this store if it exists.    
+    /// Inserts an instance of `T` into the store with the given id. If type is not registered
+    /// a default unmanaged store is created.
+    pub fn insert_with_id<T: Resource>(&mut self, id: ResourceId, value: T) -> Option<T> {
+        // safety:
+        // this type is !Send and !Sync, and so can only be accessed from the thread which
+        // owns the resources collection
+        unsafe { self.internal.insert(id, value) }
+    }
+
+    /// Inserts the instance of `T` into the store. If type is not registered
+    /// a default unmanaged store is created.
+    /// If resource alread exists it is replaced and the old value is returned. All the handles
+    /// are invalidated. The other type of references and accessors are not effected as they
+    /// should not exist by the design of the API.
+    pub fn insert<T: Resource>(&mut self, value: T) -> Option<T> {
+        self.insert_with_id(ResourceId::Global, value)
+    }
+
+    /// Removes the instance of `T` with the given id from this store if it exists.
+    /// All the handles
+    /// are invalidated. The other type of references and accessors are not effected as they
+    /// should not exist by the design of the API.   
     pub fn remove_with_id<T: Resource>(&mut self, id: &ResourceId) -> Option<T> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
@@ -138,7 +171,9 @@ impl Resources {
         unsafe { self.internal.remove::<T>(id) }
     }
 
-    /// Removes the type `T` from this store if it exists.    
+    /// Removes the type `T` from this store if it exists. All the handles
+    /// are invalidated. The other type of references and accessors are not effected as they
+    /// should not exist by the design of the API.   
     pub fn remove<T: Resource>(&mut self) -> Option<T> {
         self.remove_with_id::<T>(&ResourceId::Global)
     }
@@ -163,7 +198,7 @@ impl Resources {
 
     pub fn get_with_id<T: Resource>(&self, id: &ResourceId) -> Result<ResourceRead<'_, T>, ECSError> {
         self.get_store::<T>()
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?
             .get_with_id(id)
     }
 
@@ -172,7 +207,7 @@ impl Resources {
         ids: I,
     ) -> Result<ResourceMultiRead<'_, T>, ECSError> {
         self.get_store::<T>()
-            .ok_or_else(|| ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))?
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), None))?
             .get_with_ids(ids)
     }
 
@@ -182,7 +217,7 @@ impl Resources {
 
     pub fn get_mut_with_id<T: Resource>(&self, id: &ResourceId) -> Result<ResourceWrite<'_, T>, ECSError> {
         self.get_store::<T>()
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?
             .get_mut_with_id(id)
     }
 
@@ -191,25 +226,25 @@ impl Resources {
         ids: I,
     ) -> Result<ResourceMultiWrite<'_, T>, ECSError> {
         self.get_store::<T>()
-            .ok_or_else(|| ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))?
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), None))?
             .get_mut_with_ids(ids)
     }
 
     pub fn get_handle<T: Resource>(&self, id: &ResourceId) -> Result<ResourceHandle<T>, ECSError> {
         self.get_store::<T>()
-            .ok_or_else(|| ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))?
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), None))?
             .get_handle(id)
     }
 
     pub fn at<T: Resource>(&self, handle: &ResourceHandle<T>) -> Result<ResourceRead<'_, T>, ECSError> {
         self.get_store::<T>()
-            .ok_or_else(|| ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))?
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), None))?
             .at(handle)
     }
 
     pub fn at_mut<T: Resource>(&self, handle: &ResourceHandle<T>) -> Result<ResourceWrite<'_, T>, ECSError> {
         self.get_store::<T>()
-            .ok_or_else(|| ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))?
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), None))?
             .at_mut(handle)
     }
 }

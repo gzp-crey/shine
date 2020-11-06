@@ -31,13 +31,16 @@ fn handle_test_core(case: TestCase) {
     let build_counter = Rc::new(RefCell::new(0));
 
     let mut resources = Resources::default();
-    resources.insert_managed::<TestOne, _>({
-        let cnt = build_counter.clone();
-        move |id| {
-            *cnt.borrow_mut() += 1;
-            TestOne(format!("one {:?}", id), *cnt.borrow())
-        }
-    });
+    resources.register::<TestOne, _, _>(
+        {
+            let cnt = build_counter.clone();
+            move |id| {
+                *cnt.borrow_mut() += 1;
+                TestOne(format!("one {:?}", id), *cnt.borrow())
+            }
+        },
+        |_| {},
+    );
 
     resources
         .get_with_id::<TestOne>(&ida)

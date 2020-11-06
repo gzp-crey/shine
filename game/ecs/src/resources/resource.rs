@@ -1,8 +1,3 @@
-//! Contains types related to defining shared resources which can be accessed inside systems.
-//!
-//! Use resources to share persistent data between systems or to provide a system with state
-//! external to entities.
-
 use crate::resources::ResourceStoreRead;
 use std::{
     any,
@@ -133,7 +128,7 @@ impl<'store, T: Resource> Deref for ResourceRead<'store, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.cell.read() }
     }
 }
@@ -170,7 +165,7 @@ impl<'store, T: Resource> Deref for ResourceWrite<'store, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.cell.write() }
     }
 }
@@ -179,7 +174,7 @@ impl<'store, T: Resource> DerefMut for ResourceWrite<'store, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.cell.write() }
     }
 }
@@ -224,7 +219,7 @@ impl<'store, T: Resource> Index<usize> for ResourceMultiRead<'store, T> {
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.cells[idx].read() }
     }
 }
@@ -269,7 +264,7 @@ impl<'store, T: Resource> Index<usize> for ResourceMultiWrite<'store, T> {
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.cells[idx].write() }
     }
 }
@@ -278,7 +273,7 @@ impl<'store, T: Resource> IndexMut<usize> for ResourceMultiWrite<'store, T> {
     #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
         // safety:
-        //  this type can be constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the required Send and Sync properties are fullfiled
         unsafe { self.cells[idx].write() }
     }
 }
