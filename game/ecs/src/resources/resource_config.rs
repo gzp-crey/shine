@@ -1,32 +1,72 @@
 use crate::resources::{Resource, ResourceBakeContext, ResourceId};
 
-/// Resource store configuration.
-pub struct ResourceConfiguration<T: Resource> {
-    /// Optional functor to create missing resources from id
-    pub build: Option<Box<dyn Fn(&ResourceId) -> T>>,
+pub trait ResourceConfig<T: Resource> {
+    fn auto_build(&self) -> bool;
 
-    /// Optional functor to call during bake
-    pub post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
+    fn build(&self, id: &ResourceId) -> T;
 
-    /// Remove unreferenced resources during maintain
-    pub auto_gc: bool,
-    // General E to add extra functionality to the resource management
-    //extension: E,
+    fn post_process(&self, context: &mut ResourceBakeContext<'_, T>);
+
+    fn auto_gc(&self) -> bool;
 }
 
-impl<T: Resource> Default for ResourceConfiguration<T> {
-    fn default() -> Self {
-        Self {
-            build: None,
-            post_process: None,
-            auto_gc: false,
-        }
+/// Resources are added and removed manually
+#[derive(Default)]
+pub struct UnmanagedResource;
+
+impl<T: Resource> ResourceConfig<T> for UnmanagedResource {
+    fn auto_build(&self) -> bool {
+        false
+    }
+
+    fn build(&self, _id: &ResourceId) -> T {
+        unreachable!()
+    }
+
+    fn post_process(&self, _context: &mut ResourceBakeContext<'_, T>) {}
+
+    fn auto_gc(&self) -> bool {
+        false
     }
 }
 
-impl<T: Resource> ResourceConfiguration<T> {
-    /*pub fn extension(&self) -> E {
-        &self.extension()
-    }*/
-    //fn with_build()
+/// Resources are added and removed automatically using the provided builder
+/// functor.
+#[derive(Default)]
+pub struct ManagedResource<T, F>
+where
+    T: Resource,
+    F: Fn(&ResourceId) -> T,
+{
+    build: F,
+}
+
+impl<T, F> ManagedResource<T, F>
+where
+    T: Resource,
+    F: Fn(&ResourceId) -> T,
+{
+    pub fn new(build: F) -> Self {
+        Self { build }
+    }
+}
+
+impl<T, F> ResourceConfig<T> for ManagedResource<T, F>
+where
+    T: Resource,
+    F: Fn(&ResourceId) -> T,
+{
+    fn auto_build(&self) -> bool {
+        true
+    }
+
+    fn build(&self, id: &ResourceId) -> T {
+        (self.build)(id)
+    }
+
+    fn post_process(&self, _context: &mut ResourceBakeContext<'_, T>) {}
+
+    fn auto_gc(&self) -> bool {
+        true
+    }
 }

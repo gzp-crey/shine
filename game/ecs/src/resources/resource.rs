@@ -51,15 +51,15 @@ impl<T: Resource> ResourceCell<T> {
     }
 
     pub fn read_unlock(&self) {
-        let p = self.borrow_state.fetch_sub(1, atomic::Ordering::Relaxed);
+        let p = self.borrow_state.fetch_sub(1, atomic::Ordering::SeqCst);
         debug_assert!(p > 0);
     }
 
     /// # Safety
-    /// Resources which are `!Send` must be retrieved or created only on the thread owning the resources.
+    /// Types which are !Sync should only be accessed on the thread which owns the resource collection.
     #[inline]
     pub unsafe fn read(&self) -> &T {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::Relaxed) > 0);
+        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) > 0);
         // safety:
         //  borrow_state ensures the appropriate lock
         &*self.resource.get()
@@ -75,36 +75,36 @@ impl<T: Resource> ResourceCell<T> {
     }
 
     pub fn write_unlock(&self) {
-        let p = self.borrow_state.fetch_add(1, atomic::Ordering::Relaxed);
+        let p = self.borrow_state.fetch_add(1, atomic::Ordering::SeqCst);
         debug_assert!(p == -1);
     }
 
     /// # Safety
-    /// Resources which are `!Send` must be retrieved or created only on the thread owning the resources.
+    /// Types which are !Sync should only be accessed on the thread which owns the resource collection.
     #[inline]
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn write(&self) -> &mut T {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::Relaxed) < 0);
+        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) < 0);
         // safety:
         // borrow_state ensures the appropriate lock
         &mut *self.resource.get()
     }
 
     pub fn take(self) -> T {
-        debug_assert_eq!(self.borrow_state.load(atomic::Ordering::Relaxed), 0);
+        debug_assert_eq!(self.borrow_state.load(atomic::Ordering::SeqCst), 0);
         self.resource.into_inner()
     }
 
     pub fn hash_handle(&self) -> bool {
-        self.handle_count.load(atomic::Ordering::Relaxed) > 0
+        self.handle_count.load(atomic::Ordering::SeqCst) > 0
     }
 
     pub fn add_handle(&self) {
-        self.handle_count.fetch_add(1, atomic::Ordering::Relaxed);
+        self.handle_count.fetch_add(1, atomic::Ordering::SeqCst);
     }
 
     pub fn remove_handle(&self) {
-        self.handle_count.fetch_sub(1, atomic::Ordering::Relaxed);
+        self.handle_count.fetch_sub(1, atomic::Ordering::SeqCst);
     }
 }
 
@@ -128,7 +128,7 @@ impl<'store, T: Resource> Deref for ResourceRead<'store, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.cell.read() }
     }
 }
@@ -165,7 +165,7 @@ impl<'store, T: Resource> Deref for ResourceWrite<'store, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.cell.write() }
     }
 }
@@ -174,7 +174,7 @@ impl<'store, T: Resource> DerefMut for ResourceWrite<'store, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.cell.write() }
     }
 }
@@ -219,7 +219,7 @@ impl<'store, T: Resource> Index<usize> for ResourceMultiRead<'store, T> {
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.cells[idx].read() }
     }
 }
@@ -264,7 +264,7 @@ impl<'store, T: Resource> Index<usize> for ResourceMultiWrite<'store, T> {
     #[inline]
     fn index(&self, idx: usize) -> &Self::Output {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.cells[idx].write() }
     }
 }
@@ -273,7 +273,7 @@ impl<'store, T: Resource> IndexMut<usize> for ResourceMultiWrite<'store, T> {
     #[inline]
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.cells[idx].write() }
     }
 }

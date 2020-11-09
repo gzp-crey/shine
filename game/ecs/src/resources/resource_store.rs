@@ -1,7 +1,7 @@
 use crate::{
     resources::{
-        Resource, ResourceCell, ResourceConfiguration, ResourceHandle, ResourceId, ResourceMultiRead,
-        ResourceMultiWrite, ResourceRead, ResourceWrite,
+        Resource, ResourceCell, ResourceConfig, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite,
+        ResourceRead, ResourceWrite,
     },
     ECSError,
 };
@@ -32,7 +32,7 @@ impl<'store, T: Resource> ResourceBakeContext<'store, T> {
                 debug_assert!(Arc::ptr_eq(self.resource_map.get(&handle.id()).unwrap(), &cell));
                 cell.write_lock();
                 // safety:
-                //  this type is constructed only if the required Send and Sync properties are fullfiled
+                //  this type is constructed only if the T implements the required Send and Sync markers
                 (process)(unsafe { cell.write() });
                 cell.write_unlock();
             }
@@ -43,15 +43,15 @@ impl<'store, T: Resource> ResourceBakeContext<'store, T> {
 /// Store resources of the same type (with different id)
 pub(crate) struct ResourceStore<T: Resource> {
     generation: usize,
+    config: Box<dyn ResourceConfig<T>>,
     resource_map: HashMap<ResourceId, Arc<ResourceCell<T>>>,
     pending: Mutex<HashMap<ResourceId, Arc<ResourceCell<T>>>>,
-    config: ResourceConfiguration<T>,
 }
 
 impl<T: Resource> ResourceStore<T> {
-    fn new(config: ResourceConfiguration<T>) -> Self {
+    fn new(config: Box<dyn ResourceConfig<T>>) -> Self {
         Self {
-            generation: STORE_UNIQUE_ID.fetch_add(1, atomic::Ordering::Relaxed),
+            generation: STORE_UNIQUE_ID.fetch_add(1, atomic::Ordering::SeqCst),
             resource_map: Default::default(),
             pending: Mutex::new(Default::default()),
             config,
@@ -68,15 +68,15 @@ impl<T: Resource> ResourceStore<T> {
     /// As this operation does not touch the resources itself, it is safe to call for any resources on any thread
     /// dispite of the Send, Sync properties.
     pub fn contains(&self, id: &ResourceId) -> bool {
-        self.resource_map.contains_key(id) // stored in the usual map
-         || self.config.build.is_some() // has a builder, thus it will be constructed even is it does not exists at the moment
+        self.resource_map.contains_key(id)   // stored in the usual map
+         || self.config.auto_build() // has a builder, thus it will be constructed even is it does not exists at the moment
     }
 
     /// Insert a new resource. If a resource with the given id already exists, all the handles
     /// are invalidated. The other type of references and accessors are not effected as they
     /// should not exist by the design of the API.
     /// # Safety
-    /// Resources which are `!Send` must be retrieved or inserted only on the thread owning the resources.
+    /// Resources which are `!Send` must be inserted only on the thread owning the resources.
     pub unsafe fn insert(&mut self, id: ResourceId, resource: T) -> Option<T> {
         let out = self.remove(&id);
         self.resource_map.insert(id, ResourceCell::new(resource));
@@ -87,7 +87,7 @@ impl<T: Resource> ResourceStore<T> {
     /// are not effected as they should not exist by the design of the API.
     /// of the API.
     /// # Safety
-    /// Resources which are `!Send` must be retrieved or inserted only on the thread owning the resources.
+    /// Resources which are `!Send` must be retrieved only on the thread owning the resources.
     pub unsafe fn remove(&mut self, id: &ResourceId) -> Option<T> {
         let cell = self.pending.lock().unwrap().remove(&id);
         let cell = cell.or_else(|| self.resource_map.remove(&id));
@@ -105,42 +105,41 @@ impl<T: Resource> ResourceStore<T> {
     }
 
     /// # Safety
-    /// Types which are !Sync should only be retrieved or inserted on the thread which owns the resource collection.
-    /// Without the build functionality it'd be safe to access the cell on any thread,
-    /// but as it is allowed to create new resources, this function should be called only from
-    /// thread owning resource.
+    /// Types which are !Send or !Sync should only be accessed on the thread which owns the
+    /// resource collection and the resources (and not just the wrapping cells) are
+    /// accessed (created) here.
     pub unsafe fn get_cell(&self, id: &ResourceId) -> Option<Arc<ResourceCell<T>>> {
         self.resource_map.get(id).cloned().or_else(|| {
-            self.config.build.as_ref().map(|build| {
-                let config = &self.config;
+            let config = &self.config;
+            if self.config.auto_build() {
                 let mut pending = self.pending.lock().unwrap();
                 let cell = pending
                     .entry(id.clone())
-                    .or_insert_with_key(|id| ResourceCell::new((build)(id)));
-                cell.clone()
-            })
+                    .or_insert_with_key(|id| ResourceCell::new(config.build(id)));
+                Some(cell.clone())
+            } else {
+                None
+            }
         })
     }
 
     /// Move resources from pending into the permanent map.
     /// # Safety
-    /// Types which are !Sync should only be retrieved or inserted on the thread which owns the resource collection.
-    /// Without the bake_postprocess functor it would be safe to call from any thread as it'd move only the
-    /// Arc object, but the resource'd not be touched.
+    /// Types which are !Send or !Sync should only be accessed or retrieved on the thread which
+    /// owns the resource collection and the resources (and not just the wrapping cells) are
+    /// accessed (released or updated).
     pub unsafe fn bake(&mut self) {
         {
             let mut pending = self.pending.lock().unwrap();
             self.resource_map.extend(pending.drain());
         }
-        if self.config.auto_gc {
+        if self.config.auto_gc() {
             self.resource_map.retain(|_, entry| entry.hash_handle());
         }
-        if let Some(post_process) = &self.config.post_process {
-            (post_process)(&mut ResourceBakeContext {
-                generation: self.generation,
-                resource_map: &mut self.resource_map,
-            });
-        }
+        self.config.post_process(&mut ResourceBakeContext {
+            generation: self.generation,
+            resource_map: &mut self.resource_map,
+        });
     }
 }
 
@@ -151,7 +150,7 @@ pub(crate) struct ResourceStoreCell<T: Resource> {
 }
 
 impl<T: Resource> ResourceStoreCell<T> {
-    pub fn new(config: ResourceConfiguration<T>) -> Self {
+    pub fn new(config: Box<dyn ResourceConfig<T>>) -> Self {
         Self {
             store: UnsafeCell::new(ResourceStore::new(config)),
             borrow_state: AtomicIsize::new(0),
@@ -179,16 +178,16 @@ impl<T: Resource> ResourceStoreCell<T> {
     }
 
     pub fn read_unlock(&self) {
-        let p = self.borrow_state.fetch_sub(1, atomic::Ordering::Relaxed);
+        let p = self.borrow_state.fetch_sub(1, atomic::Ordering::SeqCst);
         debug_assert!(p > 0);
     }
 
     #[inline]
     pub fn read(&self) -> &ResourceStore<T> {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::Relaxed) > 0);
+        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) > 0);
         // safety:
         //  borrow_state ensures the appropriate lock
-        //  resources are not touched here, Sedn, Sync is a different level of safety requirement
+        //  the store itself is Send and Sync (safety of ResourceCell takes care for for T)
         unsafe { &*self.store.get() }
     }
 
@@ -208,17 +207,17 @@ impl<T: Resource> ResourceStoreCell<T> {
     }
 
     pub fn write_unlock(&self) {
-        let p = self.borrow_state.fetch_add(1, atomic::Ordering::Relaxed);
+        let p = self.borrow_state.fetch_add(1, atomic::Ordering::SeqCst);
         debug_assert!(p == -1);
     }
 
     #[inline]
     #[allow(clippy::mut_from_ref)]
     pub fn write(&self) -> &mut ResourceStore<T> {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::Relaxed) < 0);
+        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) < 0);
         // safety:
         //  borrow_state ensures the appropriate lock
-        //  resources are not touched here, Sedn, Sync is a different level of safety requirement
+        //  the store itself is Send and Sync (safety of ResourceCell takes care of T)
         unsafe { &mut *self.store.get() }
     }
 }
@@ -253,7 +252,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
 
     fn get_cell(&self, id: &ResourceId) -> Option<Arc<ResourceCell<T>>> {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.store().get_cell(id) }
     }
 
@@ -387,19 +386,19 @@ impl<'store, T: Resource> ResourceStoreWrite<'store, T> {
 
     pub fn insert(&mut self, id: ResourceId, resource: T) -> Option<T> {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.store_mut().insert(id, resource) }
     }
 
     pub fn remove(&mut self, id: &ResourceId) -> Option<T> {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe { self.store_mut().remove(id) }
     }
 
     pub fn bake(&mut self) {
         // safety:
-        //  this type is constructed only if the required Send and Sync properties are fullfiled
+        //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe {
             self.store_mut().bake();
         }

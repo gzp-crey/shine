@@ -1,8 +1,8 @@
 use crate::resources::ResourceStoreCell;
 use crate::{
     resources::{
-        Resource, ResourceConfiguration, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite,
-        ResourceRead, ResourceStoreRead, ResourceStoreWrite, ResourceWrite,
+        Resource, ResourceConfig, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite, ResourceRead,
+        ResourceStoreRead, ResourceStoreWrite, ResourceWrite, UnmanagedResource,
     },
     ECSError,
 };
@@ -25,13 +25,10 @@ struct UnsafeResources {
     store_map: HashMap<TypeId, Box<dyn GeneralResourceStoreCell>>,
 }
 
-/*unsafe impl Send for UnsafeResources {}
-unsafe impl Sync for UnsafeResources {}*/
-
 impl UnsafeResources {
     /// # Safety
     /// Resources which are `!Send` must be retrieved or created only on the thread owning the resource
-    unsafe fn register<T: Resource>(&mut self, config: ResourceConfiguration<T>) {
+    unsafe fn register<T: Resource>(&mut self, config: Box<dyn ResourceConfig<T>>) {
         let ty = TypeId::of::<T>();
         // Managed store have to be registered using the register
         // function before instances of the resource can be added
@@ -55,7 +52,7 @@ impl UnsafeResources {
         let cell = self
             .store_map
             .entry(ty)
-            .or_insert_with(|| Box::new(ResourceStoreCell::<T>::new(ResourceConfiguration::default())))
+            .or_insert_with(|| Box::new(ResourceStoreCell::<T>::new(Box::new(UnmanagedResource))))
             .downcast_mut::<ResourceStoreCell<T>>()
             .expect("Downcast error");
         ResourceStoreWrite::new(cell).insert(id, resource)
@@ -110,12 +107,12 @@ impl Resources {
     }*/
 
     /// Register a new type of resource with the given managed configuration.
-    pub fn register<T: Resource>(&mut self, config: ResourceConfiguration<T>) {
+    pub fn register<T: Resource, L: 'static + ResourceConfig<T>>(&mut self, config: L) {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
-            self.internal.register(config);
+            self.internal.register(Box::new(config));
         }
     }
 
