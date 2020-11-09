@@ -1,8 +1,8 @@
 use crate::resources::ResourceStoreCell;
 use crate::{
     resources::{
-        Resource, ResourceBakeContext, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite, ResourceRead,
-        ResourceStoreRead, ResourceStoreWrite, ResourceWrite,
+        Resource, ResourceConfiguration, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite,
+        ResourceRead, ResourceStoreRead, ResourceStoreWrite, ResourceWrite,
     },
     ECSError,
 };
@@ -31,11 +31,7 @@ unsafe impl Sync for UnsafeResources {}*/
 impl UnsafeResources {
     /// # Safety
     /// Resources which are `!Send` must be retrieved or created only on the thread owning the resource
-    unsafe fn register<T: Resource>(
-        &mut self,
-        build: Option<Box<dyn Fn(&ResourceId) -> T>>,
-        post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
-    ) {
+    unsafe fn register<T: Resource>(&mut self, config: ResourceConfiguration<T>) {
         let ty = TypeId::of::<T>();
         // Managed store have to be registered using the register
         // function before instances of the resource can be added
@@ -44,8 +40,7 @@ impl UnsafeResources {
             "Resource store for {} already created",
             any::type_name::<T>()
         );
-        self.store_map
-            .insert(ty, Box::new(ResourceStoreCell::new(build, post_process)));
+        self.store_map.insert(ty, Box::new(ResourceStoreCell::new(config)));
     }
 
     unsafe fn unregister<T: Resource>(&mut self) {
@@ -60,7 +55,7 @@ impl UnsafeResources {
         let cell = self
             .store_map
             .entry(ty)
-            .or_insert_with(|| Box::new(ResourceStoreCell::<T>::new(None, None)))
+            .or_insert_with(|| Box::new(ResourceStoreCell::<T>::new(ResourceConfiguration::default())))
             .downcast_mut::<ResourceStoreCell<T>>()
             .expect("Downcast error");
         ResourceStoreWrite::new(cell).insert(id, resource)
@@ -115,18 +110,12 @@ impl Resources {
     }*/
 
     /// Register a new type of resource with the given managed configuration.
-    /// todo: make parameter a struct ResourceConfigure{...}, with default init
-    pub fn register<T: Resource, Create, PostProc>(&mut self, build: Create, post_process: PostProc)
-    where
-        Create: 'static + Fn(&ResourceId) -> T,
-        for<'a> PostProc: 'static + Fn(&mut ResourceBakeContext<'a, T>),
-    {
+    pub fn register<T: Resource>(&mut self, config: ResourceConfiguration<T>) {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
         unsafe {
-            self.internal
-                .register(Some(Box::new(build)), Some(Box::new(post_process)));
+            self.internal.register(config);
         }
     }
 

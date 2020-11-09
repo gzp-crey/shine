@@ -1,4 +1,4 @@
-use shine_ecs::resources::{ResourceId, Resources};
+use shine_ecs::resources::{ResourceConfiguration, ResourceId, Resources};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -31,16 +31,17 @@ fn handle_test_core(case: TestCase) {
     let build_counter = Rc::new(RefCell::new(0));
 
     let mut resources = Resources::default();
-    resources.register::<TestOne, _, _>(
-        {
+    resources.register::<TestOne>(ResourceConfiguration {
+        build: Some(Box::new({
             let cnt = build_counter.clone();
             move |id| {
                 *cnt.borrow_mut() += 1;
                 TestOne(format!("one {:?}", id), *cnt.borrow())
             }
-        },
-        |_| {},
-    );
+        })),
+        post_process: None,
+        auto_gc: true,
+    });
 
     resources
         .get_with_id::<TestOne>(&ida)

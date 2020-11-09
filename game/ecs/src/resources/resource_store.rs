@@ -1,7 +1,7 @@
 use crate::{
     resources::{
-        Resource, ResourceCell, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite, ResourceRead,
-        ResourceWrite,
+        Resource, ResourceCell, ResourceConfiguration, ResourceHandle, ResourceId, ResourceMultiRead,
+        ResourceMultiWrite, ResourceRead, ResourceWrite,
     },
     ECSError,
 };
@@ -19,33 +19,42 @@ use std::{
 /// to a store
 static STORE_UNIQUE_ID: AtomicUsize = AtomicUsize::new(0);
 
+/// Context for the post process functor called after bake
+pub struct ResourceBakeContext<'store, T: Resource> {
+    generation: usize,
+    resource_map: &'store mut HashMap<ResourceId, Arc<ResourceCell<T>>>,
+}
+
+impl<'store, T: Resource> ResourceBakeContext<'store, T> {
+    pub fn process_by_handle<F: Fn(&mut T)>(&self, handle: &ResourceHandle<T>, process: F) {
+        if let Some(cell) = handle.upgrade() {
+            if handle.generation() == self.generation {
+                debug_assert!(Arc::ptr_eq(self.resource_map.get(&handle.id()).unwrap(), &cell));
+                cell.write_lock();
+                // safety:
+                //  this type is constructed only if the required Send and Sync properties are fullfiled
+                (process)(unsafe { cell.write() });
+                cell.write_unlock();
+            }
+        }
+    }
+}
+
 /// Store resources of the same type (with different id)
 pub(crate) struct ResourceStore<T: Resource> {
     generation: usize,
     resource_map: HashMap<ResourceId, Arc<ResourceCell<T>>>,
     pending: Mutex<HashMap<ResourceId, Arc<ResourceCell<T>>>>,
-
-    /// Optional functor to create missing resources from id
-    build: Option<Box<dyn Fn(&ResourceId) -> T>>,
-    /// Optional functor to call during bake
-    post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
-    /// Remove unreferenced resources during maintain
-    auto_gc: bool,
+    config: ResourceConfiguration<T>,
 }
 
 impl<T: Resource> ResourceStore<T> {
-    fn new(
-        build: Option<Box<dyn Fn(&ResourceId) -> T>>,
-        post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
-    ) -> Self {
-        let auto_gc = build.is_some();
+    fn new(config: ResourceConfiguration<T>) -> Self {
         Self {
             generation: STORE_UNIQUE_ID.fetch_add(1, atomic::Ordering::Relaxed),
             resource_map: Default::default(),
             pending: Mutex::new(Default::default()),
-            build,
-            post_process,
-            auto_gc,
+            config,
         }
     }
 
@@ -60,7 +69,7 @@ impl<T: Resource> ResourceStore<T> {
     /// dispite of the Send, Sync properties.
     pub fn contains(&self, id: &ResourceId) -> bool {
         self.resource_map.contains_key(id) // stored in the usual map
-         || self.build.is_some() // has a builder, thus it will be constructed even is it does not exists at the moment
+         || self.config.build.is_some() // has a builder, thus it will be constructed even is it does not exists at the moment
     }
 
     /// Insert a new resource. If a resource with the given id already exists, all the handles
@@ -102,7 +111,8 @@ impl<T: Resource> ResourceStore<T> {
     /// thread owning resource.
     pub unsafe fn get_cell(&self, id: &ResourceId) -> Option<Arc<ResourceCell<T>>> {
         self.resource_map.get(id).cloned().or_else(|| {
-            self.build.as_ref().map(|build| {
+            self.config.build.as_ref().map(|build| {
+                let config = &self.config;
                 let mut pending = self.pending.lock().unwrap();
                 let cell = pending
                     .entry(id.clone())
@@ -122,34 +132,14 @@ impl<T: Resource> ResourceStore<T> {
             let mut pending = self.pending.lock().unwrap();
             self.resource_map.extend(pending.drain());
         }
-        if self.auto_gc {
+        if self.config.auto_gc {
             self.resource_map.retain(|_, entry| entry.hash_handle());
         }
-        if let Some(post_process) = &self.post_process {
+        if let Some(post_process) = &self.config.post_process {
             (post_process)(&mut ResourceBakeContext {
                 generation: self.generation,
                 resource_map: &mut self.resource_map,
             });
-        }
-    }
-}
-
-pub struct ResourceBakeContext<'store, T: Resource> {
-    generation: usize,
-    resource_map: &'store mut HashMap<ResourceId, Arc<ResourceCell<T>>>,
-}
-
-impl<'store, T: Resource> ResourceBakeContext<'store, T> {
-    pub fn process_by_handle<F: Fn(&mut T)>(&self, handle: &ResourceHandle<T>, process: F) {
-        if let Some(cell) = handle.upgrade() {
-            if handle.generation() == self.generation {
-                debug_assert!(Arc::ptr_eq(self.resource_map.get(&handle.id()).unwrap(), &cell));
-                cell.write_lock();
-                // safety:
-                //  this type is constructed only if the required Send and Sync properties are fullfiled
-                (process)(unsafe { cell.write() });
-                cell.write_unlock();
-            }
         }
     }
 }
@@ -161,12 +151,9 @@ pub(crate) struct ResourceStoreCell<T: Resource> {
 }
 
 impl<T: Resource> ResourceStoreCell<T> {
-    pub fn new(
-        build: Option<Box<dyn Fn(&ResourceId) -> T>>,
-        post_process: Option<Box<dyn Fn(&mut ResourceBakeContext<'_, T>)>>,
-    ) -> Self {
+    pub fn new(config: ResourceConfiguration<T>) -> Self {
         Self {
-            store: UnsafeCell::new(ResourceStore::new(build, post_process)),
+            store: UnsafeCell::new(ResourceStore::new(config)),
             borrow_state: AtomicIsize::new(0),
         }
     }
