@@ -1,4 +1,6 @@
-use std::sync::atomic::{self, AtomicIsize};
+// Based on hecs::AtomicBorrow (https://github.com/Ralith/hecs/blob/master/src/borrow.rs)
+
+use std::sync::atomic::{AtomicUsize, Ordering};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -10,63 +12,76 @@ pub enum RWTokenError {
     AlreadyWriteLocked,
 }
 
-/// Simmilar to RLock, but the resource guarded is not part of the
+/// Marker bit for the write_lock
+const WRITE_BIT: usize = !(usize::max_value() >> 1);
+
+/// Simmilar to RWLock, but the resource guarded is not part of the
 /// structure.
-pub struct RWToken(AtomicIsize);
+pub struct RWToken(AtomicUsize);
 
 impl RWToken {
     pub fn new() -> Self {
-        Self(AtomicIsize::new(0))
+        Self(AtomicUsize::new(0))
     }
 
     pub fn new_write_locked() -> Self {
-        Self(AtomicIsize::new(-1))
+        Self(AtomicUsize::new(WRITE_BIT))
     }
 
     pub fn try_read_lock(&self) -> Result<(), RWTokenError> {
-        loop {
-            let read = self.0.load(atomic::Ordering::SeqCst);
-            if read < 0 {
-                return Err(RWTokenError::AlreadyWriteLocked);
-            }
-
-            if self.0.compare_and_swap(read, read + 1, atomic::Ordering::SeqCst) == read {
-                return Ok(());
-            }
+        let value = self.0.fetch_add(1, Ordering::Acquire).wrapping_add(1);
+        if value == 0 {
+            core::panic!("Counter wrapped, this borrow is invalid!")
+        }
+        if value & WRITE_BIT != 0 {
+            self.0.fetch_sub(1, Ordering::Release);
+            Err(RWTokenError::AlreadyWriteLocked)
+        } else {
+            Ok(())
         }
     }
 
     pub fn read_unlock(&self) {
-        let p = self.0.fetch_sub(1, atomic::Ordering::SeqCst);
-        debug_assert!(p > 0, "Token was not read locked");
+        let value = self.0.fetch_sub(1, Ordering::Release);
+        debug_assert_ne!(value, 0, "unbalanced releases");
+        debug_assert_eq!(
+            value & WRITE_BIT,
+            0,
+            "shared release of unique borrow, write_lock - read_unlock"
+        );
     }
 
     #[inline]
     pub fn is_read(&self) -> bool {
-        self.0.load(atomic::Ordering::SeqCst) > 0
+        let value = self.0.load(Ordering::Relaxed);
+        value != 0 && (value & WRITE_BIT == 0)
     }
 
     pub fn try_write_lock(&self) -> Result<(), RWTokenError> {
-        let borrowed = self.0.compare_and_swap(0, -1, atomic::Ordering::SeqCst);
-        match borrowed {
-            0 => Ok(()),
-            x if x < 0 => Err(RWTokenError::AlreadyWriteLocked),
-            _ => Err(RWTokenError::AlreadyReadLocked),
-        }
+        self.0
+            .compare_exchange(0, WRITE_BIT, Ordering::Acquire, Ordering::Relaxed)
+            .map_err(|value| {
+                if value & WRITE_BIT == 0 {
+                    RWTokenError::AlreadyReadLocked
+                } else {
+                    RWTokenError::AlreadyWriteLocked
+                }
+            })?;
+        Ok(())
     }
 
     pub fn write_unlock(&self) {
-        let p = self.0.fetch_add(1, atomic::Ordering::SeqCst);
-        debug_assert!(p == -1, "Token was not write locked");
+        let value = self.0.fetch_and(!WRITE_BIT, Ordering::Release);
+        debug_assert_ne!(
+            value & WRITE_BIT,
+            0,
+            "unique release of shared borrow, read_lock - write_unlock"
+        );
     }
 
     #[inline]
     pub fn is_write(&self) -> bool {
-        self.0.load(atomic::Ordering::SeqCst) < 0
+        let value = self.0.load(Ordering::Relaxed);
+        value & WRITE_BIT != 0
     }
-
-    /*#[inline]
-    pub unsafe fn is_unlocked(&self) -> bool {
-        self.0.load(atomic::Ordering::SeqCst) == 0
-    }*/
 }

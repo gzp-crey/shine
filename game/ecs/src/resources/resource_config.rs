@@ -1,35 +1,52 @@
 use crate::resources::{Resource, ResourceBakeContext, ResourceId};
+use std::marker::PhantomData;
 
-pub trait ResourceConfig<T>: Sized
-where
-    T: Resource<Config = Self>,
-{
+pub trait ResourceConfig: Sized {
+    type Resource: Resource<Config = Self>;
+
     fn auto_build(&self) -> bool;
 
-    fn build(&self, id: &ResourceId) -> T;
+    fn build(&self, id: &ResourceId) -> Self::Resource;
 
-    fn post_process(&self, context: &mut ResourceBakeContext<'_, T>);
+    fn post_process(&self, context: &mut ResourceBakeContext<'_, Self::Resource>);
 
     fn auto_gc(&self) -> bool;
 }
 
-/// Resources are added and removed manually
-#[derive(Default)]
-pub struct UnmanagedResource;
-
-impl<T> ResourceConfig<T> for UnmanagedResource
+/// Resources configuration to manage the resource manually.
+/// The resources have to be added or removed explicitly and no automatic creation or
+/// release happens.
+pub struct UnmanagedResource<T>
 where
     T: Resource<Config = Self>,
 {
+    _ph: PhantomData<T>,
+}
+
+impl<T> Default for UnmanagedResource<T>
+where
+    T: Resource<Config = Self>,
+{
+    fn default() -> Self {
+        Self { _ph: PhantomData }
+    }
+}
+
+impl<T> ResourceConfig for UnmanagedResource<T>
+where
+    T: Resource<Config = Self>,
+{
+    type Resource = T;
+
     fn auto_build(&self) -> bool {
         false
     }
 
-    fn build(&self, _id: &ResourceId) -> T {
+    fn build(&self, _id: &ResourceId) -> Self::Resource {
         unreachable!()
     }
 
-    fn post_process(&self, _context: &mut ResourceBakeContext<'_, T>) {}
+    fn post_process(&self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
 
     fn auto_gc(&self) -> bool {
         false
@@ -37,39 +54,44 @@ where
 }
 
 /// Resources are added and removed automatically using the provided builder
-/// functor. If there is no active handlue during bake, the unreferenced resources are
-/// removed.
+/// functors.
 pub struct ManagedResource<T>
 where
     T: Resource<Config = Self>,
 {
     build: Box<dyn Fn(&ResourceId) -> T>,
+    auto_gc: bool,
 }
 
 impl<T> ManagedResource<T>
 where
     T: Resource<Config = Self>,
 {
-    pub fn new<F: 'static + Fn(&ResourceId) -> T>(build: F) -> Self {
-        Self { build: Box::new(build) }
+    pub fn new<F: 'static + Fn(&ResourceId) -> T>(auto_gc: bool, build: F) -> Self {
+        Self {
+            build: Box::new(build),
+            auto_gc,
+        }
     }
 }
 
-impl<T> ResourceConfig<T> for ManagedResource<T>
+impl<T> ResourceConfig for ManagedResource<T>
 where
     T: Resource<Config = Self>,
 {
+    type Resource = T;
+
     fn auto_build(&self) -> bool {
         true
     }
 
-    fn build(&self, id: &ResourceId) -> T {
+    fn build(&self, id: &ResourceId) -> Self::Resource {
         (self.build)(id)
     }
 
-    fn post_process(&self, _context: &mut ResourceBakeContext<'_, T>) {}
+    fn post_process(&self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
 
     fn auto_gc(&self) -> bool {
-        true
+        self.auto_gc
     }
 }

@@ -37,7 +37,7 @@ fn handle_test_core(case: TestCase) {
 
     let mut resources = Resources::default();
 
-    resources.register::<TestOne>(ManagedResource::new({
+    resources.register::<TestOne>(ManagedResource::new(true, {
         let cnt = build_counter.clone();
         move |id| {
             *cnt.borrow_mut() += 1;

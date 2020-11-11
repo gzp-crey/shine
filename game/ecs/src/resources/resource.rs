@@ -15,7 +15,7 @@ use std::{
 
 /// Blanket trait for resource types.
 pub trait Resource: 'static + Sized {
-    type Config: ResourceConfig<Self> + Sized;
+    type Config: ResourceConfig<Resource = Self>;
 }
 //impl<T> Resource for T where T: 'static {}
 

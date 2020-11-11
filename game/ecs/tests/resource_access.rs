@@ -5,17 +5,17 @@ mod utils;
 
 struct TestOne(String);
 impl Resource for TestOne {
-    type Config = UnmanagedResource;
+    type Config = UnmanagedResource<Self>;
 }
 
 struct TestTwo(String);
 impl Resource for TestTwo {
-    type Config = UnmanagedResource;
+    type Config = UnmanagedResource<Self>;
 }
 
 struct NotSync(*const u8);
 impl Resource for NotSync {
-    type Config = UnmanagedResource;
+    type Config = UnmanagedResource<Self>;
 }
 
 #[derive(Copy, Clone)]
