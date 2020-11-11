@@ -7,4 +7,6 @@ pub mod spscstate;
 pub mod store;
 
 mod error_string;
+mod rwtoken;
 pub use self::error_string::*;
+pub use self::rwtoken::*;

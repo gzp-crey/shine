@@ -1,7 +1,22 @@
-use shine_ecs::resources::{ResourceId, ResourceTag, Resources};
+use shine_ecs::resources::{Resource, ResourceId, ResourceTag, Resources, UnmanagedResource};
 use std::str::FromStr;
 
 mod utils;
+
+struct TestOne(String);
+impl Resource for TestOne {
+    type Config = UnmanagedResource;
+}
+
+struct TestTwo(String);
+impl Resource for TestTwo {
+    type Config = UnmanagedResource;
+}
+
+struct NotSync(*const u8);
+impl Resource for NotSync {
+    type Config = UnmanagedResource;
+}
 
 #[derive(Copy, Clone)]
 enum SimpleTestCase {
@@ -13,17 +28,18 @@ enum SimpleTestCase {
 fn simple_test_core(case: SimpleTestCase) {
     utils::init_logger();
 
-    struct TestOne(String);
-    struct TestTwo(String);
-    struct NotSync(*const u8);
-
     let id = ResourceId::Tag(ResourceTag::from_str("ptr").unwrap());
     let gid = ResourceId::Global;
 
     let mut resources = Resources::default();
-    resources.insert(TestOne("one".to_string()));
-    resources.insert(TestTwo("two".to_string()));
-    resources.insert_with_id(id.clone(), NotSync(std::ptr::null()));
+
+    resources.register::<TestOne>(Default::default());
+    resources.register::<TestTwo>(Default::default());
+    resources.register::<NotSync>(Default::default());
+
+    resources.insert(TestOne("one".to_string())).unwrap();
+    resources.insert(TestTwo("two".to_string())).unwrap();
+    resources.insert_with_id(id.clone(), NotSync(std::ptr::null())).unwrap();
 
     assert!(resources.get_store::<TestOne>().unwrap().contains(&gid));
     assert!(resources.get_store::<TestTwo>().unwrap().contains(&gid));
@@ -79,15 +95,13 @@ fn simple_test() {
 }
 
 #[test]
-#[should_panic(
-    expected = "Resource store for resource_access::simple_test_core::TestTwo already borrowed as immutable"
-)]
+#[should_panic(expected = "Resource store for resource_access::TestTwo already borrowed as immutable")]
 fn simple_test_fail_1() {
     simple_test_core(SimpleTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::simple_test_core::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_access::TestOne already borrowed as immutable")]
 fn simple_test_fail_2() {
     simple_test_core(SimpleTestCase::Panic2);
 }
@@ -102,20 +116,29 @@ enum MultiTestCase {
 fn multi_test_core(case: MultiTestCase) {
     utils::init_logger();
 
-    struct TestOne(String);
-    struct TestTwo(String);
+    let mut resources = Resources::default();
+
+    resources.register::<TestOne>(Default::default());
+    resources.register::<TestTwo>(Default::default());
 
     let ida = ResourceId::from_tag("a").unwrap();
     let idb = ResourceId::from_tag("b").unwrap();
 
-    let mut resources = Resources::default();
-    resources.insert(TestOne("one".to_string()));
-    resources.insert_with_id(ida.clone(), TestOne("one_a".to_string()));
-    resources.insert_with_id(idb.clone(), TestOne("one_b".to_string()));
+    resources.insert(TestOne("one".to_string())).unwrap();
+    resources
+        .insert_with_id(ida.clone(), TestOne("one_a".to_string()))
+        .unwrap();
+    resources
+        .insert_with_id(idb.clone(), TestOne("one_b".to_string()))
+        .unwrap();
 
-    resources.insert(TestTwo("two".to_string()));
-    resources.insert_with_id(ida.clone(), TestTwo("two_a".to_string()));
-    resources.insert_with_id(idb.clone(), TestTwo("two_b".to_string()));
+    resources.insert(TestTwo("two".to_string())).unwrap();
+    resources
+        .insert_with_id(ida.clone(), TestTwo("two_a".to_string()))
+        .unwrap();
+    resources
+        .insert_with_id(idb.clone(), TestTwo("two_b".to_string()))
+        .unwrap();
 
     assert_eq!(resources.get::<TestOne>().unwrap().0, "one");
     assert_eq!(resources.get_with_id::<TestOne>(&ida).unwrap().0, "one_a");
@@ -165,13 +188,13 @@ fn multi_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::multi_test_core::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_access::TestOne already borrowed as immutable")]
 fn multi_test_core_fail_1() {
     multi_test_core(MultiTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::multi_test_core::TestOne already borrowed as mutable")]
+#[should_panic(expected = "Resource of resource_access::TestOne already borrowed as mutable")]
 fn multi_test_core_fail_2() {
     multi_test_core(MultiTestCase::Panic2);
 }

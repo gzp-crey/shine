@@ -1,4 +1,4 @@
-use crate::resources::ResourceStoreRead;
+use crate::resources::{ResourceConfig, ResourceStoreRead};
 use std::{
     any,
     cell::UnsafeCell,
@@ -11,8 +11,10 @@ use std::{
 };
 
 /// Blanket trait for resource types.
-pub trait Resource: 'static {}
-impl<T> Resource for T where T: 'static {}
+pub trait Resource: 'static + Sized {
+    type Config: ResourceConfig<Self> + Sized;
+}
+//impl<T> Resource for T where T: 'static {}
 
 /// Storage of single resource instance
 pub(crate) struct ResourceCell<T: Resource> {
@@ -95,7 +97,7 @@ impl<T: Resource> ResourceCell<T> {
         self.resource.into_inner()
     }
 
-    pub fn hash_handle(&self) -> bool {
+    pub fn has_handle(&self) -> bool {
         self.handle_count.load(atomic::Ordering::SeqCst) > 0
     }
 

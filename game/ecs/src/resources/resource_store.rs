@@ -43,13 +43,13 @@ impl<'store, T: Resource> ResourceBakeContext<'store, T> {
 /// Store resources of the same type (with different id)
 pub(crate) struct ResourceStore<T: Resource> {
     generation: usize,
-    config: Box<dyn ResourceConfig<T>>,
+    config: <T as Resource>::Config,
     resource_map: HashMap<ResourceId, Arc<ResourceCell<T>>>,
     pending: Mutex<HashMap<ResourceId, Arc<ResourceCell<T>>>>,
 }
 
 impl<T: Resource> ResourceStore<T> {
-    fn new(config: Box<dyn ResourceConfig<T>>) -> Self {
+    fn new(config: <T as Resource>::Config) -> Self {
         Self {
             generation: STORE_UNIQUE_ID.fetch_add(1, atomic::Ordering::SeqCst),
             resource_map: Default::default(),
@@ -134,7 +134,7 @@ impl<T: Resource> ResourceStore<T> {
             self.resource_map.extend(pending.drain());
         }
         if self.config.auto_gc() {
-            self.resource_map.retain(|_, entry| entry.hash_handle());
+            self.resource_map.retain(|_, entry| entry.has_handle());
         }
         self.config.post_process(&mut ResourceBakeContext {
             generation: self.generation,
@@ -150,7 +150,7 @@ pub(crate) struct ResourceStoreCell<T: Resource> {
 }
 
 impl<T: Resource> ResourceStoreCell<T> {
-    pub fn new(config: Box<dyn ResourceConfig<T>>) -> Self {
+    pub fn new(config: <T as Resource>::Config) -> Self {
         Self {
             store: UnsafeCell::new(ResourceStore::new(config)),
             borrow_state: AtomicIsize::new(0),
@@ -273,7 +273,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         let store = self.clone();
         let cell = store
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
         Ok(ResourceRead::new(store, cell))
     }
 
@@ -287,7 +287,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             .map(|id| {
                 store
                     .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))
+                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiRead::new(store, cells))
@@ -301,7 +301,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         let store = self.clone();
         let cell = store
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
         Ok(ResourceWrite::new(store, cell))
     }
 
@@ -315,7 +315,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             .map(|id| {
                 store
                     .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))
+                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiWrite::new(store, cells))
@@ -324,7 +324,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
     pub fn get_handle(&self, id: &ResourceId) -> Result<ResourceHandle<T>, ECSError> {
         let cell = self
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), Some(id.clone())))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
         Ok(ResourceHandle::new(self.generation(), &cell, id))
     }
 
@@ -334,7 +334,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         } else if let Some(cell) = handle.upgrade() {
             Ok(ResourceRead::new(self.clone(), cell))
         } else {
-            Err(ECSError::ResourceNotFound(any::type_name::<T>().into(), None))
+            Err(ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))
         }
     }
 
@@ -344,7 +344,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         } else if let Some(cell) = handle.upgrade() {
             Ok(ResourceWrite::new(self.clone(), cell))
         } else {
-            Err(ECSError::ResourceNotFound(any::type_name::<T>().into(), None))
+            Err(ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))
         }
     }
 }
