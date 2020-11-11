@@ -1,9 +1,6 @@
-use crate::{
-    core::RWToken,
-    resources::{ResourceConfig, ResourceStoreRead},
-};
+use crate::{core::RWToken, resources::ResourceStoreRead};
 use std::{
-    any,
+    any::type_name,
     cell::UnsafeCell,
     fmt,
     ops::{Deref, DerefMut, Index, IndexMut},
@@ -14,14 +11,12 @@ use std::{
 };
 
 /// Blanket trait for resource types.
-pub trait Resource: 'static + Sized {
-    type Config: ResourceConfig<Resource = Self>;
-}
-//impl<T> Resource for T where T: 'static {}
+pub trait Resource: 'static + Sized {}
+impl<T> Resource for T where T: 'static {}
 
 /// Storage of single resource instance
 pub(crate) struct ResourceCell<T: Resource> {
-    resource: UnsafeCell<T>,
+    resource: UnsafeCell<Option<T>>,
     rw_token: RWToken,
     handle_count: AtomicUsize,
 }
@@ -30,18 +25,48 @@ unsafe impl<T: Resource> Send for ResourceCell<T> {}
 unsafe impl<T: Resource> Sync for ResourceCell<T> {}
 
 impl<T: Resource> ResourceCell<T> {
-    pub fn new(resource: T) -> Arc<Self> {
+    pub fn new_occupied(resource: T) -> Arc<Self> {
         Arc::new(ResourceCell {
-            resource: UnsafeCell::new(resource),
+            resource: UnsafeCell::new(Some(resource)),
             handle_count: AtomicUsize::new(0),
             rw_token: RWToken::new(),
         })
     }
 
+    /// Creates an empty, write locked resource cell .
+    pub fn new_empty() -> Arc<Self> {
+        Arc::new(ResourceCell {
+            resource: UnsafeCell::new(None),
+            handle_count: AtomicUsize::new(0),
+            rw_token: RWToken::new_write_locked(),
+        })
+    }
+
+    /// Removes the resource form a cell leaving it empty (and write locked)
+    /// Types which are !Send should only be retrieved only on the thread which owns the resource collection.
+    pub unsafe fn take(&self) -> T {
+        self.write_lock();
+        // safety
+        //  rw_token ensures the appropriate lock
+        let res = &mut *self.resource.get();
+        res.take().unwrap()
+    }
+
+    /// Set the resource of an empty cell and release the write lock
+    pub unsafe fn set(&self, resource: T) {
+        debug_assert!(self.rw_token.is_write());
+        // safety
+        //  rw_token ensures the appropriate lock
+        let res = &mut *self.resource.get();
+        debug_assert!(res.is_none());
+        *res = Some(resource);
+        self.rw_token.write_unlock();
+    }
+
     pub fn read_lock(&self) {
         self.rw_token
             .try_read_lock()
-            .expect(&format!("Resource of {}", any::type_name::<T>()));
+            .unwrap_or_else(|err| panic!("Immutable borrow of a resource [{}] failed: {}", type_name::<T>(), err));
     }
 
     pub fn read_unlock(&self) {
@@ -55,13 +80,13 @@ impl<T: Resource> ResourceCell<T> {
         debug_assert!(self.rw_token.is_read());
         // safety:
         //  rw_token ensures the appropriate lock
-        &*self.resource.get()
+        (&*self.resource.get()).as_ref().unwrap()
     }
 
     pub fn write_lock(&self) {
         self.rw_token
             .try_write_lock()
-            .expect(&format!("Resource of {}", any::type_name::<T>()));
+            .unwrap_or_else(|err| panic!("Mutable borrow of a resource [{}] failed: {}", type_name::<T>(), err))
     }
 
     pub fn write_unlock(&self) {
@@ -76,12 +101,7 @@ impl<T: Resource> ResourceCell<T> {
         debug_assert!(self.rw_token.is_write());
         // safety:
         // rw_state ensures the appropriate lock
-        &mut *self.resource.get()
-    }
-
-    pub fn take(self) -> T {
-        debug_assert!(self.rw_token.is_write());
-        self.resource.into_inner()
+        (&mut *self.resource.get()).as_mut().unwrap()
     }
 
     pub fn has_handle(&self) -> bool {

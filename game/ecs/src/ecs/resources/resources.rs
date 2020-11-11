@@ -371,12 +371,6 @@ impl Resources {
         Ok(())
     }
 
-    /*/// Inserts the instance of `T` for each system. As resource is created on
-    /// demand when requested, T have to implement Default.
-    pub fn insert_local<T: Default + Resource>(&mut self) {
-        unimplemented!()
-    }*/
-
     fn contains_impl<T: Resource>(&self, id: ResourceId) -> bool {
         self.internal.contains(&ResourceHandle::new::<T>(id))
     }

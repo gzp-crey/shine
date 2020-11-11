@@ -7,7 +7,7 @@ use crate::{
     ECSError,
 };
 use std::{
-    any,
+    any::type_name,
     cell::UnsafeCell,
     collections::HashMap,
     sync::{
@@ -44,13 +44,13 @@ impl<'store, T: Resource> ResourceBakeContext<'store, T> {
 /// Store resources of the same type (with different id)
 pub(crate) struct ResourceStore<T: Resource> {
     generation: usize,
-    config: <T as Resource>::Config,
+    config: Box<dyn ResourceConfig<Resource = T>>,
     resource_map: HashMap<ResourceId, Arc<ResourceCell<T>>>,
     pending: Mutex<HashMap<ResourceId, Arc<ResourceCell<T>>>>,
 }
 
 impl<T: Resource> ResourceStore<T> {
-    fn new(config: <T as Resource>::Config) -> Self {
+    fn new(config: Box<dyn ResourceConfig<Resource = T>>) -> Self {
         Self {
             generation: STORE_UNIQUE_ID.fetch_add(1, atomic::Ordering::SeqCst),
             resource_map: Default::default(),
@@ -80,7 +80,7 @@ impl<T: Resource> ResourceStore<T> {
     /// Resources which are `!Send` must be inserted only on the thread owning the resources.
     pub unsafe fn insert(&mut self, id: ResourceId, resource: T) -> Option<T> {
         let out = self.remove(&id);
-        self.resource_map.insert(id, ResourceCell::new(resource));
+        self.resource_map.insert(id, ResourceCell::new_occupied(resource));
         out
     }
 
@@ -97,10 +97,7 @@ impl<T: Resource> ResourceStore<T> {
         // to rust's borrow checker (have a &self and &mut self at the same time)
         if let Some(cell) = cell {
             Some(match Arc::try_unwrap(cell) {
-                Ok(cell) => {
-                    cell.write_lock();
-                    cell.take()
-                }
+                Ok(cell) => cell.take(),
                 Err(_) => panic!("Internal error, multiple ref exists to the same resource"),
             })
         } else {
@@ -114,12 +111,16 @@ impl<T: Resource> ResourceStore<T> {
     /// accessed (created) here.
     pub unsafe fn get_cell(&self, id: &ResourceId) -> Option<Arc<ResourceCell<T>>> {
         self.resource_map.get(id).cloned().or_else(|| {
-            let config = &self.config;
             if self.config.auto_build() {
+                let config = &self.config;
+                let generation = self.generation();
                 let mut pending = self.pending.lock().unwrap();
-                let cell = pending
-                    .entry(id.clone())
-                    .or_insert_with_key(|id| ResourceCell::new(config.build(id)));
+                let cell = pending.entry(id.clone()).or_insert_with_key(|id| {
+                    let cell = ResourceCell::new_empty();
+                    let handle = ResourceHandle::new(generation, &cell, &id);
+                    cell.set(config.build(handle, id));
+                    cell
+                });
                 Some(cell.clone())
             } else {
                 None
@@ -140,7 +141,7 @@ impl<T: Resource> ResourceStore<T> {
         if self.config.auto_gc() {
             self.resource_map.retain(|_, entry| entry.has_handle());
         }
-        self.config.post_process(&mut ResourceBakeContext {
+        self.config.post_bake(&mut ResourceBakeContext {
             generation: self.generation,
             resource_map: &mut self.resource_map,
         });
@@ -154,7 +155,7 @@ pub(crate) struct ResourceStoreCell<T: Resource> {
 }
 
 impl<T: Resource> ResourceStoreCell<T> {
-    pub fn new(config: <T as Resource>::Config) -> Self {
+    pub fn new(config: Box<dyn ResourceConfig<Resource = T>>) -> Self {
         Self {
             store: UnsafeCell::new(ResourceStore::new(config)),
             rw_token: RWToken::new(),
@@ -162,9 +163,13 @@ impl<T: Resource> ResourceStoreCell<T> {
     }
 
     pub fn read_lock(&self) {
-        self.rw_token
-            .try_read_lock()
-            .expect(&format!("Resource store for {}", any::type_name::<T>()));
+        self.rw_token.try_read_lock().unwrap_or_else(|err| {
+            panic!(
+                "Immutable borrow of a resource store [{}] failed: {}",
+                type_name::<T>(),
+                err
+            )
+        });
     }
 
     pub fn read_unlock(&self) {
@@ -181,9 +186,13 @@ impl<T: Resource> ResourceStoreCell<T> {
     }
 
     pub fn write_lock(&self) {
-        self.rw_token
-            .try_write_lock()
-            .expect(&format!("Resource store for {}", any::type_name::<T>()));
+        self.rw_token.try_write_lock().unwrap_or_else(|err| {
+            panic!(
+                "Mutable borrow of a resource store [{}] failed: {}",
+                type_name::<T>(),
+                err
+            )
+        });
     }
 
     pub fn write_unlock(&self) {
@@ -240,6 +249,11 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         self.store().generation()
     }
 
+    /// Call extension operation on config
+    pub fn config(&self) -> &dyn ResourceConfig<Resource = T> {
+        &*self.store().config
+    }
+
     pub fn contains(&self, id: &ResourceId) -> bool {
         self.store().contains(id)
     }
@@ -252,7 +266,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         let store = self.clone();
         let cell = store
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.clone()))?;
         Ok(ResourceRead::new(store, cell))
     }
 
@@ -266,7 +280,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             .map(|id| {
                 store
                     .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
+                    .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.clone()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiRead::new(store, cells))
@@ -280,7 +294,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         let store = self.clone();
         let cell = store
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.clone()))?;
         Ok(ResourceWrite::new(store, cell))
     }
 
@@ -294,7 +308,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
             .map(|id| {
                 store
                     .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))
+                    .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.clone()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiWrite::new(store, cells))
@@ -303,7 +317,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
     pub fn get_handle(&self, id: &ResourceId) -> Result<ResourceHandle<T>, ECSError> {
         let cell = self
             .get_cell(id)
-            .ok_or_else(|| ECSError::ResourceNotFound(any::type_name::<T>().into(), id.clone()))?;
+            .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.clone()))?;
         Ok(ResourceHandle::new(self.generation(), &cell, id))
     }
 
@@ -313,7 +327,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         } else if let Some(cell) = handle.upgrade() {
             Ok(ResourceRead::new(self.clone(), cell))
         } else {
-            Err(ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))
+            Err(ECSError::ResourceTypeNotFound(type_name::<T>().into()))
         }
     }
 
@@ -323,7 +337,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         } else if let Some(cell) = handle.upgrade() {
             Ok(ResourceWrite::new(self.clone(), cell))
         } else {
-            Err(ECSError::ResourceTypeNotFound(any::type_name::<T>().into()))
+            Err(ECSError::ResourceTypeNotFound(type_name::<T>().into()))
         }
     }
 }

@@ -5,7 +5,8 @@
 
 use crate::resources::{Resource, ResourceCell, ResourceId};
 use std::{
-    any, fmt,
+    any::type_name,
+    fmt,
     sync::{Arc, Weak},
 };
 
@@ -77,12 +78,12 @@ impl<T: Resource> fmt::Debug for ResourceHandle<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ResourceHandle")
             .field(&self.id)
-            .field(&any::type_name::<T>().to_owned())
+            .field(&type_name::<T>().to_owned())
             .finish()
     }
 
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ResourceHandle").field(any::type_name::<T>()).finish()
+        f.debug_tuple("ResourceHandle").field(type_name::<T>()).finish()
     }
 }

@@ -1,40 +1,88 @@
-use crate::resources::{Resource, ResourceHandle};
+use crate::resources::{Resource, ResourceBakeContext, ResourceConfig, ResourceHandle, ResourceId};
 use futures::{
-    channel::mpsc::{UnboundedReceiver, UnboundedSender},
+    channel::mpsc::{self, UnboundedReceiver, UnboundedSender},
     SinkExt, StreamExt,
 };
-use std::future::Future;
+use std::{any::Any, future::Future};
+
+/// Context to request (async) resource load
+pub struct ResourceLoadRequester<T: Resource, Request> {
+    request_sender: UnboundedSender<(ResourceHandle<T>, Request)>,
+}
+
+impl<T: Resource, Request> ResourceLoadRequester<T, Request> {
+    pub fn send_request(&self, handle: ResourceHandle<T>, request: Request) {
+        log::trace!("[{:?}] Sending load request", handle);
+        if let Err(err) = self.request_sender.unbounded_send((handle, request)) {
+            log::info!("Failed to notify load worker: {:?}", err);
+        }
+    }
+}
+
+/// Context to respond to the load request with the result of loading
+pub struct ResourceLoadResponder<T: Resource, Response> {
+    response_sender: UnboundedSender<(ResourceHandle<T>, Response)>,
+}
+
+impl<T: Resource, Response> ResourceLoadResponder<T, Response> {
+    pub fn send_response(&self, handle: ResourceHandle<T>, response: Response) {
+        log::trace!("[{:?}] Sending load response", handle);
+        if let Err(err) = self.response_sender.unbounded_send((handle, response)) {
+            log::info!("Failed to notify store: {:?}", err);
+        }
+    }
+}
 
 /// Manage resource load request-responses, storage side
 pub struct ResourceLoader<T, Request, Response>
 where
     T: Resource,
-    Request: Send,
-    Response: Send,
+    Request: 'static + Send,
+    Response: 'static + Send,
 {
-    pub(crate) request_sender: UnboundedSender<(ResourceHandle<T>, Request)>,
-    pub(crate) response_sender: UnboundedSender<(ResourceHandle<T>, Response)>,
-    pub(crate) response_receiver: UnboundedReceiver<(ResourceHandle<T>, Response)>,
+    request_sender: UnboundedSender<(ResourceHandle<T>, Request)>,
+    response_receiver: UnboundedReceiver<(ResourceHandle<T>, Response)>,
+    build: Box<dyn Fn(ResourceLoadRequester<T, Request>, ResourceHandle<T>, &ResourceId) -> T>,
+    response: Box<dyn Fn(ResourceLoadRequester<T, Request>, ResourceHandle<T>, &mut T, Response)>,
 }
 
 impl<T, Request, Response> ResourceLoader<T, Request, Response>
 where
     T: Resource,
-    Request: Send,
-    Response: Send,
+    Request: 'static + Send,
+    Response: 'static + Send,
 {
+    pub fn new<FBuild, FLoad, FLoadFut, FResponse>(build: FBuild, load: FLoad, response: FResponse) -> Self
+    where
+        FBuild: 'static + Fn(ResourceLoadRequester<T, Request>, ResourceHandle<T>, &ResourceId) -> T,
+        FLoadFut: 'static + Future<Output = Option<Response>>,
+        FLoad: 'static + Send + Fn(&ResourceHandle<T>, Request) -> FLoadFut,
+        FResponse: 'static + Fn(ResourceLoadRequester<T, Request>, ResourceHandle<T>, &mut T, Response),
+    {
+        let (request_sender, request_receiver) = mpsc::unbounded();
+        let (response_sender, response_receiver) = mpsc::unbounded();
+
+        ResourceLoadWorker {
+            request_receiver,
+            response_sender,
+            load,
+        }
+        .start();
+
+        Self {
+            request_sender,
+            response_receiver,
+            build: Box::new(build),
+            response: Box::new(response),
+        }
+    }
+
     pub fn request(&mut self, handle: ResourceHandle<T>, request: Request) {
         log::debug!("Request loading for {:?}", handle);
         if let Err(err) = self.request_sender.unbounded_send((handle, request)) {
             log::warn!("Failed to send request: {:?}", err);
         }
     }
-
-    /*pub fn responder(&self) -> AsyncLoadResponder<D> {
-        AsyncLoadResponder {
-            response_sender: self.response_sender.clone(),
-        }
-    }*/
 
     fn next_response(&mut self) -> Option<(ResourceHandle<T>, Response)> {
         match self.response_receiver.try_next() {
@@ -47,62 +95,63 @@ where
         }
     }
 }
-/*
-/// Trait to create the loading future.
-pub trait AsyncLoader<T, Request, Response>: 'static + Send + Sync
-where T : Resource,
-    Request : Send,
-    Response: Send
-{
-    fn load<'a>(
-        &'a mut self,
-        load_token: LoadToken<D>,
-        request: D::LoadRequest,
-    ) -> Pin<Box<dyn 'a + std::future::Future<Output = Option<D::LoadResponse>>>>;
-}
-*/
-/*
-/// Wrapper to send load responses.
-pub struct AsyncLoadResponder<D>
-where
-    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
-{
-    pub(crate) response_sender: UnboundedSender<(LoadToken<D>, D::LoadResponse)>,
-}
 
-impl<D> AsyncLoadResponder<D>
+impl<T, Request, Response> ResourceConfig for ResourceLoader<T, Request, Response>
 where
-    D: OnLoad<LoadHandler = AsyncLoadHandler<D>>,
+    T: Resource,
+    Request: 'static + Send,
+    Response: 'static + Send,
 {
-    pub fn send_response(&self, load_token: LoadToken<D>, response: D::LoadResponse) {
-        log::trace!("[{:?}] Sending load response", load_token);
-        if let Err(err) = self.response_sender.unbounded_send((load_token, response)) {
-            log::info!("Failed to notify store: {:?}", err);
-        }
+    type Resource = T;
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn auto_build(&self) -> bool {
+        true
+    }
+
+    fn build(&self, handle: ResourceHandle<T>, id: &ResourceId) -> Self::Resource {
+        (self.build)(
+            ResourceLoadRequester {
+                request_sender: self.request_sender.clone(),
+            },
+            handle,
+            id,
+        )
+    }
+
+    fn post_bake(&self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {
+        unimplemented!()
+    }
+
+    fn auto_gc(&self) -> bool {
+        true
     }
 }
-*/
+
 /// Handle resource loading request, loading side.
-pub struct ResourceLoadWorker<T, Request, Response, Load, Fut>
+struct ResourceLoadWorker<T, Request, Response, Load, LoadFut>
 where
     T: Resource,
     Request: 'static + Send,
     Response: 'static + Send,
-    Fut: 'static + Future<Output = Option<Response>>,
-    Load: 'static + Fn(&ResourceHandle<T>, Request) -> Fut + Send,
+    LoadFut: 'static + Future<Output = Option<Response>>,
+    Load: 'static + Send + Fn(&ResourceHandle<T>, Request) -> LoadFut,
 {
-    pub(crate) request_receiver: UnboundedReceiver<(ResourceHandle<T>, Request)>,
-    pub(crate) response_sender: UnboundedSender<(ResourceHandle<T>, Response)>,
-    pub(crate) load: Load,
+    request_receiver: UnboundedReceiver<(ResourceHandle<T>, Request)>,
+    response_sender: UnboundedSender<(ResourceHandle<T>, Response)>,
+    load: Load,
 }
 
-impl<T, Request, Response, Load, Fut> ResourceLoadWorker<T, Request, Response, Load, Fut>
+impl<T, Request, Response, Load, LoadFut> ResourceLoadWorker<T, Request, Response, Load, LoadFut>
 where
     T: Resource,
     Request: 'static + Send,
     Response: 'static + Send,
-    Fut: 'static + Future<Output = Option<Response>>,
-    Load: 'static + Fn(&ResourceHandle<T>, Request) -> Fut + Send,
+    LoadFut: 'static + Future<Output = Option<Response>>,
+    Load: 'static + Send + Fn(&ResourceHandle<T>, Request) -> LoadFut,
 {
     async fn handle_one(&mut self) -> bool {
         let (handle, request) = match self.request_receiver.next().await {

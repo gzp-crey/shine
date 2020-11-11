@@ -1,4 +1,4 @@
-use shine_ecs::resources::{ManagedResource, Resource, ResourceId, Resources};
+use shine_ecs::resources::{ManagedResource, ResourceId, Resources};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -6,10 +6,6 @@ mod utils;
 
 #[derive(Debug)]
 struct TestOne(String, usize);
-
-impl Resource for TestOne {
-    type Config = ManagedResource<Self>;
-}
 
 impl TestOne {
     #[inline]
@@ -37,7 +33,7 @@ fn handle_test_core(case: TestCase) {
 
     let mut resources = Resources::default();
 
-    resources.register::<TestOne>(ManagedResource::new(true, {
+    resources.register(ManagedResource::new(true, {
         let cnt = build_counter.clone();
         move |id| {
             *cnt.borrow_mut() += 1;
@@ -124,19 +120,25 @@ fn handle_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_handle::TestOne: AlreadyReadLocked")]
+#[should_panic(
+    expected = "Mutable borrow of a resource [resource_handle::TestOne] failed: Target already borrowed as immutable"
+)]
 fn handle_test_fail_1() {
     handle_test_core(TestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_handle::TestOne: AlreadyWriteLocked")]
+#[should_panic(
+    expected = "Immutable borrow of a resource [resource_handle::TestOne] failed: Target already borrowed as mutable"
+)]
 fn handle_test_fail_2() {
     handle_test_core(TestCase::Panic2);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_handle::TestOne: AlreadyWriteLocked")]
+#[should_panic(
+    expected = "Mutable borrow of a resource [resource_handle::TestOne] failed: Target already borrowed as mutable"
+)]
 fn handle_test_fail_3() {
     handle_test_core(TestCase::Panic3);
 }

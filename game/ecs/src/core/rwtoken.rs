@@ -19,6 +19,12 @@ const WRITE_BIT: usize = !(usize::max_value() >> 1);
 /// structure.
 pub struct RWToken(AtomicUsize);
 
+impl Default for RWToken {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RWToken {
     pub fn new() -> Self {
         Self(AtomicUsize::new(0))

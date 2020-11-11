@@ -1,22 +1,15 @@
-use shine_ecs::resources::{Resource, ResourceId, ResourceTag, Resources, UnmanagedResource};
-use std::str::FromStr;
+use shine_ecs::resources::{
+    ResourceBakeContext, ResourceConfig, ResourceHandle, ResourceId, ResourceTag, Resources, UnmanagedResource,
+};
+use std::{any::Any, str::FromStr};
 
 mod utils;
 
 struct TestOne(String);
-impl Resource for TestOne {
-    type Config = UnmanagedResource<Self>;
-}
 
 struct TestTwo(String);
-impl Resource for TestTwo {
-    type Config = UnmanagedResource<Self>;
-}
 
 struct NotSync(*const u8);
-impl Resource for NotSync {
-    type Config = UnmanagedResource<Self>;
-}
 
 #[derive(Copy, Clone)]
 enum SimpleTestCase {
@@ -24,6 +17,39 @@ enum SimpleTestCase {
     Panic1,
     Panic2,
 }
+
+struct TestOneExtension(usize);
+
+impl ResourceConfig for TestOneExtension {
+    type Resource = TestOne;
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn auto_build(&self) -> bool {
+        false
+    }
+
+    fn build(&self, _handle: ResourceHandle<Self::Resource>, _id: &ResourceId) -> Self::Resource {
+        unreachable!()
+    }
+
+    fn post_bake(&self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {
+        /*nop*/
+    }
+
+    fn auto_gc(&self) -> bool {
+        false
+    }
+}
+
+pub trait ExtTest {
+    fn foo() -> usize {
+        12
+    }
+}
+impl ExtTest for TestOneExtension {}
 
 fn simple_test_core(case: SimpleTestCase) {
     utils::init_logger();
@@ -33,9 +59,9 @@ fn simple_test_core(case: SimpleTestCase) {
 
     let mut resources = Resources::default();
 
-    resources.register::<TestOne>(Default::default());
-    resources.register::<TestTwo>(Default::default());
-    resources.register::<NotSync>(Default::default());
+    resources.register(UnmanagedResource::<TestOne>::default());
+    resources.register(UnmanagedResource::<TestTwo>::default());
+    resources.register(UnmanagedResource::<NotSync>::default());
 
     resources.insert(TestOne("one".to_string())).unwrap();
     resources.insert(TestTwo("two".to_string())).unwrap();
@@ -95,13 +121,17 @@ fn simple_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource store for resource_access::TestTwo: AlreadyReadLocked")]
+#[should_panic(
+    expected = "Mutable borrow of a resource store [resource_access::TestTwo] failed: Target already borrowed as immutable"
+)]
 fn simple_test_fail_1() {
     simple_test_core(SimpleTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::TestOne: AlreadyReadLocked")]
+#[should_panic(
+    expected = "Mutable borrow of a resource [resource_access::TestOne] failed: Target already borrowed as immutable"
+)]
 fn simple_test_fail_2() {
     simple_test_core(SimpleTestCase::Panic2);
 }
@@ -118,8 +148,8 @@ fn multi_test_core(case: MultiTestCase) {
 
     let mut resources = Resources::default();
 
-    resources.register::<TestOne>(Default::default());
-    resources.register::<TestTwo>(Default::default());
+    resources.register(TestOneExtension(11));
+    resources.register(UnmanagedResource::<TestTwo>::default());
 
     let ida = ResourceId::from_tag("a").unwrap();
     let idb = ResourceId::from_tag("b").unwrap();
@@ -147,6 +177,16 @@ fn multi_test_core(case: MultiTestCase) {
     assert_eq!(resources.get_with_id::<TestTwo>(&idb).unwrap().0, "two_b");
 
     let test_one_store = resources.get_store::<TestOne>().unwrap();
+
+    assert_eq!(
+        test_one_store
+            .config()
+            .as_any()
+            .downcast_ref::<TestOneExtension>()
+            .unwrap()
+            .0,
+        11
+    );
 
     {
         log::info!("get after get");
@@ -188,13 +228,17 @@ fn multi_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::TestOne: AlreadyReadLocked")]
+#[should_panic(
+    expected = "Mutable borrow of a resource [resource_access::TestOne] failed: Target already borrowed as immutable"
+)]
 fn multi_test_core_fail_1() {
     multi_test_core(MultiTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::TestOne: AlreadyWriteLocked")]
+#[should_panic(
+    expected = "Immutable borrow of a resource [resource_access::TestOne] failed: Target already borrowed as mutable"
+)]
 fn multi_test_core_fail_2() {
     multi_test_core(MultiTestCase::Panic2);
 }
