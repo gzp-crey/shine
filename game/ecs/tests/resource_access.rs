@@ -95,13 +95,13 @@ fn simple_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource store for resource_access::TestTwo already borrowed as immutable")]
+#[should_panic(expected = "Resource store for resource_access::TestTwo: AlreadyReadLocked")]
 fn simple_test_fail_1() {
     simple_test_core(SimpleTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_access::TestOne: AlreadyReadLocked")]
 fn simple_test_fail_2() {
     simple_test_core(SimpleTestCase::Panic2);
 }
@@ -188,13 +188,13 @@ fn multi_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_access::TestOne: AlreadyReadLocked")]
 fn multi_test_core_fail_1() {
     multi_test_core(MultiTestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_access::TestOne already borrowed as mutable")]
+#[should_panic(expected = "Resource of resource_access::TestOne: AlreadyWriteLocked")]
 fn multi_test_core_fail_2() {
     multi_test_core(MultiTestCase::Panic2);
 }

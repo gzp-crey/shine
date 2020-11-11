@@ -1,4 +1,5 @@
 use crate::{
+    core::RWToken,
     resources::{
         Resource, ResourceCell, ResourceConfig, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite,
         ResourceRead, ResourceWrite,
@@ -10,7 +11,7 @@ use std::{
     cell::UnsafeCell,
     collections::HashMap,
     sync::{
-        atomic::{self, AtomicIsize, AtomicUsize},
+        atomic::{self, AtomicUsize},
         Arc, Mutex,
     },
 };
@@ -92,11 +93,14 @@ impl<T: Resource> ResourceStore<T> {
         let cell = self.pending.lock().unwrap().remove(&id);
         let cell = cell.or_else(|| self.resource_map.remove(&id));
 
+        // No accessor should exits as that would require a &self which contradicts to
+        // to rust's borrow checker (have a &self and &mut self at the same time)
         if let Some(cell) = cell {
-            // No accessor may exits as that would require a &self which contradicts to
-            // to rust's borrow checker (have a &self and &mut self at the same time)
             Some(match Arc::try_unwrap(cell) {
-                Ok(cell) => cell.take(),
+                Ok(cell) => {
+                    cell.write_lock();
+                    cell.take()
+                }
                 Err(_) => panic!("Internal error, multiple ref exists to the same resource"),
             })
         } else {
@@ -146,77 +150,52 @@ impl<T: Resource> ResourceStore<T> {
 /// Storage of a ResourceStore
 pub(crate) struct ResourceStoreCell<T: Resource> {
     store: UnsafeCell<ResourceStore<T>>,
-    borrow_state: AtomicIsize,
+    rw_token: RWToken,
 }
 
 impl<T: Resource> ResourceStoreCell<T> {
     pub fn new(config: <T as Resource>::Config) -> Self {
         Self {
             store: UnsafeCell::new(ResourceStore::new(config)),
-            borrow_state: AtomicIsize::new(0),
+            rw_token: RWToken::new(),
         }
     }
 
     pub fn read_lock(&self) {
-        loop {
-            let read = self.borrow_state.load(atomic::Ordering::SeqCst);
-            if read < 0 {
-                panic!(
-                    "Resource store for {} already borrowed as mutable",
-                    any::type_name::<T>()
-                );
-            }
-
-            if self
-                .borrow_state
-                .compare_and_swap(read, read + 1, atomic::Ordering::SeqCst)
-                == read
-            {
-                break;
-            }
-        }
+        self.rw_token
+            .try_read_lock()
+            .expect(&format!("Resource store for {}", any::type_name::<T>()));
     }
 
     pub fn read_unlock(&self) {
-        let p = self.borrow_state.fetch_sub(1, atomic::Ordering::SeqCst);
-        debug_assert!(p > 0);
+        self.rw_token.read_unlock();
     }
 
     #[inline]
     pub fn read(&self) -> &ResourceStore<T> {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) > 0);
+        debug_assert!(self.rw_token.is_read());
         // safety:
-        //  borrow_state ensures the appropriate lock
+        //  rw_token ensures the appropriate lock
         //  the store itself is Send and Sync (safety of ResourceCell takes care for for T)
         unsafe { &*self.store.get() }
     }
 
     pub fn write_lock(&self) {
-        let borrowed = self.borrow_state.compare_and_swap(0, -1, atomic::Ordering::SeqCst);
-        match borrowed {
-            0 => {}
-            x if x < 0 => panic!(
-                "Resource store for {} already borrowed as mutable",
-                any::type_name::<T>()
-            ),
-            _ => panic!(
-                "Resource store for {} already borrowed as immutable",
-                any::type_name::<T>()
-            ),
-        }
+        self.rw_token
+            .try_write_lock()
+            .expect(&format!("Resource store for {}", any::type_name::<T>()));
     }
 
     pub fn write_unlock(&self) {
-        let p = self.borrow_state.fetch_add(1, atomic::Ordering::SeqCst);
-        debug_assert!(p == -1);
+        self.rw_token.write_unlock();
     }
 
     #[inline]
     #[allow(clippy::mut_from_ref)]
     pub fn write(&self) -> &mut ResourceStore<T> {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) < 0);
+        debug_assert!(self.rw_token.is_write());
         // safety:
-        //  borrow_state ensures the appropriate lock
+        //  rw_token ensures the appropriate lock
         //  the store itself is Send and Sync (safety of ResourceCell takes care of T)
         unsafe { &mut *self.store.get() }
     }

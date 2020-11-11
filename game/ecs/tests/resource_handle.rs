@@ -124,19 +124,19 @@ fn handle_test() {
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_handle::TestOne already borrowed as immutable")]
+#[should_panic(expected = "Resource of resource_handle::TestOne: AlreadyReadLocked")]
 fn handle_test_fail_1() {
     handle_test_core(TestCase::Panic1);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_handle::TestOne already borrowed as mutable")]
+#[should_panic(expected = "Resource of resource_handle::TestOne: AlreadyWriteLocked")]
 fn handle_test_fail_2() {
     handle_test_core(TestCase::Panic2);
 }
 
 #[test]
-#[should_panic(expected = "Resource of resource_handle::TestOne already borrowed as mutable")]
+#[should_panic(expected = "Resource of resource_handle::TestOne: AlreadyWriteLocked")]
 fn handle_test_fail_3() {
     handle_test_core(TestCase::Panic3);
 }

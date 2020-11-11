@@ -1,11 +1,14 @@
-use crate::resources::{ResourceConfig, ResourceStoreRead};
+use crate::{
+    core::RWToken,
+    resources::{ResourceConfig, ResourceStoreRead},
+};
 use std::{
     any,
     cell::UnsafeCell,
     fmt,
     ops::{Deref, DerefMut, Index, IndexMut},
     sync::{
-        atomic::{self, AtomicIsize, AtomicUsize},
+        atomic::{self, AtomicUsize},
         Arc,
     },
 };
@@ -19,8 +22,8 @@ pub trait Resource: 'static + Sized {
 /// Storage of single resource instance
 pub(crate) struct ResourceCell<T: Resource> {
     resource: UnsafeCell<T>,
+    rw_token: RWToken,
     handle_count: AtomicUsize,
-    borrow_state: AtomicIsize,
 }
 
 unsafe impl<T: Resource> Send for ResourceCell<T> {}
@@ -31,54 +34,38 @@ impl<T: Resource> ResourceCell<T> {
         Arc::new(ResourceCell {
             resource: UnsafeCell::new(resource),
             handle_count: AtomicUsize::new(0),
-            borrow_state: AtomicIsize::new(0),
+            rw_token: RWToken::new(),
         })
     }
 
     pub fn read_lock(&self) {
-        loop {
-            let read = self.borrow_state.load(atomic::Ordering::SeqCst);
-            if read < 0 {
-                panic!("Resource of {} already borrowed as mutable", any::type_name::<T>());
-            }
-
-            if self
-                .borrow_state
-                .compare_and_swap(read, read + 1, atomic::Ordering::SeqCst)
-                == read
-            {
-                break;
-            }
-        }
+        self.rw_token
+            .try_read_lock()
+            .expect(&format!("Resource of {}", any::type_name::<T>()));
     }
 
     pub fn read_unlock(&self) {
-        let p = self.borrow_state.fetch_sub(1, atomic::Ordering::SeqCst);
-        debug_assert!(p > 0);
+        self.rw_token.read_unlock();
     }
 
     /// # Safety
     /// Types which are !Sync should only be accessed on the thread which owns the resource collection.
     #[inline]
     pub unsafe fn read(&self) -> &T {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) > 0);
+        debug_assert!(self.rw_token.is_read());
         // safety:
-        //  borrow_state ensures the appropriate lock
+        //  rw_token ensures the appropriate lock
         &*self.resource.get()
     }
 
     pub fn write_lock(&self) {
-        let borrowed = self.borrow_state.compare_and_swap(0, -1, atomic::Ordering::SeqCst);
-        match borrowed {
-            0 => {}
-            x if x < 0 => panic!("Resource of {} already borrowed as mutable", any::type_name::<T>()),
-            _ => panic!("Resource of {} already borrowed as immutable", any::type_name::<T>()),
-        }
+        self.rw_token
+            .try_write_lock()
+            .expect(&format!("Resource of {}", any::type_name::<T>()));
     }
 
     pub fn write_unlock(&self) {
-        let p = self.borrow_state.fetch_add(1, atomic::Ordering::SeqCst);
-        debug_assert!(p == -1);
+        self.rw_token.write_unlock();
     }
 
     /// # Safety
@@ -86,27 +73,27 @@ impl<T: Resource> ResourceCell<T> {
     #[inline]
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn write(&self) -> &mut T {
-        debug_assert!(self.borrow_state.load(atomic::Ordering::SeqCst) < 0);
+        debug_assert!(self.rw_token.is_write());
         // safety:
-        // borrow_state ensures the appropriate lock
+        // rw_state ensures the appropriate lock
         &mut *self.resource.get()
     }
 
     pub fn take(self) -> T {
-        debug_assert_eq!(self.borrow_state.load(atomic::Ordering::SeqCst), 0);
+        debug_assert!(self.rw_token.is_write());
         self.resource.into_inner()
     }
 
     pub fn has_handle(&self) -> bool {
-        self.handle_count.load(atomic::Ordering::SeqCst) > 0
+        self.handle_count.load(atomic::Ordering::Relaxed) > 0
     }
 
     pub fn add_handle(&self) {
-        self.handle_count.fetch_add(1, atomic::Ordering::SeqCst);
+        self.handle_count.fetch_add(1, atomic::Ordering::Relaxed);
     }
 
     pub fn remove_handle(&self) {
-        self.handle_count.fetch_sub(1, atomic::Ordering::SeqCst);
+        self.handle_count.fetch_sub(1, atomic::Ordering::Relaxed);
     }
 }
 

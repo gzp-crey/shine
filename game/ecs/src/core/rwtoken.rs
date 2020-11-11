@@ -1,7 +1,12 @@
 use std::sync::atomic::{self, AtomicIsize};
+use thiserror::Error;
 
+#[derive(Debug, Error)]
 pub enum RWTokenError {
+    #[error("Target already borrowed as immutable")]
     AlreadyReadLocked,
+
+    #[error("Target already borrowed as mutable")]
     AlreadyWriteLocked,
 }
 
