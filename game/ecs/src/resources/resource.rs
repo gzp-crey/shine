@@ -1,4 +1,4 @@
-use crate::{core::RWToken, resources::ResourceStoreRead};
+use crate::{core::rwtoken::RWToken, resources::ResourceStoreRead};
 use std::{
     any::type_name,
     cell::UnsafeCell,

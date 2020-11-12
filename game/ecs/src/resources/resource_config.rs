@@ -10,7 +10,7 @@ pub trait ResourceConfig {
 
     fn build(&self, handle: ResourceHandle<Self::Resource>, id: &ResourceId) -> Self::Resource;
 
-    fn post_bake(&self, context: &mut ResourceBakeContext<'_, Self::Resource>);
+    fn post_bake(&mut self, context: &mut ResourceBakeContext<'_, Self::Resource>);
 
     fn auto_gc(&self) -> bool;
 }
@@ -43,7 +43,7 @@ impl<T: Resource> ResourceConfig for UnmanagedResource<T> {
         unreachable!()
     }
 
-    fn post_bake(&self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
+    fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
 
     fn auto_gc(&self) -> bool {
         false
@@ -81,7 +81,7 @@ impl<T: Resource> ResourceConfig for ManagedResource<T> {
         (self.build)(id)
     }
 
-    fn post_bake(&self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
+    fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
 
     fn auto_gc(&self) -> bool {
         self.auto_gc

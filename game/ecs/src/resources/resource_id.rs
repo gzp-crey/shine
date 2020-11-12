@@ -1,5 +1,5 @@
 use crate::{
-    core::{ids::SmallStringId, ErrorString},
+    core::{error::ErrorString, ids::SmallStringId},
     ECSError,
 };
 use std::str::FromStr;

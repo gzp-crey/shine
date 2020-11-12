@@ -1,5 +1,5 @@
 use crate::{
-    core::RWToken,
+    core::rwtoken::RWToken,
     resources::{
         Resource, ResourceCell, ResourceConfig, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite,
         ResourceRead, ResourceWrite,
@@ -27,14 +27,14 @@ pub struct ResourceBakeContext<'store, T: Resource> {
 }
 
 impl<'store, T: Resource> ResourceBakeContext<'store, T> {
-    pub fn process_by_handle<F: Fn(&mut T)>(&self, handle: &ResourceHandle<T>, process: F) {
+    pub fn process_by_handle<F: FnOnce(&ResourceHandle<T>, &mut T)>(&self, handle: &ResourceHandle<T>, process: F) {
         if let Some(cell) = handle.upgrade() {
             if handle.generation() == self.generation {
                 debug_assert!(Arc::ptr_eq(self.resource_map.get(&handle.id()).unwrap(), &cell));
                 cell.write_lock();
                 // safety:
                 //  this type is constructed only if the T implements the required Send and Sync markers
-                (process)(unsafe { cell.write() });
+                (process)(&handle, unsafe { cell.write() });
                 cell.write_unlock();
             }
         }
