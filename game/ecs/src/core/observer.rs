@@ -67,6 +67,11 @@ where
     }
 
     pub fn notify_all(&mut self, event: E) {
+        //todo:
+        // lock, create a copy
+        // notify by the copy, collect removed observer
+        // lock, remove observers
+
         let mut observers = self.observers.lock().unwrap();
         observers.retain(|observer| {
             if let Some(observer) = observer.upgrade() {

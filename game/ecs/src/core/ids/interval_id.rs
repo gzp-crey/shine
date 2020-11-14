@@ -9,6 +9,8 @@ impl IntervalId {
     }
 }
 
+/// Keep track of used/unused ids within the given interval.
+/// A sorted list of empty region is used internally.
 #[derive(Debug)]
 pub struct IntervalStore {
     range: Range<u32>,

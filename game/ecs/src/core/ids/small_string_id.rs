@@ -7,7 +7,8 @@ use std::{
     str::{self, FromStr},
 };
 
-/// An ID the requires no additional heap alloction.
+/// A string like id that requires no additional heap alloction.
+/// It is simmilar to a small string implementation, but it provides no string manipulations.
 #[derive(Clone, PartialOrd, PartialEq, Ord, Eq, Hash)]
 pub struct SmallStringId<const N: usize> {
     inner: [u8; N],

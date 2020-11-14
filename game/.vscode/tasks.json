@@ -22,51 +22,6 @@
             "group": "build"
         },
         {
-            "label": "build ycrdt",
-            "type": "shell",
-            "command": "cargo",
-            "args": [
-                "build",
-                "-p",
-                "shine-ycrdt"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "clear": true
-            },
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "group": "build"
-        },
-        {
-            "label": "test ycrdt",
-            "type": "shell",
-            "command": "cargo",
-            "args": [
-                "test",
-                "-p",
-                "shine-ycrdt"
-            ],
-            "options": {
-                "env": {
-                    "RUST_BACKTRACE": "1"
-                }
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "clear": true
-            },
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "group": "build"
-        },
-        {
             "label": "build native",
             "type": "shell",
             "command": "cargo",
@@ -99,7 +54,9 @@
             ],
             "options": {
                 "env": {
-                    "RUST_BACKTRACE": "1"
+                    "RUST_BACKTRACE": "1",
+                    "VK_LAYER_PATH": "d:\\VulkanSDK\\1.2.141.2\\Bin",
+                    "VK_INSTANCE_LAYERS": "VK_LAYER_LUNARG_api_dump;VkLayer_khronos_validation"
                 }
             },
             "presentation": {
@@ -218,18 +175,16 @@
             "problemMatcher": [],
             "group": "build"
         },
+
         {
-            "label": "test ecs - native",
+            "label": "test - native",
             "type": "shell",
             "command": "cargo",
             "args": [
                 "test",
                 "--features",
                 "native",
-                "--test", "resource_handle",
-                "--test", "resource_access",
                 "--",
-                //"--nocapture",
                 "--test-threads=1"
             ],
             "options": {
@@ -250,38 +205,7 @@
             "group": "build"
         },
         {
-            "label": "test game - native",
-            "type": "shell",
-            "command": "cargo",
-            "args": [
-                "test",
-                "--features",
-                "native",
-                "--",
-                "--nocapture",
-                "--test-threads=1"
-            ],
-            "options": {
-                "env": {
-                    "RUST_BACKTRACE": "1",
-                    "VK_LAYER_PATH": "d:\\VulkanSDK\\1.2.141.2\\Bin",
-                    "VK_INSTANCE_LAYERS": "VK_LAYER_LUNARG_api_dump;VkLayer_khronos_validation"
-                },
-                "cwd": "${workspaceFolder}/game"
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "clear": true
-            },
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "group": "build"
-        },
-        {
-            "label": "clippy *",
+            "label": "clippy",
             "type": "shell",
             "command": "cargo",
             "args": [
@@ -306,5 +230,5 @@
             ],
             "group": "build"
         }
-    ]
+    ],    
 }

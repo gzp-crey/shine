@@ -1,144 +1,105 @@
-use shine_ecs::resources::{ManagedResource, ResourceId, Resources};
-use std::cell::RefCell;
-use std::rc::Rc;
+use shine_ecs::resources::{ResourceHandle, ResourceId, ResourceLoadContext, ResourceLoader, Resources};
+use std::{thread, time::Duration};
 
 mod utils;
 
+/// Test resource data
 #[derive(Debug)]
-struct TestOne(String, usize);
+struct TestData {
+    id: ResourceId,
+    response_count: u32,
+    text: String,
+}
 
-impl TestOne {
-    #[inline]
-    fn assert_eq(&self, s: &str, v: usize) {
-        assert_eq!(self.0, s);
-        assert_eq!(self.1, v);
+impl TestData {
+    fn build(context: &ResourceLoadContext<Self, String>, handle: ResourceHandle<Self>, id: &ResourceId) -> TestData {
+        log::trace!("Creating [{:?}]", id);
+        context.send_request(handle, "build".to_string());
+        TestData {
+            id: id.clone(),
+            response_count: 0,
+            text: "!".to_string(),
+        }
+    }
+
+    async fn on_load(
+        handle: ResourceHandle<Self>,
+        request: String,
+    ) -> Option<String> {
+        log::debug!("on_load [{:?}]: {:?}", handle, request);
+        thread::sleep(Duration::from_micros(50)); // emulate an active wait
+        Some(format!("l({})", request))
+    }
+
+    fn on_load_response(
+        this: &mut Self,
+        context: &ResourceLoadContext<Self, String>,
+        handle: &ResourceHandle<Self>,
+        response: String,
+    ) {
+        log::debug!("on_load_response [{:?}], {}", handle, response);
+        this.response_count += 1;
+        this.text = format!("{}, {}", this.text, response);
+        context.send_request(handle.clone(), format!("r({})", this.text));
     }
 }
 
-#[derive(Copy, Clone)]
-enum TestCase {
-    Happy,
-    Panic1,
-    Panic2,
-    Panic3,
-}
-
-fn handle_test_core(case: TestCase) {
+#[tokio::test(threaded_scheduler)]
+async fn simple() {
     utils::init_logger();
 
-    let ida = ResourceId::from_tag("a").unwrap();
-    let idb = ResourceId::from_tag("b").unwrap();
-
-    let build_counter = Rc::new(RefCell::new(0));
-
     let mut resources = Resources::default();
-
-    resources.register(ManagedResource::new(true, {
-        let cnt = build_counter.clone();
-        move |id| {
-            *cnt.borrow_mut() += 1;
-            TestOne(format!("one {:?}", id), *cnt.borrow())
-        }
-    }));
-
-    resources
-        .get_with_id::<TestOne>(&ida)
-        .unwrap()
-        .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
-    resources
-        .get_mut_with_id::<TestOne>(&ida)
-        .unwrap()
-        .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
-
-    let ha = resources.get_handle::<TestOne>(&ida).unwrap();
-    resources.at(&ha).unwrap().assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+    resources.register(ResourceLoader::new(
+        TestData::build,
+        TestData::on_load,
+        TestData::on_load_response,
+    ));
 
     {
-        // create now, counter incremented
-        let hb = resources.get_handle::<TestOne>(&idb).unwrap();
-        resources.at(&hb).unwrap().assert_eq("one Tag(SmallStringId(\"b\"))", 2);
-        resources
-            .get_with_id::<TestOne>(&idb)
-            .unwrap()
-            .assert_eq("one Tag(SmallStringId(\"b\"))", 2);
+        log::debug!("Create a resource");
+        let id = {
+            let store = resources.get_store::<TestData>().unwrap();
+            store.get_handle(&ResourceId::from_tag(&"test").unwrap()).unwrap()
+        };
 
-        {
-            let store_one = resources.get_store::<TestOne>().unwrap();
-
-            // handle and store keeps no lock on resoource
-            resources
-                .get_mut_with_id::<TestOne>(&ida)
-                .unwrap()
-                .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+        let mut i = 0;
+        let mut response_count = 0;
+        loop {
+            log::debug!("Process loop {} - {}", i, response_count);
+            i += 1;
+            assert!(
+                i < 100,
+                "Most certainly request-response is not working, as iteration limit was reached"
+            );
 
             {
-                // read resource a
-                let res_a = store_one.at(&ha).unwrap();
-                res_a.assert_eq("one Tag(SmallStringId(\"a\"))", 1);
-                // read + read is ok
-                resources
-                    .get_with_id::<TestOne>(&ida)
-                    .unwrap()
-                    .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
-                if let TestCase::Panic1 = case {
-                    // read + write is panic
-                    let _ = resources.get_mut_with_id::<TestOne>(&ida).unwrap();
-                    unreachable!()
-                }
+                let mut store = resources.get_store_mut::<TestData>().unwrap();
+                store.bake();
+            }
 
-                // write resource b
-                let res_b = store_one.at_mut(&hb).unwrap();
-                res_b.assert_eq("one Tag(SmallStringId(\"b\"))", 2);
-                // write + read is panic
-                if let TestCase::Panic2 = case {
-                    let _ = resources.get_with_id::<TestOne>(&idb).unwrap();
-                    unreachable!()
-                }
-                if let TestCase::Panic3 = case {
-                    // write + write
-                    let _ = resources.get_mut_with_id::<TestOne>(&idb).unwrap();
-                    unreachable!()
-                }
+            response_count = {
+                let store = resources.get_store::<TestData>().unwrap();
+                let item = store.at(&id).unwrap();
+                log::debug!("loop: {}", item.text);
+                item.response_count
+            };
+
+            if response_count > 3 {
+                let store = resources.get_store::<TestData>().unwrap();
+                let item = store.at(&id).unwrap();
+                assert!(item
+                    .text
+                    .starts_with("!, l(build), l(r(!, l(build))), l(r(!, l(build), l(r(!, l(build)))))"));
+                break;
+            } else {
+                tokio::time::delay_for(Duration::from_micros(10)).await;
             }
         }
     }
 
-    // garbage collect
-    resources.get_store_mut::<TestOne>().unwrap().bake();
-
-    //handle was kept alive, no change in version
-    resources.at(&ha).unwrap().assert_eq("one Tag(SmallStringId(\"a\"))", 1);
-
-    //handle was dropped, change in version
-    let hb = resources.get_handle::<TestOne>(&idb).unwrap();
-    resources.at(&hb).unwrap().assert_eq("one Tag(SmallStringId(\"b\"))", 3);
-}
-
-#[test]
-fn handle_test() {
-    handle_test_core(TestCase::Happy);
-}
-
-#[test]
-#[should_panic(
-    expected = "Mutable borrow of a resource [resource_handle::TestOne] failed: Target already borrowed as immutable"
-)]
-fn handle_test_fail_1() {
-    handle_test_core(TestCase::Panic1);
-}
-
-#[test]
-#[should_panic(
-    expected = "Immutable borrow of a resource [resource_handle::TestOne] failed: Target already borrowed as mutable"
-)]
-fn handle_test_fail_2() {
-    handle_test_core(TestCase::Panic2);
-}
-
-#[test]
-#[should_panic(
-    expected = "Mutable borrow of a resource [resource_handle::TestOne] failed: Target already borrowed as mutable"
-)]
-fn handle_test_fail_3() {
-    handle_test_core(TestCase::Panic3);
+    log::debug!("Clearing resources");
+    {
+        let mut store = resources.get_store_mut::<TestData>().unwrap();
+        store.bake();
+    }
 }

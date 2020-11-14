@@ -2,7 +2,9 @@ use futures::{channel::oneshot, Future};
 
 pub struct TaskCanceled;
 
-/// Send task into an async anvironment and poll for completion in non-async context using a oneshot channel
+/// Send task for asynchronous execution. The status can be polled
+/// for completion withou blocking in a sync function.
+/// Iternally a oneshot channel is used to trigger completion.
 pub struct AsyncTask<T> {
     receiver: oneshot::Receiver<T>,
 }

@@ -142,3 +142,97 @@ fn handle_test_fail_2() {
 fn handle_test_fail_3() {
     handle_test_core(TestCase::Panic3);
 }
+
+#[test]
+#[cfg(TODO)]
+fn simple_multi_threaded() {
+    utils::init_logger();
+    utils::single_threaded_test();
+
+    const ITER: u32 = 10;
+    let store = store::no_load::<TestData>(2);
+
+    // request from multiple threads
+    let store = Arc::new(store);
+    {
+        let mut tp = vec![];
+        for i in 0..ITER {
+            let store = store.clone();
+            tp.push(thread::spawn(move || {
+                let store = store.try_read().unwrap();
+                assert!(store.try_get(&TestDataId(0)) == None);
+
+                // request 1
+                let r1 = store.get_or_add(&TestDataId(1));
+                assert!(store.at(&r1).0 == format!("id: {}", 1));
+
+                // request 100 + threadId
+                let r100 = store.get_or_add(&TestDataId(100 + i));
+                assert!(store.at(&r100).0 == format!("id: {}", 100 + i));
+
+                for _ in 0..100 {
+                    assert!(store.at(&r1).0 == format!("id: {}", 1));
+                    assert!(store.at(&r100).0 == format!("id: {}", 100 + i));
+                }
+            }));
+        }
+        for t in tp.drain(..) {
+            t.join().unwrap();
+        }
+    }
+
+    log::info!("request process");
+    let mut store = Arc::try_unwrap(store).map_err(|_| ()).unwrap();
+    store.finalize_requests();
+
+    // check after process
+    let store = Arc::new(store);
+    {
+        let mut tp = vec![];
+        for i in 0..ITER {
+            let store = store.clone();
+            tp.push(thread::spawn(move || {
+                let store = store.try_read().unwrap();
+                assert!(store.try_get(&TestDataId(0)) == None);
+
+                // get 1
+                let r1 = store.try_get(&TestDataId(1)).unwrap();
+                assert!(store.at(&r1).0 == format!("id: {}", 1));
+
+                // get 100 + threadId
+                let r100 = store.try_get(&TestDataId(100 + i)).unwrap();
+                assert!(store.at(&r100).0 == format!("id: {}", 100 + i));
+            }));
+        }
+        for t in tp.drain(..) {
+            t.join().unwrap();
+        }
+    }
+
+    log::info!("drain");
+    let mut store = Arc::try_unwrap(store).map_err(|_| ()).unwrap();
+    store.finalize_requests();
+    store.drain_unused();
+
+    // check after drain
+    let store = Arc::new(store);
+    {
+        let mut tp = vec![];
+        for i in 0..ITER {
+            let store = store.clone();
+            tp.push(thread::spawn(move || {
+                let store = store.try_read().unwrap();
+                assert!(store.try_get(&TestDataId(0)) == None);
+
+                // get 1
+                assert!(store.try_get(&TestDataId(1)) == None);
+
+                // get 100 + threadId
+                assert!(store.try_get(&TestDataId(100 + i)) == None);
+            }));
+        }
+        for t in tp.drain(..) {
+            t.join().unwrap();
+        }
+    }
+}

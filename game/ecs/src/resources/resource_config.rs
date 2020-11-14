@@ -10,9 +10,9 @@ pub trait ResourceConfig {
 
     fn build(&self, handle: ResourceHandle<Self::Resource>, id: &ResourceId) -> Self::Resource;
 
-    fn post_bake(&mut self, context: &mut ResourceBakeContext<'_, Self::Resource>);
-
     fn auto_gc(&self) -> bool;
+
+    fn post_bake(&mut self, context: &mut ResourceBakeContext<'_, Self::Resource>);
 }
 
 /// Resources configuration to manage the resource manually.
@@ -43,11 +43,11 @@ impl<T: Resource> ResourceConfig for UnmanagedResource<T> {
         unreachable!()
     }
 
-    fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
-
     fn auto_gc(&self) -> bool {
         false
     }
+
+    fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
 }
 
 /// Resources are added and removed automatically using the provided builder
@@ -81,9 +81,9 @@ impl<T: Resource> ResourceConfig for ManagedResource<T> {
         (self.build)(id)
     }
 
-    fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
-
     fn auto_gc(&self) -> bool {
         self.auto_gc
     }
+
+    fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
 }

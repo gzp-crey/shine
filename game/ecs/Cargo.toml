@@ -5,7 +5,7 @@ authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
 [features]
-default= []
+default= ["native"]
 native = ["tokio"]
 wasm = ["wasm-bindgen-futures"]
 
@@ -21,7 +21,6 @@ hecs = "0.2"
 fxhash = "0.2"
 
 
-
 # native
 # "macros, time" is required only for test, but see https://github.com/rust-lang/cargo/issues/1596
 tokio = { version = "0.2", features = ["rt-core", "rt-util", "blocking", "macros", "time"], optional = true }
@@ -31,6 +30,6 @@ wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
 
 [dev-dependencies]
-env_logger = "0.7"
+env_logger = "0.8"
 permutohedron = "0.2"
 rand = "0.7"
