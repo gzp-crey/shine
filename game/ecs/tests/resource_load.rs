@@ -22,10 +22,7 @@ impl TestData {
         }
     }
 
-    async fn on_load(
-        handle: ResourceHandle<Self>,
-        request: String,
-    ) -> Option<String> {
+    async fn on_load(handle: ResourceHandle<Self>, request: String) -> Option<String> {
         log::debug!("on_load [{:?}]: {:?}", handle, request);
         thread::sleep(Duration::from_micros(50)); // emulate an active wait
         Some(format!("l({})", request))
@@ -72,21 +69,18 @@ async fn simple() {
                 "Most certainly request-response is not working, as iteration limit was reached"
             );
 
-            {
-                let mut store = resources.get_store_mut::<TestData>().unwrap();
-                store.bake();
-            }
+            resources.bake::<TestData>(true);
 
             response_count = {
                 let store = resources.get_store::<TestData>().unwrap();
-                let item = store.at(&id).unwrap();
+                let item = store.at(&id);
                 log::debug!("loop: {}", item.text);
                 item.response_count
             };
 
             if response_count > 3 {
                 let store = resources.get_store::<TestData>().unwrap();
-                let item = store.at(&id).unwrap();
+                let item = store.at(&id);
                 assert!(item
                     .text
                     .starts_with("!, l(build), l(r(!, l(build))), l(r(!, l(build), l(r(!, l(build)))))"));
@@ -98,8 +92,5 @@ async fn simple() {
     }
 
     log::debug!("Clearing resources");
-    {
-        let mut store = resources.get_store_mut::<TestData>().unwrap();
-        store.bake();
-    }
+    resources.bake::<TestData>(true);
 }

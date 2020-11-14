@@ -106,10 +106,6 @@ where
         (self.build)(&request_context, handle, id)
     }
 
-    fn auto_gc(&self) -> bool {
-        true
-    }
-
     fn post_bake(&mut self, context: &mut ResourceBakeContext<'_, Self::Resource>) {
         while let Some((handle, rp)) = self.next_response() {
             log::trace!("[{:?}] Received load response", handle);
@@ -164,12 +160,7 @@ where
         if !handle.is_alive() {
             return true;
         }
-        let response = match (self.load)(
-            handle.clone(),
-            rq,
-        )
-        .await
-        {
+        let response = match (self.load)(handle.clone(), rq).await {
             Some(output) => output,
             None => return true,
         };

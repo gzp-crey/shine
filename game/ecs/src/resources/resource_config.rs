@@ -10,8 +10,6 @@ pub trait ResourceConfig {
 
     fn build(&self, handle: ResourceHandle<Self::Resource>, id: &ResourceId) -> Self::Resource;
 
-    fn auto_gc(&self) -> bool;
-
     fn post_bake(&mut self, context: &mut ResourceBakeContext<'_, Self::Resource>);
 }
 
@@ -43,10 +41,6 @@ impl<T: Resource> ResourceConfig for UnmanagedResource<T> {
         unreachable!()
     }
 
-    fn auto_gc(&self) -> bool {
-        false
-    }
-
     fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}
 }
 
@@ -54,15 +48,11 @@ impl<T: Resource> ResourceConfig for UnmanagedResource<T> {
 /// functors.
 pub struct ManagedResource<T: Resource> {
     build: Box<dyn Fn(&ResourceId) -> T>,
-    auto_gc: bool,
 }
 
 impl<T: Resource> ManagedResource<T> {
-    pub fn new<F: 'static + Fn(&ResourceId) -> T>(auto_gc: bool, build: F) -> Self {
-        Self {
-            build: Box::new(build),
-            auto_gc,
-        }
+    pub fn new<F: 'static + Fn(&ResourceId) -> T>(build: F) -> Self {
+        Self { build: Box::new(build) }
     }
 }
 
@@ -79,10 +69,6 @@ impl<T: Resource> ResourceConfig for ManagedResource<T> {
 
     fn build(&self, _handle: ResourceHandle<Self::Resource>, id: &ResourceId) -> Self::Resource {
         (self.build)(id)
-    }
-
-    fn auto_gc(&self) -> bool {
-        self.auto_gc
     }
 
     fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {}

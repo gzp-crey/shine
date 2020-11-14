@@ -7,17 +7,18 @@ use std::str::FromStr;
 pub type ResourceTag = SmallStringId<16>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SystemId(usize);
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ResourceId {
     Global,
     Tag(ResourceTag),
-    System(SystemId),
+    Counter(usize),
     Binary(Vec<u8>),
 }
 
 impl ResourceId {
+    pub fn from_counter(cnt: usize) -> Self {
+        ResourceId::Counter(cnt)
+    }
+
     pub fn from_tag(tag: &str) -> Result<Self, ECSError> {
         Ok(ResourceId::Tag(
             ResourceTag::from_str(tag).map_err(|err| ECSError::ResourceId(err.into()))?,

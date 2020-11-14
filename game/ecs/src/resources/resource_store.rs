@@ -73,6 +73,15 @@ impl<T: Resource> ResourceStore<T> {
          || self.config.auto_build() // has a builder, thus it will be constructed even is it does not exists at the moment
     }
 
+    /// Check if the the given resource instance exists in the store.
+    /// # Safety
+    /// As this operation does not touch the resources itself, it is safe to call for any resources on any thread
+    /// dispite of the Send, Sync properties.
+    pub fn exists(&self, id: &ResourceId) -> bool {
+        self.resource_map.contains_key(id)                  // stored in the usual map
+         || self.pending.lock().unwrap().contains_key(id) // or stored in the pending set
+    }
+
     /// Insert a new resource. If a resource with the given id already exists, all the handles
     /// are invalidated. The other type of references and accessors are not effected as they
     /// should not exist by the design of the API.
@@ -132,13 +141,13 @@ impl<T: Resource> ResourceStore<T> {
     /// # Safety
     /// Types which are !Send or !Sync should only be accessed or retrieved on the thread which
     /// owns the resource collection and the resources (and not just the wrapping cells) are
-    /// accessed (released or updated).
-    pub unsafe fn bake(&mut self) {
+    /// accessed (updated).
+    pub unsafe fn bake(&mut self, gc: bool) {
         {
             let mut pending = self.pending.lock().unwrap();
             self.resource_map.extend(pending.drain());
         }
-        if self.config.auto_gc() {
+        if gc {
             self.resource_map.retain(|_, entry| entry.has_handle());
         }
         self.config.post_bake(&mut ResourceBakeContext {
@@ -254,6 +263,10 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         &*self.store().config
     }
 
+    pub fn exists(&self, id: &ResourceId) -> bool {
+        self.store().exists(id)
+    }
+
     pub fn contains(&self, id: &ResourceId) -> bool {
         self.store().contains(id)
     }
@@ -321,7 +334,7 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         Ok(ResourceHandle::new(self.generation(), &cell, id))
     }
 
-    pub fn at(&self, handle: &ResourceHandle<T>) -> Result<ResourceRead<'store, T>, ECSError> {
+    pub fn try_at(&self, handle: &ResourceHandle<T>) -> Result<ResourceRead<'store, T>, ECSError> {
         if handle.generation() != self.generation() {
             Err(ECSError::ResourceExpired)
         } else if let Some(cell) = handle.upgrade() {
@@ -331,7 +344,11 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         }
     }
 
-    pub fn at_mut(&self, handle: &ResourceHandle<T>) -> Result<ResourceWrite<'store, T>, ECSError> {
+    pub fn at(&self, handle: &ResourceHandle<T>) -> ResourceRead<'store, T> {
+        self.try_at(handle).unwrap()
+    }
+
+    pub fn try_at_mut(&self, handle: &ResourceHandle<T>) -> Result<ResourceWrite<'store, T>, ECSError> {
         if handle.generation() != self.generation() {
             Err(ECSError::ResourceExpired)
         } else if let Some(cell) = handle.upgrade() {
@@ -339,6 +356,10 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         } else {
             Err(ECSError::ResourceTypeNotFound(type_name::<T>().into()))
         }
+    }
+
+    pub fn at_mut(&self, handle: &ResourceHandle<T>) -> ResourceWrite<'store, T> {
+        self.try_at_mut(handle).unwrap()
     }
 }
 
@@ -389,11 +410,11 @@ impl<'store, T: Resource> ResourceStoreWrite<'store, T> {
         unsafe { self.store_mut().remove(id) }
     }
 
-    pub fn bake(&mut self) {
+    pub fn bake(&mut self, gc: bool) {
         // safety:
         //  this type is constructed only if the T implements the required Send and Sync markers
         unsafe {
-            self.store_mut().bake();
+            self.store_mut().bake(gc);
         }
     }
 }

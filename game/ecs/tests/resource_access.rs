@@ -35,10 +35,6 @@ impl ResourceConfig for TestOneExtension {
         unreachable!()
     }
 
-    fn auto_gc(&self) -> bool {
-        false
-    }
-
     fn post_bake(&mut self, _context: &mut ResourceBakeContext<'_, Self::Resource>) {
         /*nop*/
     }
