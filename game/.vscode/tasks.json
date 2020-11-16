@@ -191,7 +191,7 @@
                 "env": {
                     "RUST_BACKTRACE": "1"
                 },
-                "cwd": "${workspaceFolder}/ecs"
+                "cwd": "${workspaceFolder}/game"
             },
             "presentation": {
                 "echo": true,

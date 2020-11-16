@@ -5,6 +5,13 @@ authors = ["gzp-crey <gzp@creygames.com>"]
 edition = "2018"
 
 [features]
+default = ["native", "cook"]
+native = [ 
+    "tokio", 
+    "reqwest",
+    "winit",
+    "shine-ecs/native",
+    "shine-input/native" ]
 wasm = [ 
     "web-sys", 
     "js-sys",
@@ -13,13 +20,9 @@ wasm = [
     "wasm-bindgen-macro",
     "shine-ecs/wasm",
     "shine-input/wasm" ]
-
-native = [ 
-    "tokio", 
-    "reqwest",
-    "winit",
-    "shine-ecs/native",
-    "shine-input/native" ]
+cook = [     
+    "shaderc"
+]
 
 [dependencies]
 log = "0.4"
@@ -45,7 +48,8 @@ bytemuck = "1.4"
 gltf = "0.15"
 
 # native
-tokio = { version = "0.2", features = ["rt-core", "fs"], optional = true }
+# macros and time is required only for test, but see https://github.com/rust-lang/cargo/issues/1596
+tokio = { version = "0.2", features = ["rt-core", "fs", "time", "macros"], optional = true }
 reqwest = { version = "0.10", features = ["gzip"], optional = true }
 winit = { version ="0.22", optional = true }
 
@@ -73,10 +77,17 @@ web-sys = { version = "0.3", optional = true, features = [
 ] }
 js-sys = { version = "0.3", optional = true }
 
+#cook
+shaderc = { version = "0.6", features = ["build-from-source"], optional = true }
+gltf-json = { version = "0.15", optional = true }
+
+
 shine-input = { path = "../input", version = "0.1.0" }
 shine-ecs = { path = "../ecs", version = "0.1.0" }
 
 [dev-dependencies]
+env_logger = "0.8"
 rand = "0.7"
 permutohedron = "0.2"
+
 

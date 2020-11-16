@@ -1,52 +1,11 @@
-use crate::{Config, CookingError};
-use shine_game::assets::{io::HashableContent, AssetError, AssetIO, AssetId, Url};
+use crate::{Config, CookerError, Dependency, SourceId, TargetNaming};
+use shine_game::assets::{io::HashableContent, AssetIO, AssetId, Url};
 use sqlx::{
     self,
     executor::Executor,
     postgres::{PgPool, PgQueryAs},
 };
 use std::sync::Arc;
-
-pub enum AssetNaming {
-    Hard(String),
-    SoftScheme(String),
-}
-
-pub struct Dependency {
-    id: AssetId,
-    url: Url,
-    is_soft: bool,
-}
-
-impl Dependency {
-    pub fn soft(id: AssetId, url: Url) -> Dependency {
-        Dependency { id, url, is_soft: true }
-    }
-
-    pub fn hard(id: AssetId, url: Url) -> Dependency {
-        Dependency {
-            id,
-            url,
-            is_soft: false,
-        }
-    }
-
-    pub fn is_soft(&self) -> bool {
-        self.is_soft
-    }
-
-    pub fn is_hard(&self) -> bool {
-        !self.is_soft
-    }
-
-    pub fn url(&self) -> &Url {
-        &self.url
-    }
-
-    pub fn id(&self) -> &AssetId {
-        &self.id
-    }
-}
 
 //Manage local sources to speed up compilation
 #[derive(Clone)]
@@ -56,7 +15,7 @@ pub struct TargetDB {
 }
 
 impl TargetDB {
-    pub async fn new(config: &Config) -> Result<TargetDB, CookingError> {
+    pub async fn new(config: &Config) -> Result<TargetDB, CookerError> {
         log::info!("Connecting to db...");
         let pool = if let Some(conn) = &config.target_db_connection {
             Some(PgPool::new(&conn).await?)
@@ -70,7 +29,7 @@ impl TargetDB {
         Ok(db)
     }
 
-    async fn init(&self) -> Result<(), CookingError> {
+    async fn init(&self) -> Result<(), CookerError> {
         if let Some(pool) = &self.pool {
             (&*pool)
             .execute(
@@ -110,18 +69,20 @@ impl TargetDB {
     async fn update_dependencies(
         &self,
         parent: &Dependency,
+        _source_url: &Url,
         source_hash: String,
         dependencies: Vec<Dependency>,
-    ) -> Result<(), CookingError> {
+    ) -> Result<(), CookerError> {
         if let Some(pool) = &self.pool {
             let mut tx = pool.begin().await?;
+            let source_id = parent.source_id().to_asset_id()?;
 
             sqlx::query("DELETE FROM source_dependencies where parent = $1")
-                .bind(parent.id().as_str())
+                .bind(source_id.as_str())
                 .execute(&mut tx)
                 .await?;
             sqlx::query("DELETE FROM cooked_dependencies where parent = $1")
-                .bind(parent.url().as_str())
+                .bind(parent.cooked_url().as_str())
                 .execute(&mut tx)
                 .await?;
 
@@ -132,8 +93,8 @@ impl TargetDB {
                         VALUES ($1,$2,$3)
                     "#,
                 )
-                .bind(parent.id().as_str())
-                .bind(dep.id().as_str())
+                .bind(source_id.as_str())
+                .bind(dep.source_id().to_asset_id()?.as_str())
                 .bind(dep.is_soft)
                 .execute(&mut tx)
                 .await?;
@@ -144,8 +105,8 @@ impl TargetDB {
                         VALUES ($1,$2,$3)
                     "#,
                 )
-                .bind(parent.url().as_str())
-                .bind(dep.url().as_str())
+                .bind(parent.cooked_url().as_str())
+                .bind(dep.cooked_url().as_str())
                 .bind(dep.is_soft)
                 .execute(&mut tx)
                 .await?;
@@ -159,8 +120,8 @@ impl TargetDB {
                         DO UPDATE SET cooked_url = $2, source_hash = $3
                 "#,
             )
-            .bind(parent.id().as_str())
-            .bind(parent.url().as_str())
+            .bind(source_id.as_str())
+            .bind(parent.cooked_url().as_str())
             .bind(source_hash)
             .execute(pool)
             .await?;
@@ -172,7 +133,7 @@ impl TargetDB {
 
     // Return the affected root parents with hard dependency. It recursively travels all the parent from the given children
     // following only the hard links and return the root elements. The response also contains the unknow resources.
-    pub async fn get_affected_roots(&self, asset_ids: &[AssetId]) -> Result<Vec<AssetId>, CookingError> {
+    pub async fn get_affected_roots(&self, asset_ids: &[AssetId]) -> Result<Vec<AssetId>, CookerError> {
         log::info!("asset_ids: {:?}", asset_ids);
 
         if let Some(pool) = &self.pool {
@@ -225,39 +186,44 @@ impl TargetDB {
 
     async fn upload_binary_content(
         &self,
-        asset_id: AssetId,
-        asset_url: Url,
-        naming: AssetNaming,
-        content: &[u8],
-    ) -> Result<Dependency, AssetError> {
-        let target_dependency = match naming {
-            AssetNaming::Hard(scheme) => {
-                let hashed_path = content.hashed_path();
-                let target_id = format!("{}.{}", hashed_path, asset_url.extension());
-                let url = Url::parse(&format!("hash-{}://{}", scheme, target_id))?;
-                Dependency::hard(asset_id, url)
+        source_id: &SourceId,
+        cooked_naming: TargetNaming,
+        cooked_content: &[u8],
+    ) -> Result<Dependency, CookerError> {
+        let target_dependency = match cooked_naming {
+            TargetNaming::Hard(scheme, ext) => {
+                let hashed_path = cooked_content.content_hash_path();
+                let asset_id = source_id.to_asset_id()?;
+                let ext = ext.unwrap_or_else(|| asset_id.extension().to_owned());
+                let url = Url::parse(&format!("hash-{}://{}.{}", scheme, hashed_path, ext))?;
+                Dependency::hard(source_id.clone(), url)
             }
-            AssetNaming::SoftScheme(scheme) => {
+            TargetNaming::Soft(scheme) => {
+                let asset_id = source_id.to_asset_id()?;
                 let url = Url::parse(&format!("{}://{}", scheme, asset_id.as_str()))?;
-                Dependency::soft(asset_id, url)
+                Dependency::soft(source_id.clone(), url)
             }
         };
 
-        self.io.upload_binary(&target_dependency.url(), &content).await?;
+        self.io
+            .upload_binary(&target_dependency.cooked_url(), &cooked_content)
+            .await?;
         Ok(target_dependency)
     }
 
     pub async fn upload_cooked_binary(
         &self,
-        asset_id: AssetId,
-        asset_url: Url,
-        naming: AssetNaming,
-        content: &[u8],
+        source_id: &SourceId,
+        source_url: &Url,
         source_hash: String,
+        cooked_naming: TargetNaming,
+        cooked_content: &[u8],
         dependencies: Vec<Dependency>,
-    ) -> Result<Dependency, CookingError> {
-        let target_dependency = self.upload_binary_content(asset_id, asset_url, naming, content).await?;
-        self.update_dependencies(&target_dependency, source_hash, dependencies)
+    ) -> Result<Dependency, CookerError> {
+        let target_dependency = self
+            .upload_binary_content(source_id, cooked_naming, cooked_content)
+            .await?;
+        self.update_dependencies(&target_dependency, source_url, source_hash, dependencies)
             .await?;
         Ok(target_dependency)
     }

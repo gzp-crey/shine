@@ -1,15 +1,15 @@
 use data_encoding::HEXLOWER;
-use ring::digest::{Context as RingContext, SHA256};
+use ring::digest::{Context, SHA256};
 
 pub fn sha256_bytes(data: &[u8]) -> String {
-    let mut context = RingContext::new(&SHA256);
+    let mut context = Context::new(&SHA256);
     context.update(data);
     let hash = context.finish();
     HEXLOWER.encode(hash.as_ref())
 }
 
 pub fn sha256_multiple_bytes(data: &[&[u8]]) -> String {
-    let mut context = RingContext::new(&SHA256);
+    let mut context = Context::new(&SHA256);
     for d in data {
         context.update(d);
     }
@@ -18,11 +18,11 @@ pub fn sha256_multiple_bytes(data: &[&[u8]]) -> String {
 }
 
 /// Helper to hash multi-part content
-pub struct ContentHasher(RingContext);
+pub struct ContentHasher(Context);
 
 impl Default for ContentHasher {
     fn default() -> Self {
-        ContentHasher(RingContext::new(&SHA256))
+        ContentHasher(Context::new(&SHA256))
     }
 }
 
@@ -45,30 +45,24 @@ pub fn hash_to_path(hash: &str) -> String {
 
 /// Implement the trait to generate hash-ed content path
 pub trait HashableContent {
-    fn content_hash(self) -> String;
+    fn hash(self) -> String;
 
-    fn content_hash_path(self) -> String
+    fn hashed_path(self) -> String
     where
         Self: Sized,
     {
-        hash_to_path(&self.content_hash())
+        hash_to_path(&self.hash())
     }
 }
 
 impl HashableContent for &[u8] {
-    fn content_hash(self) -> String {
+    fn hash(self) -> String {
         sha256_bytes(self)
     }
 }
 
-impl HashableContent for &str {
-    fn content_hash(self) -> String {
-        sha256_bytes(self.as_bytes())
-    }
-}
-
 impl HashableContent for ContentHasher {
-    fn content_hash(self) -> String {
+    fn hash(self) -> String {
         ContentHasher::hash(self)
     }
 }

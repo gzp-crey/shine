@@ -298,7 +298,8 @@ fn threaded_test() {
                 });
             }
         });
-        assert_eq!(counter.load(Ordering::Relaxed), THREAD_COUNT + THREAD_COUNT + 1); // no change in resources
+        assert_eq!(counter.load(Ordering::Relaxed), THREAD_COUNT + THREAD_COUNT + 1);
+        // no change in resources
     }
 
     log::info!("check update");

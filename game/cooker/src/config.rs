@@ -6,7 +6,7 @@ use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub asset_source_base: Url,
+    pub source_root: Url,
     pub source_virtual_schemes: HashMap<String, Url>,
 
     pub target_db_connection: Option<String>,

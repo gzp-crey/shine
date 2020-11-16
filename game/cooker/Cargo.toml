@@ -6,20 +6,17 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-env_logger = "0.7"
-config ="0.10"
-serde = {version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+env_logger = "0.8"
 thiserror = "1.0"
 color-eyre = "0.5"
-bincode = "1.3"
+config ="0.10"
+
 tokio = {version = "0.2", features = ["time", "blocking", "rt-threaded", "rt-util"]}
+
+serde = {version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
 
 sqlx = { version = "0.3", default-features = false, features = [ "runtime-tokio", "macros", "sqlite", "postgres", "tls" ] }
 
-image = {version = "0.23", features = ["jpeg"] }
-shaderc = {version = "0.6", features = ["build-from-source"] }
-gltf = "0.15"
-gltf-json = "0.15"
-
-shine-game = {path = "../game", version = "0.1.0", features = ["native"]}
+shine-game = {path = "../game", version = "0.1.0", features = ["native", "cook"]}
