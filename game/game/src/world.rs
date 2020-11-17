@@ -1,19 +1,4 @@
 use shine_ecs::resources::Resources;
-use std::error::Error as StdError;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum WorldError {
-    #[error("Error in plugin {}", plugin)]
-    Plugin { plugin: String, source: Box<dyn StdError> },
-
-    #[error("Plugin {} has missing dependency, (requested by {})", plugin, depends_on)]
-    MissingDependency {
-        plugin: String,
-        depends_on: String,
-        source: Box<dyn StdError>,
-    },
-}
 
 #[derive(Default)]
 pub struct World {

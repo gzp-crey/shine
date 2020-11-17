@@ -2,6 +2,8 @@ pub mod io;
 
 mod error;
 pub use self::error::*;
+mod cooking_error;
+pub use self::cooking_error::*;
 mod url;
 pub use self::url::*;
 mod asset_id;
@@ -13,6 +15,8 @@ pub use self::plugin::*;
 
 mod shader;
 pub use self::shader::*;
+mod texture;
+pub use self::texture::*;
 
 //pub mod gltf;
 //mod vertex_descriptor;

@@ -1,4 +1,4 @@
-use shine_game::assets::{io::HashableContent, AssetIO, AssetId, CookedShader, ShaderType, SourceShader, Url};
+use shine_game::assets::{io::HashableContent, AssetIO, AssetId, ShaderSource, ShaderType, Url};
 use std::collections::HashMap;
 
 mod utils;
@@ -14,14 +14,14 @@ async fn load_shader() {
     let id = AssetId::new("hello.fs").unwrap();
     let shader_url = id.to_url(&source_root).unwrap();
 
-    let (fs, source_hash) = SourceShader::load(&io, &shader_url).await.unwrap();
-    assert_eq!(fs.ty, ShaderType::Fragment);
+    let (source, source_hash) = ShaderSource::load(&io, &shader_url).await.unwrap();
+    assert_eq!(source.ty, ShaderType::Fragment);
     assert_eq!(
         source_hash,
         "adcdb2c2b8e24b2f83e3a76c3139cf445a591f00194e1c6f80bb0852c7100d95"
     );
 
-    let cooked_fs = CookedShader::cook(&shader_url, &fs).await.unwrap();
+    let cooked_fs = source.cook().await.unwrap();
     let cooked_hash = bincode::serialize(&cooked_fs).unwrap().content_hash();
     assert_eq!(cooked_fs.ty, ShaderType::Fragment);
     assert_eq!(

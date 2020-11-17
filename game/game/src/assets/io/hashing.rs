@@ -22,11 +22,15 @@ pub struct ContentHasher(RingContext);
 
 impl Default for ContentHasher {
     fn default() -> Self {
-        ContentHasher(RingContext::new(&SHA256))
+        Self::new()
     }
 }
 
 impl ContentHasher {
+    pub fn new() -> Self {
+        Self(RingContext::new(&SHA256))
+    }
+
     pub fn add(&mut self, data: &[u8]) -> &mut Self {
         self.0.update(data);
         self

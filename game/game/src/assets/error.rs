@@ -92,13 +92,3 @@ impl AssetError {
         }
     }
 }
-
-#[cfg(feature = "cook")]
-#[derive(Debug, Error)]
-pub enum CookingError {
-    #[error("Cooking of {:?} failed", content_id)]
-    Cook {
-        content_id: String,
-        source: Box<dyn 'static + StdError + Sync + Send>,
-    },
-}

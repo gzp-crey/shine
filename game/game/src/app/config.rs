@@ -1,4 +1,4 @@
-use crate::{app::AppError, assets::AssetConfig, render::RenderConfig};
+use crate::{app::AppError, assets::AssetConfig /*render::RenderConfig*/};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::Path;
@@ -7,7 +7,7 @@ use std::str::FromStr;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub asset: AssetConfig,
-    pub render: RenderConfig,
+    //pub render: RenderConfig,
 }
 
 impl Config {

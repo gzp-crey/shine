@@ -13,3 +13,12 @@ macro_rules! smaller_tuples_too {
         smaller_tuples_too!{$m, $($tt),*}
     };
 }
+
+/// Simmilar to debug_assert! but code is not validated when !cfg(debug_assertions)
+#[macro_export]
+macro_rules! dbg_assert {
+    ($($arg:tt)*) => {
+        #[cfg(debug_assertions)]
+        { debug_assert!($($arg)*) }
+    };
+}

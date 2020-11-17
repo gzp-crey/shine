@@ -5,11 +5,7 @@ pub use self::config::*;
 mod game_lifecycle;
 pub use self::game_lifecycle::*;
 
-use crate::{
-    assets::{AssetIO, Url},
-    game::Game,
-    World,
-};
+use crate::World;
 
 #[derive(Default)]
 pub struct App {
@@ -18,13 +14,13 @@ pub struct App {
 }
 
 impl App {
-    pub async fn load_game_from_url(&mut self, url: &Url) -> Result<(), AppError> {
+    /*pub async fn load_game_from_url(&mut self, url: &Url) -> Result<(), AppError> {
         let game = {
-            let assetio = self.world.plugin_resource::<AssetIO>("asset")?;
-            Game::from_url(&*assetio, url).await
-        }?;
+            let assetio = self.world.asset_io()?;
+            Game::from_url(&*assetio, url).await?
+        };
         self.load_game(game).await
-    }
+    }*/
 
     pub async fn load_game<S: GameSource>(&mut self, game: S) -> Result<(), AppError> {
         self.unload_game().await?;

@@ -1,3 +1,4 @@
+use crate::dbg_assert;
 use std::ops::Range;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -39,7 +40,7 @@ impl IntervalStore {
     }
 
     pub fn allocate(&mut self) -> IntervalId {
-        debug_assert!(self.check_intervals());
+        dbg_assert!(self.check_intervals());
         let entry = &mut self.empty.first_mut().expect("Access Intervall is full");
         assert!(entry.1 > entry.0);
         let id = entry.0;
@@ -49,13 +50,13 @@ impl IntervalStore {
         }
         self.size += 1;
         assert!(self.range.contains(&id));
-        debug_assert!(self.check_intervals());
+        dbg_assert!(self.check_intervals());
         IntervalId(id)
     }
 
     pub fn deallocate(&mut self, id: IntervalId) {
         assert!(self.range.contains(&id.0));
-        debug_assert!(self.check_intervals());
+        dbg_assert!(self.check_intervals());
 
         // insert new empty interval
         match self.empty.iter().position(|e| id.0 < e.1) {
@@ -87,7 +88,7 @@ impl IntervalStore {
                 self.empty.remove(i);
             }
         }
-        debug_assert!(self.check_intervals());
+        dbg_assert!(self.check_intervals());
     }
 
     #[cfg(debug_assertions)]

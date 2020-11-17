@@ -84,6 +84,8 @@ impl<T: Resource> fmt::Debug for ResourceHandle<T> {
 
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ResourceHandle").field(type_name::<T>()).finish()
+        f.debug_tuple("ResourceHandle")
+            .field(&type_name::<T>().to_owned())
+            .finish()
     }
 }

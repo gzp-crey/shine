@@ -1,5 +1,6 @@
 use crate::{
     core::rwtoken::RWToken,
+    dbg_assert,
     resources::{
         Resource, ResourceCell, ResourceConfig, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite,
         ResourceRead, ResourceWrite,
@@ -10,6 +11,7 @@ use std::{
     any::type_name,
     cell::UnsafeCell,
     collections::HashMap,
+    marker::PhantomData,
     sync::{
         atomic::{self, AtomicUsize},
         Arc, Mutex,
@@ -23,6 +25,9 @@ static STORE_UNIQUE_ID: AtomicUsize = AtomicUsize::new(0);
 /// Context for the post process functor called after bake
 pub struct ResourceBakeContext<'store, T: Resource> {
     generation: usize,
+    _ph: PhantomData<&'store T>,
+
+    #[cfg(debug_assertions)]
     resource_map: &'store mut HashMap<ResourceId, Arc<ResourceCell<T>>>,
 }
 
@@ -30,7 +35,7 @@ impl<'store, T: Resource> ResourceBakeContext<'store, T> {
     pub fn process_by_handle<F: FnOnce(&ResourceHandle<T>, &mut T)>(&self, handle: &ResourceHandle<T>, process: F) {
         if let Some(cell) = handle.upgrade() {
             if handle.generation() == self.generation {
-                debug_assert!(Arc::ptr_eq(self.resource_map.get(&handle.id()).unwrap(), &cell));
+                dbg_assert!(Arc::ptr_eq(self.resource_map.get(&handle.id()).unwrap(), &cell));
                 cell.write_lock();
                 // safety:
                 //  this type is constructed only if the T implements the required Send and Sync markers
@@ -152,6 +157,8 @@ impl<T: Resource> ResourceStore<T> {
         }
         self.config.post_bake(&mut ResourceBakeContext {
             generation: self.generation,
+            _ph: PhantomData,
+            #[cfg(debug_assertions)]
             resource_map: &mut self.resource_map,
         });
     }

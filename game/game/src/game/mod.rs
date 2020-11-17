@@ -1,4 +1,4 @@
-pub mod test1;
+//pub mod test1;
 //pub mod test2;
 //pub mod test3;
 //pub mod test4;
@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Game {
-    Test1(test1::Test1),
+    Empty,
+    //Test1(test1::Test1),
     //Test2(test2::Test2),
     //Test3(test3::Test3),
     //Test4(test4::Test4),

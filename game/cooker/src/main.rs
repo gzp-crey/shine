@@ -10,7 +10,7 @@ mod config;
 //mod cook_gltf;
 //mod cook_pipeline;
 mod cook_shader;
-//mod cook_texture;
+mod cook_texture;
 mod target_db;
 
 pub use self::config::Config;
@@ -130,7 +130,7 @@ async fn cook(context: &Context, source_id: SourceId) -> Result<Dependency, Cook
         //"pl" => cook_pipeline::cook_pipeline(&context, &asset_base, &asset_id).await?,
         //"fgr" => cook_frame_graph::cook_frame_graph(&context, &asset_base, &asset_id).await?,
         //"glb" | "gltf" => cook_gltf::cook_gltf(&context, &asset_base, &asset_id).await?,
-        //"jpg" | "png" => cook_texture::cook_texture(&context, &asset_base, &asset_id).await?,
+        "jpg" | "png" => cook_texture::cook_texture(&context, source_id).await?,
         //"game" => cook_game::cook_game(&context, &asset_base, &asset_id).await?,
         e => return Err(assets::AssetError::UnsupportedFormat(e.into()).into()),
     };
@@ -176,6 +176,7 @@ fn main() -> Result<(), Report> {
 
     let assets = [
         "games/test1/hello.fs",
+        "games/test3/checker.png",
         //"games/test1/test.game",
         //"games/test2/test.game",
         //"games/test3/test.game",
