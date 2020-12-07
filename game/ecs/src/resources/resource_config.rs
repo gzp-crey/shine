@@ -6,10 +6,13 @@ pub trait ResourceConfig {
 
     fn as_any(&self) -> &dyn Any;
 
+    /// Indicates if build should be called when a resoucre was not found.
     fn auto_build(&self) -> bool;
 
+    /// Called to create missing resources when auto_build is enabled.
     fn build(&self, handle: ResourceHandle<Self::Resource>, id: &ResourceId) -> Self::Resource;
 
+    /// Called during bake to perform additional updates on the resources (ex. consume async load responses)
     fn post_bake(&mut self, context: &mut ResourceBakeContext<'_, Self::Resource>);
 }
 

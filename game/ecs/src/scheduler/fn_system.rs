@@ -1,3 +1,15 @@
+use crate::{
+    core::hlist::HFind,
+    hlist_type,
+    resources::{Resource, Resources},
+    scheduler::{
+        FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, ResourceClaims, ResourceQuery, System,
+        SystemGroup, SystemName, TagResClaim, TagResMutClaim,
+    },
+    ECSError,
+};
+use std::{any, borrow::Cow, convert::TryFrom, marker::PhantomData};
+
 /// Create a system from a function
 pub struct FnSystemBuilder<Func, C, R> {
     func: Func,
@@ -7,7 +19,7 @@ pub struct FnSystemBuilder<Func, C, R> {
     _phantom: std::marker::PhantomData<R>,
 }
 
-impl<Func, C, R> SystemBuilder<Func, C, R> {
+impl<Func, C, R> FnSystemBuilder<Func, C, R> {
     #[must_use]
     pub fn with_name(mut self, name: Option<SystemName>) -> Self {
         self.name = name;
@@ -21,9 +33,9 @@ impl<Func, C, R> SystemBuilder<Func, C, R> {
     }
 
     #[must_use]
-    pub fn with_claim<T, Index>(mut self, claim: T) -> Self
+    pub fn with_claim<Claim, Index>(mut self, claim: Claim) -> Self
     where
-        C: HFind<T, Index>,
+        C: HFind<Claim, Index>,
     {
         *self.claims.get_mut() = claim;
         self
@@ -31,63 +43,61 @@ impl<Func, C, R> SystemBuilder<Func, C, R> {
 }
 
 /// Helper trait to set the tags for shared tagged resource claims
-pub trait WithTag<C, Index> {
-    fn with_tag<Claim: 'static>(self, claim: &[&str]) -> Self
+pub trait WithTagRes<C, HIndex> {
+    fn with_tag<T: Resource>(self, claim: &[&str]) -> Self
     where
         Self: Sized,
-        C: HFind<TagClaim<Claim>, Index>;
+        C: HFind<TagResClaim<T>, HIndex>;
 }
 
-impl<Func, C, R, Index> WithTag<C, Index> for SystemBuilder<Func, C, R> {
-    fn with_tag<Claim: 'static>(mut self, claim: &[&str]) -> Self
+impl<Func, C, R, HIndex> WithTagRes<C, HIndex> for FnSystemBuilder<Func, C, R> {
+    fn with_tag<T: Resource>(mut self, claim: &[&str]) -> Self
     where
         Self: Sized,
-        C: HFind<TagClaim<Claim>, Index>,
+        C: HFind<TagResClaim<T>, HIndex>,
     {
-        *self.claims.get_mut() = TagClaim::<Claim>::try_from(claim).unwrap();
+        *self.claims.get_mut() = TagResClaim::<T>::try_from(claim).unwrap();
         self
     }
 }
 
-/// Trait to set the tags for unique tagged resource claims
-pub trait WithTagMut<C, Index> {
-    fn with_tag_mut<Claim>(self, claim: &[&str]) -> Self
+/// Helper trait to set the tags for unique tagged resource claims
+pub trait WithTagResMut<C, Index> {
+    fn with_tag_mut<T: Resource>(self, claim: &[&str]) -> Self
     where
         Self: Sized,
-        Claim: 'static,
-        C: HFind<TagMutClaim<Claim>, Index>;
+        C: HFind<TagResMutClaim<T>, Index>;
 }
 
-impl<Func, C, R, Index> WithTagMut<C, Index> for SystemBuilder<Func, C, R> {
-    fn with_tag_mut<Claim: 'static>(mut self, claim: &[&str]) -> Self
+impl<Func, C, R, Index> WithTagResMut<C, Index> for FnSystemBuilder<Func, C, R> {
+    fn with_tag_mut<T: Resource>(mut self, claim: &[&str]) -> Self
     where
         Self: Sized,
-        Claim: 'static,
-        C: HFind<TagMutClaim<Claim>, Index>,
+        C: HFind<TagResMutClaim<T>, Index>,
     {
-        *self.claims.get_mut() = TagMutClaim::<Claim>::try_from(claim).unwrap();
+        *self.claims.get_mut() = TagResMutClaim::<T>::try_from(claim).unwrap();
         self
     }
 }
 
-pub struct SystemFn<Func, Claims>
+pub struct FnSystem<Func, Claims>
 where
     Func: FnMut(&Resources, &Claims) -> Result<(), ECSError>,
 {
-    type_name: Cow<'static, str>,
+    debug_name: Cow<'static, str>,
     name: Option<SystemName>,
     claims: Claims,
     resource_claims: ResourceClaims,
     func: Func,
 }
 
-impl<Func, Claims> System for SystemFn<Func, Claims>
+impl<Func, Claims> System for FnSystem<Func, Claims>
 where
     Func: FnMut(&Resources, &Claims) -> Result<(), ECSError> + Send + Sync,
     Claims: 'static + Send + Sync,
 {
-    fn type_name(&self) -> Cow<'static, str> {
-        self.type_name.clone()
+    fn debug_name(&self) -> &str {
+        &self.debug_name
     }
 
     fn name(&self) -> &Option<SystemName> {
@@ -98,9 +108,10 @@ where
         &self.resource_claims
     }
 
-    fn run(&mut self, resources: &Resources) -> Result<(), ECSError> {
-        log::trace!("Running system [{:?}] - {:?}", self.name, self.type_name());
-        (self.func)(resources, &self.claims)
+    fn run(&mut self, resources: &Resources) -> Result<SystemGroup, ECSError> {
+        log::trace!("Running system [{:?}] - {:?}", self.name, self.debug_name());
+        (self.func)(resources, &self.claims)?;
+        Ok(SystemGroup::default())
     }
 }
 
@@ -120,12 +131,12 @@ macro_rules! impl_into_system {
                 + Send + Sync + 'static,
             $($resource: ResourceQuery,)*
         {
-            type Builder = SystemBuilder<Func,
+            type Builder = FnSystemBuilder<Func,
                              hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
                              ($($resource,)*)>;
 
             fn system(self) -> Self::Builder {
-                SystemBuilder {
+                FnSystemBuilder {
                     name: None,
                     func: self,
                     dependencies: Default::default(),
@@ -136,7 +147,7 @@ macro_rules! impl_into_system {
         }
 
         impl<Func, $($resource,)*> IntoSystem<($($resource,)*)>
-            for SystemBuilder<
+            for FnSystemBuilder<
                     Func,
                     hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
                     ($($resource,)*)>
@@ -151,19 +162,18 @@ macro_rules! impl_into_system {
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
             fn into_system(self) -> Result<Box<dyn System>, ECSError> {
-                let SystemBuilder{ mut func, name, claims, .. } = self;
-                let type_name = any::type_name::<Func>().into();
+                let FnSystemBuilder{ mut func, name, claims, .. } = self;
+                let debug_name = any::type_name::<Func>().into();
                 let mut resource_claims = ResourceClaims::default();
 
-                $(resource_claims.add_claim(<$resource as ResourceQuery>::default_claims());)*
                 $(resource_claims.add_claim({
                         let $resource : &<$resource as ResourceQuery>::Claim = claims.get();
-                        $resource.into_claim()?
+                        $resource.into_claim()
                     });)*
 
-                Ok(Box::new(SystemFn {
+                Ok(Box::new(FnSystem {
                     name,
-                    type_name,
+                    debug_name,
                     resource_claims,
                     claims,
                     func: move |resources, claims| {

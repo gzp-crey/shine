@@ -1,9 +1,6 @@
-#![cfg(off)]
-
-use shine_ecs::ecs::{
-    prelude::*,
-    resources::{Res, ResMut, Resources, Tag, TagMut},
-    scheduler::Schedule,
+use shine_ecs::{
+    resources::{ResourceId, Resources},
+    scheduler::{prelude::*, Res, ResMut, Schedule, TagRes, TagResMut},
 };
 
 mod utils;
@@ -21,7 +18,7 @@ fn sys3(r1: Res<usize>, r2: ResMut<String>, r3: Res<u8>) {
     assert!(*r3 == 3);
 }
 
-fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: Tag<u8>, r4: TagMut<u16>) {
+fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: TagRes<u8>, r4: TagResMut<u16>) {
     log::info!("claims: u8: {:?}", r3.claim());
     log::info!("claims: u16: {:?}", r4.claim());
     log::info!("r1={:?}", &*r1);
@@ -44,14 +41,20 @@ fn resource_access() {
 
     let mut resources = Resources::default();
     log::info!("registering resources...");
+    resources.register_unmanaged::<usize>();
+    resources.register_unmanaged::<u32>();
+    resources.register_unmanaged::<u16>();
+    resources.register_unmanaged::<u8>();
+    resources.register_unmanaged::<String>();
+
     resources.insert(1usize);
     resources.insert(2u32);
-    resources.insert(3u8);
-    resources.insert_with_try_tag("five", 5u8).unwrap();
-    resources.insert_with_try_tag("six", 6u8).unwrap();
-    resources.insert_with_try_tag("16", 16u16).unwrap();
-    resources.insert(4u16);
     resources.insert("string".to_string());
+    resources.insert(3u8);
+    resources.insert_tagged("five", 5u8);
+    resources.insert_tagged("six", 6u8);
+    resources.insert(4u16);
+    resources.insert_tagged("16", 16u16);
 
     log::info!("registering systems...");
     let mut sh = Schedule::default();

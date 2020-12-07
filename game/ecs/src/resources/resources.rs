@@ -2,7 +2,7 @@ use crate::resources::ResourceStoreCell;
 use crate::{
     resources::{
         Resource, ResourceConfig, ResourceHandle, ResourceId, ResourceMultiRead, ResourceMultiWrite, ResourceRead,
-        ResourceStoreRead, ResourceStoreWrite, ResourceWrite,
+        ResourceStoreRead, ResourceStoreWrite, ResourceWrite, UnmanagedResource,
     },
     ECSError,
 };
@@ -125,6 +125,12 @@ impl Resources {
         }
     }
 
+    /// Register a new type of resource with manual management.
+    /// Resources have to be registered before instances could be inserted.
+    pub fn register_unmanaged<T: Resource>(&mut self) {
+        self.register::<T, _>(UnmanagedResource::default())
+    }
+
     /// Unregister and release all the resources of the given type. This operation also invalidates
     /// all the handles. The other type of references and accessors
     /// are not effected as they should not exist by the design of the API.
@@ -154,6 +160,14 @@ impl Resources {
     /// should not exist by the design of the API.
     pub fn insert<T: Resource>(&mut self, value: T) -> Result<Option<T>, ECSError> {
         self.insert_with_id(ResourceId::Global, value)
+    }
+
+    /// Inserts the instance of `T` into the store with the given tag.
+    /// If resource alread exists it is replaced and the old value is returned. All the handles
+    /// are invalidated. The other type of references and accessors are not effected as they
+    /// should not exist by the design of the API.
+    pub fn insert_tagged<T: Resource>(&mut self, tag: &str, resource: T) -> Result<Option<T>, ECSError> {
+        self.insert_with_id(ResourceId::from_tag(tag)?, resource)
     }
 
     /// Removes the instance of `T` with the given id from this store if it exists.

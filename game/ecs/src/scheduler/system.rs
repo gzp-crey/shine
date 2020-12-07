@@ -1,4 +1,4 @@
-use crate::{core::ids::SmallStringId, resources::Resources, ECSError};
+use crate::{core::ids::SmallStringId, resources::Resources, scheduler::ResourceClaims, ECSError};
 use std::{
     slice::Iter,
     sync::{Arc, Mutex},
@@ -8,9 +8,10 @@ pub type SystemName = SmallStringId<16>;
 
 /// Systems scheduled for execution
 pub trait System: Send + Sync {
+    fn debug_name(&self) -> &str;
     fn name(&self) -> &Option<SystemName>;
     //fn dependencies(&self) -> &Vec<SystemName>;
-    //fn resource_claims(&self) -> &ResourceClaims;
+    fn resource_claims(&self) -> &ResourceClaims;
     fn run(&mut self, resources: &Resources) -> Result<SystemGroup, ECSError>;
 }
 

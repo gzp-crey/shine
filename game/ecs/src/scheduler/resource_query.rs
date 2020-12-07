@@ -21,7 +21,7 @@ pub trait IntoResourceClaim {
 
 pub trait ResourceQuery {
     type Fetch: for<'a> FetchResource<'a, Self::Claim>;
-    type Claim: Default + IntoResourceClaim;
+    type Claim: 'static + Send + Sync + Default + IntoResourceClaim;
 }
 
 pub trait FetchResource<'a, Claim> {
@@ -179,18 +179,18 @@ impl<'a, 'b, T: Resource, const N: usize> TryFrom<&'a [&'b str; N]> for TagResCl
 pub struct TagResFetch<T: Resource>(PhantomData<T>);
 
 impl<'a, T: Resource> FetchResource<'a, TagResClaim<T>> for TagResFetch<T> {
-    type Item = Tag<'a, T>;
+    type Item = TagRes<'a, T>;
 
     fn fetch<'r: 'a>(resources: &'r Resources, claims: &'r TagResClaim<T>) -> Result<Self::Item, ECSError> {
         let resources = resources.get_with_ids::<T, _>(&claims.0)?;
-        Ok(Tag(resources, claims))
+        Ok(TagRes(resources, claims))
     }
 }
 
 /// Shared borrow of multiple tagged resources.
-pub struct Tag<'a, T: Resource>(ResourceMultiRead<'a, T>, &'a TagResClaim<T>);
+pub struct TagRes<'a, T: Resource>(ResourceMultiRead<'a, T>, &'a TagResClaim<T>);
 
-impl<'a, T: Resource> Tag<'a, T> {
+impl<'a, T: Resource> TagRes<'a, T> {
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -211,7 +211,7 @@ impl<'a, T: Resource> Tag<'a, T> {
     }
 }
 
-impl<'a, T: Resource> Index<usize> for Tag<'a, T> {
+impl<'a, T: Resource> Index<usize> for TagRes<'a, T> {
     type Output = T;
 
     fn index(&self, idx: usize) -> &T {
@@ -219,30 +219,30 @@ impl<'a, T: Resource> Index<usize> for Tag<'a, T> {
     }
 }
 
-impl<'a, T: Resource> ResourceQuery for Tag<'a, T> {
+impl<'a, T: Resource> ResourceQuery for TagRes<'a, T> {
     type Claim = TagResClaim<T>;
     type Fetch = TagResFetch<T>;
 }
 
-/// Claims for TagMutRes<'_, T>. A list of resource tags.
-pub struct TagMutResClaim<T: Resource>(Vec<ResourceId>, PhantomData<fn(T)>);
+/// Claims for TagResMut<'_, T>. A list of resource tags.
+pub struct TagResMutClaim<T: Resource>(Vec<ResourceId>, PhantomData<fn(T)>);
 
-impl<T: Resource> Default for TagMutResClaim<T> {
+impl<T: Resource> Default for TagResMutClaim<T> {
     fn default() -> Self {
         Self(Vec::new(), PhantomData)
     }
 }
 
-impl<T: Resource> IntoResourceClaim for TagMutResClaim<T> {
+impl<T: Resource> IntoResourceClaim for TagResMutClaim<T> {
     fn into_claim(&self) -> ResourceClaim {
         let mutable = self.0.iter().map(|c| (TypeId::of::<T>(), c.clone()));
         ResourceClaim::new(None, mutable)
     }
 }
 
-impl<T: Resource> fmt::Debug for TagMutResClaim<T> {
+impl<T: Resource> fmt::Debug for TagResMutClaim<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut dbg = f.debug_tuple("TagMutResClaim");
+        let mut dbg = f.debug_tuple("TagResMutClaim");
         self.0.iter().for_each(|x| match x {
             ResourceId::Tag(x) => {
                 dbg.field(&x.as_str());
@@ -253,7 +253,7 @@ impl<T: Resource> fmt::Debug for TagMutResClaim<T> {
     }
 }
 
-impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for TagMutResClaim<T> {
+impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for TagResMutClaim<T> {
     type Error = ECSError;
 
     fn try_from(value: &'a [&'b str]) -> Result<Self, Self::Error> {
@@ -265,7 +265,7 @@ impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for TagMutResClaim<T> {
     }
 }
 
-impl<'a, 'b, T: Resource, const N: usize> TryFrom<&'a [&'b str; N]> for TagMutResClaim<T> {
+impl<'a, 'b, T: Resource, const N: usize> TryFrom<&'a [&'b str; N]> for TagResMutClaim<T> {
     type Error = ECSError;
 
     fn try_from(value: &'a [&'b str; N]) -> Result<Self, Self::Error> {
@@ -280,19 +280,19 @@ impl<'a, 'b, T: Resource, const N: usize> TryFrom<&'a [&'b str; N]> for TagMutRe
 /// Fetch for TagRes<'_, T>.
 pub struct TagResMutFetch<T: Resource>(PhantomData<T>);
 
-impl<'a, T: Resource> FetchResource<'a, TagMutResClaim<T>> for TagResMutFetch<T> {
-    type Item = TagMut<'a, T>;
+impl<'a, T: Resource> FetchResource<'a, TagResMutClaim<T>> for TagResMutFetch<T> {
+    type Item = TagResMut<'a, T>;
 
-    fn fetch<'r: 'a>(resources: &'r Resources, claims: &'r TagMutResClaim<T>) -> Result<Self::Item, ECSError> {
+    fn fetch<'r: 'a>(resources: &'r Resources, claims: &'r TagResMutClaim<T>) -> Result<Self::Item, ECSError> {
         let resources = resources.get_mut_with_ids::<T, _>(&claims.0)?;
-        Ok(TagMut(resources, claims))
+        Ok(TagResMut(resources, claims))
     }
 }
 
 /// Shared borrow of multiple tagged resources.
-pub struct TagMut<'a, T: Resource>(ResourceMultiWrite<'a, T>, &'a TagMutResClaim<T>);
+pub struct TagResMut<'a, T: Resource>(ResourceMultiWrite<'a, T>, &'a TagResMutClaim<T>);
 
-impl<'a, T: Resource> TagMut<'a, T> {
+impl<'a, T: Resource> TagResMut<'a, T> {
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -301,7 +301,7 @@ impl<'a, T: Resource> TagMut<'a, T> {
         self.0.is_empty()
     }
 
-    pub fn claim(&self) -> &TagMutResClaim<T> {
+    pub fn claim(&self) -> &TagResMutClaim<T> {
         &self.1
     }
 
@@ -313,7 +313,7 @@ impl<'a, T: Resource> TagMut<'a, T> {
     }
 }
 
-impl<'a, T: Resource> Index<usize> for TagMut<'a, T> {
+impl<'a, T: Resource> Index<usize> for TagResMut<'a, T> {
     type Output = T;
 
     fn index(&self, idx: usize) -> &T {
@@ -321,13 +321,13 @@ impl<'a, T: Resource> Index<usize> for TagMut<'a, T> {
     }
 }
 
-impl<'a, T: Resource> IndexMut<usize> for TagMut<'a, T> {
+impl<'a, T: Resource> IndexMut<usize> for TagResMut<'a, T> {
     fn index_mut(&mut self, idx: usize) -> &mut T {
         &mut self.0[idx]
     }
 }
 
-impl<'a, T: Resource> ResourceQuery for TagMut<'a, T> {
-    type Claim = TagMutResClaim<T>;
+impl<'a, T: Resource> ResourceQuery for TagResMut<'a, T> {
+    type Claim = TagResMutClaim<T>;
     type Fetch = TagResMutFetch<T>;
 }
