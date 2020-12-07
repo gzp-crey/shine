@@ -10,6 +10,6 @@ pub mod assets;
 //pub mod components;
 //pub mod game;
 pub mod input;
-//pub mod render;
+pub mod render;
 
 pub use wgpu;

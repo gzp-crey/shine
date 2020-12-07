@@ -1,6 +1,6 @@
 use crate::{
     app::AppError,
-    input::{mappers, InputError, InputEvent, InputMapper},
+    input::{mappers, InputEvent, InputMapper},
     World,
 };
 use shine_ecs::resources::{Resource, ResourceRead, ResourceWrite};
@@ -52,12 +52,6 @@ impl InputHandler {
     pub fn advance(&mut self, previous_state: &mut InputState) {
         self.manager
             .advance_states_with_guestures(previous_state, &mut self.state, &mut self.guestures);
-    }
-}
-
-impl From<InputError> for AppError {
-    fn from(err: InputError) -> Self {
-        AppError::plugin(World::input_plugin_name(), err)
     }
 }
 

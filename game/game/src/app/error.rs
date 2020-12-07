@@ -1,4 +1,5 @@
 use config::ConfigError;
+use shine_ecs::ECSError;
 use std::error::Error as StdError;
 use thiserror::Error;
 
@@ -12,6 +13,9 @@ pub enum AppError {
 
     #[error("Plugin not configured {}", plugin)]
     PluginDependency { plugin: String, source: Box<dyn StdError> },
+
+    #[error("Task error")]
+    TaskError(#[source] ECSError),
 }
 
 impl AppError {

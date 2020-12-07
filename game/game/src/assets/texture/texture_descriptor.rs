@@ -10,6 +10,9 @@ pub enum ImageEncoding {
 
     /// Image data is encoded as a jpeg
     Jpeg,
+
+    /// Raw uncompressed
+    Raw,
 }
 
 /// Texture data descriptor

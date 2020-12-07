@@ -11,4 +11,5 @@ pub mod core;
 mod error;
 pub use self::error::*;
 pub mod resources;
+pub mod scheduler;
 pub mod utils;

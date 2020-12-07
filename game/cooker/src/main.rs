@@ -7,7 +7,7 @@ use tokio::runtime::Runtime;
 mod config;
 //mod cook_frame_graph;
 //mod cook_game;
-//mod cook_gltf;
+mod cook_gltf;
 //mod cook_pipeline;
 mod cook_shader;
 mod cook_texture;
@@ -68,7 +68,7 @@ impl SourceId {
 /// Indicates, how to name the cooked assets
 pub enum TargetNaming {
     Hard(String, Option<String>),
-    Soft(String),
+    Soft(String, Option<String>),
 }
 
 /// Define the source -> cooked mapping for asset dependency handling.
@@ -129,7 +129,7 @@ async fn cook(context: &Context, source_id: SourceId) -> Result<Dependency, Cook
         "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, source_id).await?,
         //"pl" => cook_pipeline::cook_pipeline(&context, &asset_base, &asset_id).await?,
         //"fgr" => cook_frame_graph::cook_frame_graph(&context, &asset_base, &asset_id).await?,
-        //"glb" | "gltf" => cook_gltf::cook_gltf(&context, &asset_base, &asset_id).await?,
+        "glb" | "gltf" => cook_gltf::cook_gltf(&context, source_id).await?,
         "jpg" | "png" => cook_texture::cook_texture(&context, source_id).await?,
         //"game" => cook_game::cook_game(&context, &asset_base, &asset_id).await?,
         e => return Err(assets::AssetError::UnsupportedFormat(e.into()).into()),
@@ -177,6 +177,8 @@ fn main() -> Result<(), Report> {
     let assets = [
         "games/test1/hello.fs",
         "games/test3/checker.png",
+        "models/SimpleMeshes.gltf",
+        "models/VertexColorTest.glb",
         //"games/test1/test.game",
         //"games/test2/test.game",
         //"games/test3/test.game",

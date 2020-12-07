@@ -10,27 +10,27 @@ fn single_threaded_logic() {
     utils::init_logger();
 
     let (p, c) = state_channel();
-    assert!(c.receive().is_err());
+    assert!(c.receive().is_none());
 
-    p.send(1).unwrap();
+    p.send(1);
     assert_eq!(c.receive().unwrap(), 1);
-    assert!(c.receive().is_err());
-    assert!(c.receive().is_err());
+    assert!(c.receive().is_none());
+    assert!(c.receive().is_none());
 
-    p.send(2).unwrap();
+    p.send(2);
     assert_eq!(c.receive().unwrap(), 2);
-    assert!(c.receive().is_err());
-    assert!(c.receive().is_err());
+    assert!(c.receive().is_none());
+    assert!(c.receive().is_none());
 
-    p.send(3).unwrap();
+    p.send(3);
     assert_eq!(c.receive().unwrap(), 3);
-    assert!(c.receive().is_err());
-    assert!(c.receive().is_err());
+    assert!(c.receive().is_none());
+    assert!(c.receive().is_none());
 
-    p.send(4).unwrap();
+    p.send(4);
     assert_eq!(c.receive().unwrap(), 4);
-    assert!(c.receive().is_err());
-    assert!(c.receive().is_err());
+    assert!(c.receive().is_none());
+    assert!(c.receive().is_none());
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn single_threaded_stress_small_buffer() {
 
     let (p, c) = state_channel();
     for x in 0..ITER_COUNT {
-        p.send(x).unwrap();
+        p.send(x);
         assert_eq!(c.receive().unwrap(), x);
     }
 }
@@ -52,7 +52,7 @@ fn multi_threaded_stress_small_buffer() {
     let (p, c) = state_channel();
     let tp = thread::spawn(move || {
         for x in 0..ITER_COUNT {
-            p.send(x).unwrap();
+            p.send(x);
         }
         //println!("produced: {}", ITER_COUNT);
     });
@@ -60,16 +60,13 @@ fn multi_threaded_stress_small_buffer() {
         let mut prev = -1;
         let mut _cnt = 0;
         loop {
-            match c.receive() {
-                Ok(x) => {
-                    _cnt += 1;
-                    assert!(prev < x);
-                    prev = x;
-                    if prev == ITER_COUNT - 1 {
-                        break;
-                    }
+            if let Some(x) = c.receive() {
+                _cnt += 1;
+                assert!(prev < x);
+                prev = x;
+                if prev == ITER_COUNT - 1 {
+                    break;
                 }
-                Err(_) => {}
             }
         }
         //println!("consumed: {}", _cnt);
@@ -130,7 +127,7 @@ fn single_threaded_stress_big_buffer() {
     let (p, c) = state_channel::<BigData>();
     for x in 0..ITER_COUNT {
         {
-            let mut d = p.send_buffer().unwrap();
+            let mut d = p.send_buffer();
             assert_eq!(d.pre, 2);
             d.pre = 1;
             for i in 0..d.data.len() {
@@ -161,7 +158,7 @@ fn multi_threaded_stress_big_buffer() {
     let (p, c) = state_channel::<BigData>();
     let tp = thread::spawn(move || {
         for x in 0..ITER_COUNT {
-            let mut d = p.send_buffer().unwrap();
+            let mut d = p.send_buffer();
             d.pre = 1;
             d.x = x;
             for i in 0..d.data.len() {
@@ -177,25 +174,22 @@ fn multi_threaded_stress_big_buffer() {
         let mut prev = -1;
         let mut cnt = 0;
         loop {
-            match c.receive_buffer() {
-                Ok(mut d) => {
-                    cnt += 1;
-                    assert_eq!(d.pre, 1);
-                    assert_eq!(d.post, 1);
-                    d.pre = 2;
-                    for i in 0..d.data.len() {
-                        assert_eq!(d.data[i], d.data[0]);
-                    }
-                    d.post = 2;
-                    assert_eq!(d.pre, 2);
-                    assert_eq!(d.post, 2);
-                    assert!(prev < d.x);
-                    prev = d.x;
-                    if prev == ITER_COUNT - 1 {
-                        break;
-                    }
+            if let Some(mut d) = c.receive_buffer() {
+                cnt += 1;
+                assert_eq!(d.pre, 1);
+                assert_eq!(d.post, 1);
+                d.pre = 2;
+                for i in 0..d.data.len() {
+                    assert_eq!(d.data[i], d.data[0]);
                 }
-                Err(_) => {}
+                d.post = 2;
+                assert_eq!(d.pre, 2);
+                assert_eq!(d.post, 2);
+                assert!(prev < d.x);
+                prev = d.x;
+                if prev == ITER_COUNT - 1 {
+                    break;
+                }
             }
         }
         log::info!("consumed: {}", cnt);

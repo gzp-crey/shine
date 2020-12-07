@@ -1,4 +1,4 @@
-use crate::assets::UrlError;
+use crate::{app::AppError, assets::UrlError, World};
 use shine_ecs::core::error::ErrorString;
 use std::error::Error as StdError;
 use thiserror::Error;
@@ -90,5 +90,11 @@ impl AssetError {
             message: message.to_string(),
             source: Box::new(error),
         }
+    }
+}
+
+impl From<AssetError> for AppError {
+    fn from(err: AssetError) -> Self {
+        AppError::plugin(World::asset_plugin_name(), err)
     }
 }

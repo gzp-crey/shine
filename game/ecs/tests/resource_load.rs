@@ -1,5 +1,12 @@
-use shine_ecs::resources::{ResourceHandle, ResourceId, ResourceLoadContext, ResourceLoader, Resources};
-use std::{thread, time::Duration};
+use shine_ecs::resources::{ResourceHandle, ResourceId, ResourceLoadRequester, ResourceLoader, Resources};
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    thread,
+    time::Duration,
+};
 
 mod utils;
 
@@ -7,12 +14,12 @@ mod utils;
 #[derive(Debug)]
 struct TestData {
     id: ResourceId,
-    response_count: u32,
+    response_count: usize,
     text: String,
 }
 
 impl TestData {
-    fn build(context: &ResourceLoadContext<Self, String>, handle: ResourceHandle<Self>, id: &ResourceId) -> TestData {
+    fn build(context: &ResourceLoadRequester<Self, String>, handle: ResourceHandle<Self>, id: &ResourceId) -> TestData {
         log::trace!("Creating [{:?}]", id);
         context.send_request(handle, "build".to_string());
         TestData {
@@ -22,15 +29,16 @@ impl TestData {
         }
     }
 
-    async fn on_load(handle: ResourceHandle<Self>, request: String) -> Option<String> {
-        log::debug!("on_load [{:?}]: {:?}", handle, request);
+    async fn on_load(cnt: &Arc<AtomicUsize>, handle: ResourceHandle<Self>, request: String) -> Option<String> {
+        log::trace!("on_load [{:?}]: {:?}", handle, request);
+        cnt.fetch_add(1, Ordering::Relaxed);
         thread::sleep(Duration::from_micros(50)); // emulate an active wait
         Some(format!("l({})", request))
     }
 
     fn on_load_response(
         this: &mut Self,
-        context: &ResourceLoadContext<Self, String>,
+        context: &ResourceLoadRequester<Self, String>,
         handle: &ResourceHandle<Self>,
         response: String,
     ) {
@@ -46,8 +54,10 @@ async fn simple() {
     utils::init_logger();
 
     let mut resources = Resources::default();
+    let load_count = Arc::new(AtomicUsize::new(0));
     resources.register(ResourceLoader::new(
         TestData::build,
+        load_count.clone(),
         TestData::on_load,
         TestData::on_load_response,
     ));
@@ -60,9 +70,8 @@ async fn simple() {
         };
 
         let mut i = 0;
-        let mut response_count = 0;
         loop {
-            log::debug!("Process loop {} - {}", i, response_count);
+            log::debug!("Process loop {}", i);
             i += 1;
             assert!(
                 i < 100,
@@ -71,12 +80,18 @@ async fn simple() {
 
             resources.bake::<TestData>(true);
 
-            response_count = {
+            let response_count = {
                 let store = resources.get_store::<TestData>().unwrap();
                 let item = store.at(&id);
-                log::debug!("loop: {}", item.text);
+                log::trace!("loop: {}", item.text);
                 item.response_count
             };
+
+            let ld_count = load_count.load(Ordering::Relaxed);
+
+            // we cannot have more response as load
+            log::debug!("counters: loop:{} load:{}, response: {}", i, ld_count, response_count);
+            assert!(ld_count >= response_count);
 
             if response_count > 3 {
                 let store = resources.get_store::<TestData>().unwrap();

@@ -13,11 +13,11 @@ pub struct TextureSource {
 }
 
 impl TextureSource {
-    pub async fn load(io: &AssetIO, texture_url: &Url) -> Result<(Self, String), AssetError> {
-        log::debug!("[{}] Downloading texture...", texture_url.as_str());
-        let image_data = io.download_binary(&texture_url).await?;
+    pub async fn load(io: &AssetIO, source_url: &Url) -> Result<(Self, String), AssetError> {
+        log::debug!("[{}] Downloading texture...", source_url.as_str());
+        let image_data = io.download_binary(&source_url).await?;
 
-        let meta_url = texture_url.set_extension("tex")?;
+        let meta_url = source_url.set_extension("tex")?;
         log::debug!("[{}] Downloading (optional) descriptor...", meta_url.as_str());
         let meta_data = match io.download_binary(&meta_url).await {
             Ok(meta_data) => Some(meta_data),
@@ -39,20 +39,20 @@ impl TextureSource {
 
         let descriptor = match meta_data {
             Some(meta) => serde_json::from_slice(&meta).map_err(|err| AssetError::ContentLoad {
-                content: texture_url.as_str().to_owned(),
+                content: source_url.as_str().to_owned(),
                 source: err.into(),
             })?,
             None => TextureDescriptor::default(),
         };
 
-        log::debug!("[{}] Docompressing image...", texture_url.as_str());
+        log::debug!("[{}] Docompressing image...", source_url.as_str());
         let image = task::spawn_blocking(move || image::load_from_memory(&image_data))
             .await
-            .map_err(|err| AssetError::load_failed(texture_url.as_str(), err))?
-            .map_err(|err| AssetError::load_failed(texture_url.as_str(), err))?;
+            .map_err(|err| AssetError::load_failed(source_url.as_str(), err))?
+            .map_err(|err| AssetError::load_failed(source_url.as_str(), err))?;
 
         let texture_source = TextureSource {
-            source_url: texture_url.clone(),
+            source_url: source_url.clone(),
             descriptor,
             image,
         };
@@ -105,6 +105,8 @@ impl TextureSource {
                         .map_err(|err| CookingError::new(source_url.as_str(), err))?;
                     Ok::<_, CookingError>(image_data)
                 }
+
+                ImageEncoding::Raw => unimplemented!(),
             }
         })
         .await

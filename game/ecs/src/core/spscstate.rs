@@ -44,16 +44,16 @@ impl<T> TripleBuffer<T> {
     }
 
     /// Swaps consume and intermediate buffers and resets the new flag.
-    /// If a the new flag was set, the index to the (new) consume buffer is returned, otherwise Err
+    /// If the new flag was set, the index to the (new) consume buffer is returned, otherwise None
     /// is returned.
     /// Index of the produce buffer is not modified.
-    fn try_get_consume_index(&self) -> Result<usize, ()> {
+    fn try_get_consume_index(&self) -> Option<usize> {
         let mut old_flags = self.flags.load(Ordering::Acquire);
         let mut new_flags: usize;
         loop {
             if (old_flags & 0x40) == 0 {
                 // nothing new, no need to swap
-                return Err(());
+                return None;
             }
             // clear the "new" bit and swap the indices of consume and intermediate buffers
             new_flags = (old_flags & 0x30) | ((old_flags & 0x3) << 2) | ((old_flags & 0xC) >> 2);
@@ -66,7 +66,7 @@ impl<T> TripleBuffer<T> {
                 Err(x) => old_flags = x,
             }
         }
-        Ok(new_flags & 0x3)
+        Some(new_flags & 0x3)
     }
 
     /// Swaps intermediate and (new)produced buffers and sets the new flag.
@@ -102,20 +102,15 @@ impl<T> Sender<T> {
         Sender(owner.clone())
     }
 
-    pub fn send_buffer(&self) -> Result<RefSendBuffer<'_, T>, ()> {
-        Ok(RefSendBuffer(&self.0, self.0.get_produce_index()))
+    pub fn send_buffer(&self) -> RefSendBuffer<'_, T> {
+        RefSendBuffer(&self.0, self.0.get_produce_index())
     }
 }
 
 impl<T: Copy> Sender<T> {
-    pub fn send(&self, value: T) -> Result<(), ()> {
-        match self.send_buffer() {
-            Ok(mut b) => {
-                *b = value;
-                Ok(())
-            }
-            Err(_) => Err(()),
-        }
+    pub fn send(&self, value: T) {
+        let mut b = self.send_buffer();
+        *b = value;
     }
 }
 
@@ -155,20 +150,17 @@ impl<T> Receiver<T> {
         Receiver(owner.clone())
     }
 
-    pub fn receive_buffer(&self) -> Result<RefReceiveBuffer<'_, T>, ()> {
+    pub fn receive_buffer(&self) -> Option<RefReceiveBuffer<'_, T>> {
         match self.0.try_get_consume_index() {
-            Ok(idx) => Ok(RefReceiveBuffer(&self.0, idx)),
-            Err(_) => Err(()),
+            Some(idx) => Some(RefReceiveBuffer(&self.0, idx)),
+            None => None,
         }
     }
 }
 
 impl<T: Copy> Receiver<T> {
-    pub fn receive(&self) -> Result<T, ()> {
-        match self.receive_buffer() {
-            Ok(b) => Ok(*b),
-            Err(_) => Err(()),
-        }
+    pub fn receive(&self) -> Option<T> {
+        self.receive_buffer().map(|b| *b)
     }
 }
 

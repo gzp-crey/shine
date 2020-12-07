@@ -10,6 +10,8 @@ use std::{
     sync::{Arc, Weak},
 };
 
+pub struct ResourceHandleExpired;
+
 /// Direct index to a resource. The resource can be access through
 /// the resource store accessors [ResourceStoreRead] and [ResourceStoreWrite],
 /// but instead of a hash based lookup, direct pointer access is used.
@@ -61,6 +63,14 @@ impl<T: Resource> ResourceHandle<T> {
 
     pub fn is_alive(&self) -> bool {
         self.cell.strong_count() > 0
+    }
+
+    pub fn check_liveness(&self) -> Result<(), ResourceHandleExpired> {
+        if self.is_alive() {
+            Ok(())
+        } else {
+            Err(ResourceHandleExpired)
+        }
     }
 
     #[cfg(debug_assertions)]

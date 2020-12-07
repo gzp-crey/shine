@@ -6,6 +6,7 @@ edition = "2018"
 
 [features]
 default = ["native", "cook"]
+
 native = [ 
     "tokio", 
     "reqwest",
@@ -20,8 +21,12 @@ wasm = [
     "wasm-bindgen-macro",
     "shine-ecs/wasm",
     "shine-input/wasm" ]
+
 cook = [     
-    "shaderc"
+    "native",
+    "shaderc",
+    "gltf",
+    "gltf-json"
 ]
 
 [dependencies]
@@ -32,20 +37,19 @@ serde_json = "1.0"
 bincode = "1.3"
 config = "0.10"
 futures = "0.3"
-url = "2.1"
-base64 = "0.12"
+url = "2.2"
+base64 = "0.13"
 ring = "0.16"
 data-encoding = "2.3"
 itertools = "0.9"
 async-trait = "0.1"
 
 image = {version = "0.23", features = ["jpeg"] }
-nalgebra = "0.22"
+nalgebra = "0.23"
 
 # render
 wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master", features = ["trace", "replay"] }
 bytemuck = "1.4"
-gltf = "0.15"
 
 # native
 # macros and time is required only for test, but see https://github.com/rust-lang/cargo/issues/1596
@@ -78,9 +82,9 @@ web-sys = { version = "0.3", optional = true, features = [
 js-sys = { version = "0.3", optional = true }
 
 #cook
-shaderc = { version = "0.6", features = ["build-from-source"], optional = true }
+shaderc = { version = "0.7", features = ["build-from-source"], optional = true }
+gltf = { version = "0.15", optional = true }
 gltf-json = { version = "0.15", optional = true }
-
 
 shine-input = { path = "../input", version = "0.1.0" }
 shine-ecs = { path = "../ecs", version = "0.1.0" }

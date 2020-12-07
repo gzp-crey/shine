@@ -198,9 +198,10 @@ impl TargetDB {
                 let url = Url::parse(&format!("hash-{}://{}.{}", scheme, hashed_path, ext))?;
                 Dependency::hard(source_id.clone(), url)
             }
-            TargetNaming::Soft(scheme) => {
+            TargetNaming::Soft(scheme, ext) => {
                 let asset_id = source_id.to_asset_id()?;
-                let url = Url::parse(&format!("{}://{}", scheme, asset_id.as_str()))?;
+                let ext = ext.unwrap_or_else(|| asset_id.extension().to_owned());
+                let url = Url::parse(&format!("{}://{}", scheme, asset_id.as_str()))?.set_extension(&ext)?;
                 Dependency::soft(source_id.clone(), url)
             }
         };

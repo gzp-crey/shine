@@ -5,12 +5,42 @@ use futures::{
 };
 use std::{any::Any, future::Future};
 
+/// Wrapper to solve lifetime issues.
+/// see: https://users.rust-lang.org/t/issue-with-fnonce-and-async-function-with-a-reference-type-argument/51959?u=gzp
+pub trait FnResourceLoad<'a, CTX, T, RQ, RP>: 'static + Send
+where
+    T: Resource,
+    CTX: 'static + Send,
+    RP: 'static + Send,
+    RQ: 'static + Send,
+{
+    type Fut: 'a + Future<Output = Option<RP>>;
+
+    fn call(&self, context: &'a CTX, handle: ResourceHandle<T>, request: RQ) -> Self::Fut;
+}
+
+impl<'a, CTX, T, RP, RQ, LoadFut, FnLoad> FnResourceLoad<'a, CTX, T, RQ, RP> for FnLoad
+where
+    T: Resource,
+    CTX: 'static + Send,
+    RP: 'static + Send,
+    RQ: 'static + Send,
+    LoadFut: 'a + Future<Output = Option<RP>>,
+    FnLoad: 'static + Send + Fn(&'a CTX, ResourceHandle<T>, RQ) -> LoadFut,
+{
+    type Fut = LoadFut;
+
+    fn call(&self, context: &'a CTX, handle: ResourceHandle<T>, request: RQ) -> Self::Fut {
+        (self)(context, handle, request)
+    }
+}
+
 /// Context to request (async) resource load
-pub struct ResourceLoadContext<T: Resource, RQ> {
+pub struct ResourceLoadRequester<T: Resource, RQ> {
     request_sender: UnboundedSender<(ResourceHandle<T>, RQ)>,
 }
 
-impl<T: Resource, RQ> ResourceLoadContext<T, RQ> {
+impl<T: Resource, RQ> ResourceLoadRequester<T, RQ> {
     pub fn send_request(&self, handle: ResourceHandle<T>, rq: RQ) {
         log::trace!("[{:?}] Sending load request", handle);
         if let Err(err) = self.request_sender.unbounded_send((handle, rq)) {
@@ -29,8 +59,8 @@ where
 {
     request_sender: UnboundedSender<(ResourceHandle<T>, RQ)>,
     response_receiver: UnboundedReceiver<(ResourceHandle<T>, RP)>,
-    build: Box<dyn Fn(&ResourceLoadContext<T, RQ>, ResourceHandle<T>, &ResourceId) -> T>,
-    response: Box<dyn Fn(&mut T, &ResourceLoadContext<T, RQ>, &ResourceHandle<T>, RP)>,
+    build: Box<dyn Fn(&ResourceLoadRequester<T, RQ>, ResourceHandle<T>, &ResourceId) -> T>,
+    response: Box<dyn Fn(&mut T, &ResourceLoadRequester<T, RQ>, &ResourceHandle<T>, RP)>,
 }
 
 impl<T, RQ, RP> ResourceLoader<T, RQ, RP>
@@ -39,12 +69,17 @@ where
     RQ: 'static + Send,
     RP: 'static + Send,
 {
-    pub fn new<FnBuild, FnLoad, LoadFut, FnResponse>(build: FnBuild, load: FnLoad, response: FnResponse) -> Self
+    pub fn new<CTX, FnBuild, FnLoad, FnResponse>(
+        build: FnBuild,
+        context: CTX,
+        load: FnLoad,
+        response: FnResponse,
+    ) -> Self
     where
-        FnBuild: 'static + Fn(&ResourceLoadContext<T, RQ>, ResourceHandle<T>, &ResourceId) -> T,
-        LoadFut: 'static + Future<Output = Option<RP>>,
-        FnLoad: 'static + Send + Fn(ResourceHandle<T>, RQ) -> LoadFut,
-        FnResponse: 'static + Fn(&mut T, &ResourceLoadContext<T, RQ>, &ResourceHandle<T>, RP),
+        CTX: 'static + Send + Sync,
+        FnBuild: 'static + Fn(&ResourceLoadRequester<T, RQ>, ResourceHandle<T>, &ResourceId) -> T,
+        for<'a> FnLoad: FnResourceLoad<'a, CTX, T, RQ, RP>,
+        FnResponse: 'static + Fn(&mut T, &ResourceLoadRequester<T, RQ>, &ResourceHandle<T>, RP),
     {
         let (request_sender, request_receiver) = mpsc::unbounded();
         let (response_sender, response_receiver) = mpsc::unbounded();
@@ -53,6 +88,7 @@ where
             request_receiver,
             response_sender,
             load,
+            context,
         }
         .start();
 
@@ -100,7 +136,7 @@ where
     }
 
     fn build(&self, handle: ResourceHandle<T>, id: &ResourceId) -> Self::Resource {
-        let request_context = ResourceLoadContext {
+        let request_context = ResourceLoadRequester {
             request_sender: self.request_sender.clone(),
         };
         (self.build)(&request_context, handle, id)
@@ -110,7 +146,7 @@ where
         while let Some((handle, rp)) = self.next_response() {
             log::trace!("[{:?}] Received load response", handle);
 
-            let request_context = ResourceLoadContext {
+            let request_context = ResourceLoadRequester {
                 request_sender: self.request_sender.clone(),
             };
             context.process_by_handle(&handle, {
@@ -126,26 +162,27 @@ where
 }
 
 /// Handle resource loading request, loading side.
-struct ResourceLoadWorker<T, RQ, RP, FnLoad, LoadFut>
+struct ResourceLoadWorker<CTX, T, RQ, RP, FnLoad>
 where
+    CTX: 'static + Send + Sync,
     T: Resource,
     RQ: 'static + Send,
     RP: 'static + Send,
-    LoadFut: 'static + Future<Output = Option<RP>>,
-    FnLoad: 'static + Send + Fn(ResourceHandle<T>, RQ) -> LoadFut,
+    for<'a> FnLoad: FnResourceLoad<'a, CTX, T, RQ, RP>,
 {
     request_receiver: UnboundedReceiver<(ResourceHandle<T>, RQ)>,
     response_sender: UnboundedSender<(ResourceHandle<T>, RP)>,
     load: FnLoad,
+    context: CTX,
 }
 
-impl<T, RQ, RP, FnLoad, LoadFut> ResourceLoadWorker<T, RQ, RP, FnLoad, LoadFut>
+impl<CTX, T, RQ, RP, FnLoad> ResourceLoadWorker<CTX, T, RQ, RP, FnLoad>
 where
+    CTX: 'static + Send + Sync,
     T: Resource,
     RQ: 'static + Send,
     RP: 'static + Send,
-    LoadFut: 'static + Future<Output = Option<RP>>,
-    FnLoad: 'static + Send + Fn(ResourceHandle<T>, RQ) -> LoadFut,
+    for<'a> FnLoad: FnResourceLoad<'a, CTX, T, RQ, RP>,
 {
     async fn handle_one(&mut self) -> bool {
         let (handle, rq) = match self.request_receiver.next().await {
@@ -160,7 +197,7 @@ where
         if !handle.is_alive() {
             return true;
         }
-        let response = match (self.load)(handle.clone(), rq).await {
+        let response = match self.load.call(&self.context, handle.clone(), rq).await {
             Some(output) => output,
             None => return true,
         };

@@ -26,6 +26,7 @@ impl CookedTexture {
                         c, f
                     ))),
                 }?;
+                self.image_descriptor.encoding = ImageEncoding::Raw;
                 Ok(self)
             }
 
@@ -40,8 +41,11 @@ impl CookedTexture {
                         c, f
                     ))),
                 }?;
+                self.image_descriptor.encoding = ImageEncoding::Raw;
                 Ok(self)
             }
+
+            ImageEncoding::Raw => unimplemented!(),
         }
     }
 }

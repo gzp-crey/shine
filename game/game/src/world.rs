@@ -1,13 +1,15 @@
-use shine_ecs::resources::Resources;
+use crate::app::AppError;
+use shine_ecs::{resources::Resources, scheduler::Schedule};
+use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct World {
     pub resources: Resources,
-    //schedules: HashMap<String, Schedule>,
+    schedules: HashMap<String, Schedule>,
 }
 
 impl World {
-    /*pub fn add_stage(&mut self, stage: &str, schedule: Schedule) {
+    pub fn add_stage(&mut self, stage: &str, schedule: Schedule) {
         let _ = self.schedules.insert(stage.into(), schedule);
     }
 
@@ -19,9 +21,10 @@ impl World {
         self.schedules.clear();
     }
 
-    pub fn run_stage(&mut self, stage: &str) {
+    pub fn run_stage(&mut self, stage: &str) -> Result<(), AppError> {
         if let Some(stage) = self.schedules.get_mut(stage) {
-            stage.run(&self.resources);
+            stage.run(&self.resources).map_err(|err| AppError::TaskError(err))?;
         }
-    }*/
+        Ok(())
+    }
 }

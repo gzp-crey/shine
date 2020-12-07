@@ -1,6 +1,6 @@
 use crate::{
     app::AppError,
-    assets::{AssetError, AssetIO, Url},
+    assets::{AssetIO, Url},
     World,
 };
 use serde::{Deserialize, Serialize};
@@ -10,12 +10,6 @@ use std::collections::HashMap;
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct AssetConfig {
     pub virtual_schemes: HashMap<String, Url>,
-}
-
-impl From<AssetError> for AppError {
-    fn from(err: AssetError) -> Self {
-        AppError::plugin(World::asset_plugin_name(), err)
-    }
 }
 
 impl World {

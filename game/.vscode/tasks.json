@@ -192,7 +192,7 @@
                 "env": {
                     "RUST_BACKTRACE": "1"
                 },
-                "cwd": "${workspaceFolder}/game"
+                "cwd": "${workspaceFolder}/${input:project}"
             },
             "presentation": {
                 "echo": true,
@@ -206,7 +206,7 @@
             "group": "build"
         },
         {
-            "label": "clippy",
+            "label": "clippy - native",
             "type": "shell",
             "command": "cargo",
             "args": [
@@ -218,7 +218,7 @@
                 "env": {
                     "RUST_BACKTRACE": "1"
                 },
-                "cwd": "${workspaceFolder}/ecs"
+                "cwd": "${workspaceFolder}/${input:project}"
             },
             "presentation": {
                 "echo": true,
@@ -232,4 +232,17 @@
             "group": "build"
         }
     ],    
+
+    "inputs": [
+        {
+          "type": "pickString",
+          "id": "project",
+          "description": "Select project",
+          "options": [
+            "ecs",
+            "game",
+          ],
+          "default": "game"
+        },
+    ]
 }

@@ -1,3 +1,4 @@
+#![cfg(feature = "cook")]
 use image::GenericImageView;
 use shine_game::assets::{io::HashableContent, AssetIO, AssetId, ImageEncoding, TextureSource, Url};
 use std::collections::HashMap;
