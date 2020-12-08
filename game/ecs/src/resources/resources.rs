@@ -31,16 +31,15 @@ unsafe impl Sync for UnsafeResources {}
 impl UnsafeResources {
     /// # Safety
     /// Resources which are `!Send` must be retrieved or created only on the thread owning the resource
-    unsafe fn register<T: Resource>(&mut self, config: Box<dyn ResourceConfig<Resource = T>>) {
+    unsafe fn register<T: Resource>(&mut self, config: Box<dyn ResourceConfig<Resource = T>>) -> Result<(), ECSError> {
         let ty = TypeId::of::<T>();
         // Managed store have to be registered using the register
         // function before instances of the resource can be added
-        assert!(
-            self.store_map.get(&ty).is_none(),
-            "Resource store for {} already created",
-            type_name::<T>()
-        );
+        if self.store_map.get(&ty).is_some() {
+            return Err(ECSError::ResourceAlreadyRegistered(type_name::<T>().into()));
+        }
         self.store_map.insert(ty, Box::new(ResourceStoreCell::<T>::new(config)));
+        Ok(())
     }
 
     unsafe fn unregister<T: Resource>(&mut self) {
@@ -116,18 +115,19 @@ impl Resources {
 
     /// Register a new type of resource with the given configuration.
     /// Resources have to be registered before instances could be inserted.
-    pub fn register<T: Resource, TC: 'static + ResourceConfig<Resource = T>>(&mut self, config: TC) {
+    pub fn register<T: Resource, TC: 'static + ResourceConfig<Resource = T>>(
+        &mut self,
+        config: TC,
+    ) -> Result<(), ECSError> {
         // safety:
         // this type is !Send and !Sync, and so can only be accessed from the thread which
         // owns the resources collection
-        unsafe {
-            self.internal.register::<T>(Box::new(config));
-        }
+        unsafe { self.internal.register::<T>(Box::new(config)) }
     }
 
     /// Register a new type of resource with manual management.
     /// Resources have to be registered before instances could be inserted.
-    pub fn register_unmanaged<T: Resource>(&mut self) {
+    pub fn register_unmanaged<T: Resource>(&mut self) -> Result<(), ECSError> {
         self.register::<T, _>(UnmanagedResource::default())
     }
 
@@ -168,6 +168,16 @@ impl Resources {
     /// should not exist by the design of the API.
     pub fn insert_tagged<T: Resource>(&mut self, tag: &str, resource: T) -> Result<Option<T>, ECSError> {
         self.insert_with_id(ResourceId::from_tag(tag)?, resource)
+    }
+
+    /// Register an unmanaged resource and stores the given instance of `T`.
+    /// If resource alread exists it is replaced and the old value is returned. All the handles
+    /// are invalidated. The other type of references and accessors are not effected as they
+    /// should not exist by the design of the API.
+    pub fn quick_insert<T: Resource>(&mut self, value: T) -> Result<(), ECSError> {
+        self.register_unmanaged::<T>()?;
+        self.insert_with_id(ResourceId::Global, value)?;
+        Ok(())
     }
 
     /// Removes the instance of `T` with the given id from this store if it exists.

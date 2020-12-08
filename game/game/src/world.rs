@@ -23,7 +23,7 @@ impl World {
 
     pub fn run_stage(&mut self, stage: &str) -> Result<(), AppError> {
         if let Some(stage) = self.schedules.get_mut(stage) {
-            stage.run(&self.resources).map_err(|err| AppError::TaskError(err))?;
+            stage.run(&self.resources).map_err(AppError::TaskError)?;
         }
         Ok(())
     }

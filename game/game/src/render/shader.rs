@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use shine_ecs::{
     core::observer::ObserveDispatcher,
     resources::{ResourceHandle, ResourceId, ResourceLoadRequester, ResourceLoader, Resources},
+    ECSError,
 };
 use std::sync::Arc;
 
@@ -119,17 +120,21 @@ impl Shader {
         response: ShaderResponse,
     ) {
         log::debug!("[{:?}] Load completed (success: {})", this.id, response.0.is_ok());
-        this.shader = response.0.map(|sh| Some(sh));
+        this.shader = response.0.map(Some);
         this.dispatcher.notify_all(ShaderEvent::Loaded);
     }
 
-    pub fn register_resource(resources: &mut Resources, io: AssetIO, device: Arc<wgpu::Device>) {
+    pub fn register_resource(
+        resources: &mut Resources,
+        io: AssetIO,
+        device: Arc<wgpu::Device>,
+    ) -> Result<(), ECSError> {
         resources.register(ResourceLoader::new(
             Shader::build,
             (io, device),
             Shader::on_load,
             Shader::on_load_response,
-        ));
+        ))
     }
 
     pub fn unregister_resource(resources: &mut Resources) {

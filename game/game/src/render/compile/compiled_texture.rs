@@ -17,7 +17,6 @@ fn create_sampler_descriptor(descriptor: &SamplerDescriptor) -> wgpu::SamplerDes
         lod_max_clamp: descriptor.lod_max_clamp,
         compare: descriptor.compare,
         anisotropy_clamp: descriptor.anisotropy_clamp,
-        border_color: descriptor.border_color,
     }
 }
 

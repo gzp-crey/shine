@@ -1,7 +1,6 @@
 #![cfg(feature = "cook")]
 
 use crate::assets::{io::HashableContent, AssetError, AssetIO, CookedShader, CookingError, ShaderType, Url};
-use shaderc;
 
 #[derive(Clone)]
 pub struct ShaderSource {

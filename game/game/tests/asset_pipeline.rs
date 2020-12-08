@@ -1,4 +1,3 @@
-#![cfg(off)]
 #![cfg(feature = "cook")]
 use shine_game::assets::{io::HashableContent, AssetIO, AssetId, PipelineSource, Url};
 use std::collections::HashMap;
@@ -20,7 +19,7 @@ async fn load_pipeline() {
     //assert_eq!(source.ty, ShaderType::Fragment);
     assert_eq!(
         source_hash,
-        "a887bf72cbe211e2dcedbc7b551f3cdc435ba051d6af3851570c8f15de6aa09c"
+        "82556a847da246efac991053b60615df69fb90f58af4e1642c18a2d4fb6017dd"
     );
 
     let cooked = source.cook().await.unwrap();
@@ -28,6 +27,6 @@ async fn load_pipeline() {
     //assert_eq!(cooked.ty, ShaderType::Fragment);
     assert_eq!(
         cooked_hash,
-        "9a7502469c43061835153ced78b5eae1639d3e798440bd4f3ca20cbd4e504f24"
+        "65e6e11d43eb90e787e475ec006f504505284a374880fd5d2232f21a1c58e48b"
     );
 }

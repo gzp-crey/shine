@@ -41,11 +41,11 @@ fn resource_access() {
 
     let mut resources = Resources::default();
     log::info!("registering resources...");
-    resources.register_unmanaged::<usize>();
-    resources.register_unmanaged::<u32>();
-    resources.register_unmanaged::<u16>();
-    resources.register_unmanaged::<u8>();
-    resources.register_unmanaged::<String>();
+    resources.register_unmanaged::<usize>().unwrap();
+    resources.register_unmanaged::<u32>().unwrap();
+    resources.register_unmanaged::<u16>().unwrap();
+    resources.register_unmanaged::<u8>().unwrap();
+    resources.register_unmanaged::<String>().unwrap();
 
     resources.insert(1usize);
     resources.insert(2u32);

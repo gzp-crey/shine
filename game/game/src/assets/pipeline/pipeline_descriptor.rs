@@ -98,9 +98,9 @@ impl PipelineUniformLayout {
 pub struct VertexStage {
     pub shader: String,
     pub attributes: Vec<PipelineAttribute>,
-    pub auto_uniforms: Vec<PipelineUniform>,
-    pub global_uniforms: Vec<PipelineUniform>,
-    pub local_uniforms: Vec<PipelineUniform>,
+    //pub auto_uniforms: Vec<PipelineUniform>,
+    //pub global_uniforms: Vec<PipelineUniform>,
+    //pub local_uniforms: Vec<PipelineUniform>,
 }
 
 impl VertexStage {
@@ -152,9 +152,9 @@ impl VertexStage {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FragmentStage {
     pub shader: String,
-    pub auto_uniforms: Vec<PipelineUniform>,
-    pub global_uniforms: Vec<PipelineUniform>,
-    pub local_uniforms: Vec<PipelineUniform>,
+    //pub auto_uniforms: Vec<PipelineUniform>,
+    //pub global_uniforms: Vec<PipelineUniform>,
+    //pub local_uniforms: Vec<PipelineUniform>,
 }
 
 /// Deserialized pipeline data
@@ -166,7 +166,7 @@ pub struct PipelineDescriptor {
 }
 
 impl PipelineDescriptor {
-    pub fn get_uniform_layout(&self, scope: PipelineUniformScope) -> Result<PipelineUniformLayout, AssetError> {
+    /*pub fn get_uniform_layout(&self, scope: PipelineUniformScope) -> Result<PipelineUniformLayout, AssetError> {
         let (vs_uniforms, fs_uniforms) = match scope {
             PipelineUniformScope::Auto => (&self.vertex_stage.auto_uniforms, &self.fragment_stage.auto_uniforms),
             PipelineUniformScope::Global => (&self.vertex_stage.global_uniforms, &self.fragment_stage.global_uniforms),
@@ -177,7 +177,7 @@ impl PipelineDescriptor {
             (vs_uniforms, wgpu::ShaderStage::VERTEX),
             (fs_uniforms, wgpu::ShaderStage::FRAGMENT),
         ])
-    }
+    }*/
 }
 
 /*#[derive(Clone, Debug, Serialize, Deserialize)]

@@ -89,8 +89,8 @@ impl GltfSource {
 
 ///Load data from url
 fn load_source(source_url: &Url, uri: &str) -> Result<Vec<u8>, AssetError> {
-    if uri.starts_with("data:") {
-        let mut split = uri["data:".len()..].split(";base64,");
+    if let Some(stripped) = uri.strip_prefix("data:") {
+        let mut split = stripped.split(";base64,");
         let match0 = split.next();
         let match1 = split.next();
         if let Some(data) = match1 {

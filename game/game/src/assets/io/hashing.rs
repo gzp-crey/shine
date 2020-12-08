@@ -44,7 +44,7 @@ impl ContentHasher {
 
 /// Create a storage compatible path from a hash
 pub fn hash_to_path(hash: &str) -> String {
-    format!("{}/{}", &hash[..4], &hash[4..])
+    format!("{}/{}", &hash[..4], &hash[4..32])
 }
 
 /// Implement the trait to generate hash-ed content path

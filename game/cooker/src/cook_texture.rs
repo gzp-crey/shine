@@ -1,7 +1,7 @@
-use crate::{Context, CookerError, Dependency, SourceId, TargetNaming};
-use shine_game::assets::TextureSource;
+use crate::{Context, CookerError, Dependency, TargetNaming};
+use shine_game::assets::{AssetId, TextureSource};
 
-pub async fn cook_texture(context: &Context, source_id: SourceId) -> Result<Dependency, CookerError> {
+pub async fn cook_texture(context: &Context, source_id: AssetId) -> Result<Dependency, CookerError> {
     let source_url = source_id.to_url(&context.source_root)?;
 
     let (source, source_hash) = TextureSource::load(&context.source_io, &source_url).await?;

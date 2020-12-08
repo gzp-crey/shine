@@ -15,7 +15,20 @@ impl AssetId {
         }
     }
 
-    pub fn into_absolute(&self, base: &str) -> Result<AssetId, UrlError> {
+    pub fn new_relative(&self, id: &str) -> Result<AssetId, UrlError> {
+        if let Some(id) = id.strip_prefix("./") {
+            let (folder, _) = self.split_folder();
+            if let Some(folder) = folder {
+                AssetId::new(&format!("{}/{}", folder, id))
+            } else {
+                AssetId::new(id)
+            }
+        } else {
+            AssetId::new(id)
+        }
+    }
+
+    pub fn to_absolute(&self, base: &str) -> Result<AssetId, UrlError> {
         AssetId::new(&format!("{}{}", base, self.inner))
     }
 
@@ -24,21 +37,33 @@ impl AssetId {
     }
 
     pub fn extension(&self) -> &str {
-        let mut parts = self.inner.rsplitn(2, '.');
+        let (_, file) = self.split_folder();
+        let mut parts = file.splitn(2, '.');
         let first = parts.next();
         let second = parts.next();
-        second.and(first).unwrap_or("")
+        first.and(second).unwrap_or("")
     }
 
     pub fn set_extension(&self, ext: &str) -> Result<AssetId, UrlError> {
-        let mut parts = self.inner.rsplitn(2, '.');
+        let (folder, file) = self.split_folder();
+        let mut parts = file.splitn(2, '.');
+        let first = parts.next();
+        let file = first.unwrap_or("");
+
+        let inner = if let Some(folder) = folder {
+            format!("{}/{}.{}", folder, file, ext)
+        } else {
+            format!("{}.{}", file, ext)
+        };
+
+        AssetId::new(&inner)
+    }
+
+    pub fn split_folder(&self) -> (Option<&str>, &str) {
+        let mut parts = self.inner.rsplitn(2, '/');
         let first = parts.next();
         let second = parts.next();
-        let base = second.or(first).unwrap_or("");
-
-        Ok(AssetId {
-            inner: format!("{}.{}", base, ext),
-        })
+        (first.and(second), first.or(second).unwrap_or(""))
     }
 
     pub fn to_url(&self, base: &Url) -> Result<Url, UrlError> {

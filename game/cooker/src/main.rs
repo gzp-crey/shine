@@ -1,5 +1,5 @@
 use color_eyre::{self, Report};
-use shine_game::assets::{self, AssetIO, AssetId, Url, UrlError};
+use shine_game::assets::{self, AssetIO, AssetId, Url};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::runtime::Runtime;
@@ -8,7 +8,7 @@ mod config;
 //mod cook_frame_graph;
 //mod cook_game;
 mod cook_gltf;
-//mod cook_pipeline;
+mod cook_pipeline;
 mod cook_shader;
 mod cook_texture;
 mod target_db;
@@ -37,34 +37,6 @@ pub enum CookerError {
     SqlDb(#[from] sqlx::Error),
 }
 
-/// Asset source id. Actually all of them is relative to some storage base,
-/// but within the starage they can be relative or absolute.
-#[derive(Clone, Debug)]
-pub enum SourceId {
-    Relative(String, AssetId),
-    Absolute(AssetId),
-}
-
-impl SourceId {
-    pub fn extension(&self) -> &str {
-        match self {
-            SourceId::Absolute(id) => id.extension(),
-            SourceId::Relative(_, id) => id.extension(),
-        }
-    }
-
-    pub fn to_asset_id(&self) -> Result<AssetId, UrlError> {
-        match self {
-            SourceId::Absolute(id) => Ok(id.clone()),
-            SourceId::Relative(base, id) => Ok(id.into_absolute(&base)?),
-        }
-    }
-
-    pub fn to_url(&self, base: &Url) -> Result<Url, UrlError> {
-        self.to_asset_id()?.to_url(base)
-    }
-}
-
 /// Indicates, how to name the cooked assets
 pub enum TargetNaming {
     Hard(String, Option<String>),
@@ -77,13 +49,13 @@ pub enum TargetNaming {
 /// - soft where dependency graph can be cut w.r.t. asset cooking
 /// Also note that all ids are replaced by a storage_root relative id
 pub struct Dependency {
-    source_id: SourceId,
+    source_id: AssetId,
     cooked_url: Url,
     is_soft: bool,
 }
 
 impl Dependency {
-    pub fn soft(source_id: SourceId, cooked_url: Url) -> Dependency {
+    pub fn soft(source_id: AssetId, cooked_url: Url) -> Dependency {
         Dependency {
             source_id,
             cooked_url,
@@ -91,7 +63,7 @@ impl Dependency {
         }
     }
 
-    pub fn hard(source_id: SourceId, cooked_url: Url) -> Dependency {
+    pub fn hard(source_id: AssetId, cooked_url: Url) -> Dependency {
         Dependency {
             source_id,
             cooked_url,
@@ -107,12 +79,16 @@ impl Dependency {
         !self.is_soft
     }
 
-    pub fn source_id(&self) -> &SourceId {
+    pub fn source_id(&self) -> &AssetId {
         &self.source_id
     }
 
     pub fn cooked_url(&self) -> &Url {
         &self.cooked_url
+    }
+
+    pub fn cooked_id(&self) -> String {
+        self.cooked_url.as_str().to_owned()
     }
 }
 
@@ -124,10 +100,10 @@ pub struct Context {
     pub target_db: TargetDB,
 }
 
-async fn cook(context: &Context, source_id: SourceId) -> Result<Dependency, CookerError> {
+async fn cook(context: &Context, source_id: AssetId) -> Result<Dependency, CookerError> {
     let cooked_dependency = match source_id.extension() {
         "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, source_id).await?,
-        //"pl" => cook_pipeline::cook_pipeline(&context, &asset_base, &asset_id).await?,
+        "pl" => cook_pipeline::cook_pipeline(&context, source_id).await?,
         //"fgr" => cook_frame_graph::cook_frame_graph(&context, &asset_base, &asset_id).await?,
         "glb" | "gltf" => cook_gltf::cook_gltf(&context, source_id).await?,
         "jpg" | "png" => cook_texture::cook_texture(&context, source_id).await?,
@@ -156,7 +132,7 @@ async fn run(assets: Vec<AssetId>) -> Result<(), CookerError> {
 
     for asset_id in &root_assets {
         log::info!("Cooking started for {:?}", asset_id);
-        let _cooked_dependency = cook(&context, SourceId::Absolute(asset_id.clone())).await?;
+        let _cooked_dependency = cook(&context, asset_id.clone()).await?;
         log::info!("Cooking completed for {:?}", asset_id);
     }
 
@@ -175,10 +151,11 @@ fn main() -> Result<(), Report> {
     let mut rt = Runtime::new()?;
 
     let assets = [
-        "games/test1/hello.fs",
-        "games/test3/checker.png",
-        "models/SimpleMeshes.gltf",
-        "models/VertexColorTest.glb",
+        //"games/test1/hello.fs",
+        //"games/test3/checker.png",
+        //"models/SimpleMeshes.gltf",
+        //"models/VertexColorTest.glb",
+        "games/test1/hello.pl",
         //"games/test1/test.game",
         //"games/test2/test.game",
         //"games/test3/test.game",

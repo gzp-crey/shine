@@ -21,8 +21,8 @@ mod texture;
 pub use self::texture::*;
 mod model;
 pub use self::model::*;
-//mod pipeline;
-//pub use self::pipeline::*;
+mod pipeline;
+pub use self::pipeline::*;
 
 //pub mod gltf;
 //mod vertex_descriptor;

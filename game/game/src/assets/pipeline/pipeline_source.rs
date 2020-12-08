@@ -34,7 +34,7 @@ impl PipelineSource {
         } = self;
 
         // perform some consistency check
-        for scope in [
+        /*for scope in [
             PipelineUniformScope::Auto,
             PipelineUniformScope::Global,
             PipelineUniformScope::Local,
@@ -48,7 +48,7 @@ impl PipelineSource {
                 scope,
                 layout
             );
-        }
+        }*/
 
         // cook dependencies
         log::debug!("[{}] Checking vertex shader dependency...", source_url.as_str());

@@ -74,8 +74,9 @@ impl<T: Resource> ResourceStore<T> {
     /// As this operation does not touch the resources itself, it is safe to call for any resources on any thread
     /// dispite of the Send, Sync properties.
     pub fn contains(&self, id: &ResourceId) -> bool {
-        self.resource_map.contains_key(id)   // stored in the usual map
-         || self.config.auto_build() // has a builder, thus it will be constructed even is it does not exists at the moment
+        // stored in the usual map
+        //  or has a builder, thus it will be constructed even if it does not exists at the moment
+        self.resource_map.contains_key(id) || self.config.auto_build()
     }
 
     /// Check if the the given resource instance exists in the store.
@@ -83,8 +84,9 @@ impl<T: Resource> ResourceStore<T> {
     /// As this operation does not touch the resources itself, it is safe to call for any resources on any thread
     /// dispite of the Send, Sync properties.
     pub fn exists(&self, id: &ResourceId) -> bool {
-        self.resource_map.contains_key(id)                  // stored in the usual map
-         || self.pending.lock().unwrap().contains_key(id) // or stored in the pending set
+        // stored in the usual map
+        //  or stored in the pending set
+        self.resource_map.contains_key(id) || self.pending.lock().unwrap().contains_key(id)
     }
 
     /// Insert a new resource. If a resource with the given id already exists, all the handles

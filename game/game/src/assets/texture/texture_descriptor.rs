@@ -46,7 +46,6 @@ pub struct SamplerDescriptor {
     pub lod_max_clamp: f32,
     pub compare: Option<wgpu::CompareFunction>,
     pub anisotropy_clamp: Option<NonZeroU8>,
-    pub border_color: Option<wgpu::SamplerBorderColor>,
 }
 
 impl Default for SamplerDescriptor {
@@ -62,7 +61,6 @@ impl Default for SamplerDescriptor {
             lod_max_clamp: 100.0,
             compare: None,
             anisotropy_clamp: None,
-            border_color: None,
         }
     }
 }

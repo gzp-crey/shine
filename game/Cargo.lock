@@ -316,12 +316,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "cfg_aliases"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6da2b592f5a2e590c3d94c44313bab369f2286cfe1e4134c830bf3317814866"
-
-[[package]]
 name = "cloudabi"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -741,12 +735,6 @@ name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
-
-[[package]]
-name = "fixedbitset"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37ab347416e802de484e4d03c7316c48f1ecb56574dfd4a46a80f173ce1de04d"
 
 [[package]]
 name = "flate2"
@@ -1742,13 +1730,13 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "0.2.0"
-source = "git+https://github.com/gfx-rs/naga?rev=b278e10ea7c144b2387585c4e81c1d86db8e2def#b278e10ea7c144b2387585c4e81c1d86db8e2def"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0873deb76cf44b7454fba7b2ba6a89d3de70c08aceffd2c489379b3d9d08e661"
 dependencies = [
  "bitflags",
  "fxhash",
  "log",
  "num-traits 0.2.12",
- "petgraph",
  "spirv_headers",
  "thiserror",
 ]
@@ -2099,16 +2087,6 @@ name = "permutohedron"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b687ff7b5da449d39e418ad391e5e08da53ec334903ddbb921db208908fc372c"
-
-[[package]]
-name = "petgraph"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "467d164a6de56270bd7c4d070df81d07beace25012d5103ced4e9ff08d6afdb7"
-dependencies = [
- "fixedbitset",
- "indexmap",
-]
 
 [[package]]
 name = "pin-project"
@@ -3435,8 +3413,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu"
-version = "0.6.0"
-source = "git+https://github.com/gfx-rs/wgpu-rs.git?branch=master#0609e95ed7335e3abe1663943d6e04f640d24acb"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "991903e4c9f5b7319732b30a3d0339e27a51ea992cea22769b5f6c7f7076af6d"
 dependencies = [
  "arrayvec",
  "futures",
@@ -3458,12 +3437,12 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core"
-version = "0.6.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=43adcbcf683bf1f581b89dabf653827337478c9a#43adcbcf683bf1f581b89dabf653827337478c9a"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea487deeae90e06d77eb8e6cef945247774e7c0a0a226d238b31e90633594365"
 dependencies = [
  "arrayvec",
  "bitflags",
- "cfg_aliases",
  "copyless",
  "fxhash",
  "gfx-backend-dx11",
@@ -3487,8 +3466,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-types"
-version = "0.6.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=43adcbcf683bf1f581b89dabf653827337478c9a#43adcbcf683bf1f581b89dabf653827337478c9a"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e3529528e608b54838ee618c3923b0f46e6db0334cfc6c42a16cf4ceb3bdb57"
 dependencies = [
  "bitflags",
  "serde 1.0.116",

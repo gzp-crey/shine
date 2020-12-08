@@ -2,10 +2,8 @@
 
 use shine_game::{
     app::{App, AppError, Config},
-    assets::{AssetPlugin, Url},
-    game::test1::Test1,
-    input::InputPlugin,
-    render::{RenderPlugin, Surface},
+    assets::Url,
+    render::Surface,
     wgpu, World,
 };
 use std::time::{Duration, Instant};
@@ -60,8 +58,9 @@ async fn run() {
         let mut app = rt
             .block_on(async move {
                 let mut app = App::default();
-                app.world.add_asset_plugin(config.asset.clone()).await?;
                 app.world
+                    .add_asset_plugin(config.asset.clone())
+                    .await?
                     .add_render_plugin(config.render.clone(), wgpu_instance, surface)
                     .await?;
                 app.world.add_input_plugin().await?;
@@ -72,7 +71,7 @@ async fn run() {
         let event_proxy = event_loop.create_proxy();
         tokio::task::spawn(logic(event_proxy));
 
-        rt.block_on(app.load_game_from_url(&test1_url)).unwrap();
+        //rt.block_on(app.load_game_from_url(&test1_url)).unwrap();
 
         let mut prev_render_time = Instant::now();
         let mut is_closing = false;
@@ -98,11 +97,11 @@ async fn run() {
                             match input.virtual_keycode {
                                 Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
                                 Some(VirtualKeyCode::Key0) => rt.block_on(app.unload_game()).unwrap(),
-                                Some(VirtualKeyCode::Key1) => rt.block_on(app.load_game_from_url(&test1_url)).unwrap(),
-                                Some(VirtualKeyCode::Key2) => rt.block_on(app.load_game_from_url(&test2_url)).unwrap(),
-                                Some(VirtualKeyCode::Key3) => rt.block_on(app.load_game_from_url(&test3_url)).unwrap(),
-                                Some(VirtualKeyCode::Key4) => rt.block_on(app.load_game_from_url(&test4_url)).unwrap(),
-                                Some(VirtualKeyCode::Key5) => rt.block_on(app.load_game_from_url(&test5_url)).unwrap(),
+                                //Some(VirtualKeyCode::Key1) => rt.block_on(app.load_game_from_url(&test1_url)).unwrap(),
+                                //Some(VirtualKeyCode::Key2) => rt.block_on(app.load_game_from_url(&test2_url)).unwrap(),
+                                //Some(VirtualKeyCode::Key3) => rt.block_on(app.load_game_from_url(&test3_url)).unwrap(),
+                                //Some(VirtualKeyCode::Key4) => rt.block_on(app.load_game_from_url(&test4_url)).unwrap(),
+                                //Some(VirtualKeyCode::Key5) => rt.block_on(app.load_game_from_url(&test5_url)).unwrap(),
                                 _ => {}
                             }
                         }

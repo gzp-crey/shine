@@ -30,7 +30,7 @@ async fn load_texture_no_meta() {
     assert_eq!(cooked.image_descriptor.encoding, ImageEncoding::Png);
     assert_eq!(
         cooked_hash,
-        "2884883a01b887b3e25de0264d194dbb3023cb77972aa47d77fddff38779fea0"
+        "db31514e2628823db233bf2d3bf6e5863381bec097303a43329f1263eb1ff8d3"
     );
 }
 
@@ -59,6 +59,6 @@ async fn load_texture_meta() {
     assert_eq!(cooked.image_descriptor.encoding, ImageEncoding::Jpeg);
     assert_eq!(
         cooked_hash,
-        "d5d51b071b46017a15c30f8216a8d8b094c78e11a2aeba543226bab5b231b3e8"
+        "8692b34d80d528d33991ecc7b3e5afb7b9a88a2217ad45178dac5faf4ec8e0f6"
     );
 }

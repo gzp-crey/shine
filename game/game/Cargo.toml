@@ -48,7 +48,8 @@ image = {version = "0.23", features = ["jpeg"] }
 nalgebra = "0.23"
 
 # render
-wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master", features = ["trace", "replay"] }
+wgpu = { version = "0.6" , features = ["trace", "replay"] }
+#wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", branch = "master", features = ["trace", "replay"] }
 bytemuck = "1.4"
 
 # native

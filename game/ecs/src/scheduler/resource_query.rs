@@ -156,7 +156,7 @@ impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for TagResClaim<T> {
 
     fn try_from(value: &'a [&'b str]) -> Result<Self, Self::Error> {
         let tags = value
-            .into_iter()
+            .iter()
             .map(|tag| ResourceId::from_tag(tag))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self(tags, PhantomData))
@@ -168,7 +168,7 @@ impl<'a, 'b, T: Resource, const N: usize> TryFrom<&'a [&'b str; N]> for TagResCl
 
     fn try_from(value: &'a [&'b str; N]) -> Result<Self, Self::Error> {
         let tags = value
-            .into_iter()
+            .iter()
             .map(|tag| ResourceId::from_tag(tag))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self(tags, PhantomData))
@@ -258,7 +258,7 @@ impl<'a, 'b, T: Resource> TryFrom<&'a [&'b str]> for TagResMutClaim<T> {
 
     fn try_from(value: &'a [&'b str]) -> Result<Self, Self::Error> {
         let tags = value
-            .into_iter()
+            .iter()
             .map(|tag| ResourceId::from_tag(tag))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self(tags, PhantomData))
@@ -270,7 +270,7 @@ impl<'a, 'b, T: Resource, const N: usize> TryFrom<&'a [&'b str; N]> for TagResMu
 
     fn try_from(value: &'a [&'b str; N]) -> Result<Self, Self::Error> {
         let tags = value
-            .into_iter()
+            .iter()
             .map(|tag| ResourceId::from_tag(tag))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self(tags, PhantomData))

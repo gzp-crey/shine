@@ -63,7 +63,7 @@ impl World {
     fn add_input_resource<T: Resource>(&mut self, resource: T) -> Result<(), AppError> {
         let _ = self
             .resources
-            .insert(resource)
+            .quick_insert(resource)
             .map_err(|err| AppError::plugin(Self::input_plugin_name(), err))?;
         Ok(())
     }

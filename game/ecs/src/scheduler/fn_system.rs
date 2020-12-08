@@ -16,7 +16,7 @@ pub struct FnSystemBuilder<Func, C, R> {
     name: Option<SystemName>,
     dependencies: Vec<SystemName>,
     claims: C,
-    _phantom: std::marker::PhantomData<R>,
+    _phantom: PhantomData<R>,
 }
 
 impl<Func, C, R> FnSystemBuilder<Func, C, R> {
@@ -140,7 +140,7 @@ macro_rules! impl_into_system {
                     name: None,
                     func: self,
                     dependencies: Default::default(),
-                    _phantom: std::marker::PhantomData,
+                    _phantom: PhantomData,
                     claims: Default::default(),
                 }
             }

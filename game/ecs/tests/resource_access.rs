@@ -55,9 +55,9 @@ fn simple_test_core(case: SimpleTestCase) {
 
     let mut resources = Resources::default();
 
-    resources.register(UnmanagedResource::<TestOne>::default());
-    resources.register(UnmanagedResource::<TestTwo>::default());
-    resources.register(UnmanagedResource::<NotSync>::default());
+    resources.register_unmanaged::<TestOne>().unwrap();
+    resources.register_unmanaged::<TestTwo>().unwrap();
+    resources.register_unmanaged::<NotSync>().unwrap();
 
     resources.insert(TestOne("one".to_string())).unwrap();
     resources.insert(TestTwo("two".to_string())).unwrap();

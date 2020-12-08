@@ -1,4 +1,4 @@
-use crate::{Config, CookerError, Dependency, SourceId, TargetNaming};
+use crate::{Config, CookerError, Dependency, TargetNaming};
 use shine_game::assets::{io::HashableContent, AssetIO, AssetId, Url};
 use sqlx::{
     self,
@@ -75,7 +75,7 @@ impl TargetDB {
     ) -> Result<(), CookerError> {
         if let Some(pool) = &self.pool {
             let mut tx = pool.begin().await?;
-            let source_id = parent.source_id().to_asset_id()?;
+            let source_id = parent.source_id();
 
             sqlx::query("DELETE FROM source_dependencies where parent = $1")
                 .bind(source_id.as_str())
@@ -94,7 +94,7 @@ impl TargetDB {
                     "#,
                 )
                 .bind(source_id.as_str())
-                .bind(dep.source_id().to_asset_id()?.as_str())
+                .bind(dep.source_id().as_str())
                 .bind(dep.is_soft)
                 .execute(&mut tx)
                 .await?;
@@ -186,23 +186,21 @@ impl TargetDB {
 
     async fn upload_binary_content(
         &self,
-        source_id: &SourceId,
+        asset_id: &AssetId,
         cooked_naming: TargetNaming,
         cooked_content: &[u8],
     ) -> Result<Dependency, CookerError> {
         let target_dependency = match cooked_naming {
             TargetNaming::Hard(scheme, ext) => {
                 let hashed_path = cooked_content.content_hash_path();
-                let asset_id = source_id.to_asset_id()?;
                 let ext = ext.unwrap_or_else(|| asset_id.extension().to_owned());
                 let url = Url::parse(&format!("hash-{}://{}.{}", scheme, hashed_path, ext))?;
-                Dependency::hard(source_id.clone(), url)
+                Dependency::hard(asset_id.clone(), url)
             }
             TargetNaming::Soft(scheme, ext) => {
-                let asset_id = source_id.to_asset_id()?;
                 let ext = ext.unwrap_or_else(|| asset_id.extension().to_owned());
                 let url = Url::parse(&format!("{}://{}", scheme, asset_id.as_str()))?.set_extension(&ext)?;
-                Dependency::soft(source_id.clone(), url)
+                Dependency::soft(asset_id.clone(), url)
             }
         };
 
@@ -214,7 +212,7 @@ impl TargetDB {
 
     pub async fn upload_cooked_binary(
         &self,
-        source_id: &SourceId,
+        asset_id: &AssetId,
         source_url: &Url,
         source_hash: String,
         cooked_naming: TargetNaming,
@@ -222,7 +220,7 @@ impl TargetDB {
         dependencies: Vec<Dependency>,
     ) -> Result<Dependency, CookerError> {
         let target_dependency = self
-            .upload_binary_content(source_id, cooked_naming, cooked_content)
+            .upload_binary_content(asset_id, cooked_naming, cooked_content)
             .await?;
         self.update_dependencies(&target_dependency, source_url, source_hash, dependencies)
             .await?;

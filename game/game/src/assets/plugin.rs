@@ -30,20 +30,20 @@ impl World {
     fn add_asset_resource<T: Resource>(&mut self, resource: T) -> Result<(), AppError> {
         let _ = self
             .resources
-            .insert(resource)
+            .quick_insert(resource)
             .map_err(|err| AppError::plugin(Self::asset_plugin_name(), err))?;
         Ok(())
     }
 
-    pub async fn add_asset_plugin(&mut self, config: AssetConfig) -> Result<(), AppError> {
+    pub async fn add_asset_plugin(&mut self, config: AssetConfig) -> Result<&mut Self, AppError> {
         log::info!("Adding asset plugin");
         let asset_io = AssetIO::new(config.virtual_schemes)?;
         self.add_asset_resource(asset_io)?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn remove_asset_plugin(&mut self) -> Result<(), AppError> {
+    pub async fn remove_asset_plugin(&mut self) -> Result<&mut Self, AppError> {
         self.resources.remove::<AssetIO>();
-        Ok(())
+        Ok(self)
     }
 }

@@ -21,7 +21,7 @@ impl World {
     fn add_render_resource<T: Resource>(&mut self, resource: T) -> Result<(), AppError> {
         let _ = self
             .resources
-            .insert(resource)
+            .quick_insert(resource)
             .map_err(|err| AppError::plugin(Self::render_plugin_name(), err))?;
         Ok(())
     }
@@ -68,33 +68,34 @@ impl World {
         config: RenderConfig,
         wgpu_instance: wgpu::Instance,
         surface: Surface,
-    ) -> Result<(), AppError> {
+    ) -> Result<&mut Self, AppError> {
         log::info!("Adding render plugin");
 
         let context = Context::new(wgpu_instance, &surface, &config)
             .await
             .map_err(|err| RenderError::device_error("Failed to create context", err))?;
 
-        let assetio = self.asset_io()?.clone();
+        let assetio = self.asset_io()?;
         let device = context.device();
 
         self.add_render_resource(surface)?;
         self.add_render_resource(context)?;
         self.add_render_resource(FrameTarget::default())?;
 
-        Shader::register_resource(&mut self.resources, assetio.clone(), device.clone());
+        Shader::register_resource(&mut self.resources, assetio, device)
+            .map_err(|err| AppError::plugin(Self::render_plugin_name(), err))?;
 
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn remove_render_plugin(&mut self) -> Result<(), AppError> {
+    pub async fn remove_render_plugin(&mut self) -> Result<&mut Self, AppError> {
         //let _ = self.resources.remove::<RenderStores>();
         let _ = self.resources.remove::<FrameTarget>();
         let _ = self.resources.remove::<Context>();
         let _ = self.resources.remove::<Surface>();
 
         Shader::unregister_resource(&mut self.resources);
-        Ok(())
+        Ok(self)
     }
 
     pub fn render(&mut self, size: (u32, u32)) -> Result<(), AppError> {

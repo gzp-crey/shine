@@ -7,6 +7,9 @@ pub enum ECSError {
     #[error("Resource id error: {0:?}")]
     ResourceId(#[from] Box<dyn std::error::Error>),
 
+    #[error("Resource store for {0} already registered")]
+    ResourceAlreadyRegistered(Cow<'static, str>),
+
     #[error("Resource store for {0} not registered")]
     ResourceTypeNotFound(Cow<'static, str>),
 
