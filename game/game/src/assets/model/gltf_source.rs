@@ -1,25 +1,36 @@
 #![cfg(feature = "cook")]
 use crate::assets::{
-    io::HashableContent, vertex, AssetError, AssetIO, CookedModel, CookingError, IndexData, MeshData, Url, VertexData,
+    io::HashableContent, vertex, AssetError, AssetIO, AssetId, CookedModel, CookingError, IndexData, MeshData, Url,
+    VertexData,
 };
 use gltf::{accessor::Dimensions, buffer, Document, Gltf, Primitive, Semantic};
 use itertools::izip;
 
 pub struct GltfSource {
+    pub source_id: AssetId,
     pub source_url: Url,
     pub document: Document,
     pub buffers: Vec<buffer::Data>,
 }
 
 impl GltfSource {
-    pub async fn load(io: &AssetIO, source_url: &Url) -> Result<(Self, String), AssetError> {
+    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, String), AssetError> {
+        if source_id.is_relative() {
+            return Err(AssetError::InvalidAssetId(format!(
+                "Absolute id required: {}",
+                source_id.as_str()
+            )));
+        }
+
+        log::debug!("[{}] Downloading from {} ...", source_id.as_str(), source_url.as_str());
         let data = io.download_binary(&source_url).await?;
 
         let Gltf { document, blob } =
-            Gltf::from_slice(&data).map_err(|err| AssetError::load_failed(source_url.as_str(), err))?;
-        let buffers = import_buffer_data(source_url, &document, blob)?;
+            Gltf::from_slice(&data).map_err(|err| AssetError::load_failed(source_id.as_str(), err))?;
+        let buffers = import_buffer_data(source_id, &document, blob)?;
 
         let gltf = GltfSource {
+            source_id: source_id.clone(),
             source_url: source_url.clone(),
             document,
             buffers,
@@ -30,11 +41,16 @@ impl GltfSource {
     }
 
     pub async fn cook(self) -> Result<CookedModel, CookingError> {
+        log::debug!("[{}] Compiling...", self.source_id.as_str());
+
         let GltfSource {
-            source_url,
+            source_id,
             document,
             buffers,
+            ..
         } = self;
+
+        //log::trace!("[{}] Gltf document: \n{:#?}", source_id.as_str(), document);
 
         let mut model = CookedModel::default();
         for mesh in document.meshes() {
@@ -51,11 +67,11 @@ impl GltfSource {
                     let colors_0 = primitive.get(&Semantic::Colors(0)).map(|a| a.dimensions());
                     let colors_1 = primitive.get(&Semantic::Colors(1)).map(|a| a.dimensions());
                     let format = (positions, colors_0, colors_1);
-                    log::info!("[{:?}] vertex format: {:?}", source_url.as_str(), format);
+                    log::info!("[{}] vertex format: {:?}", source_id.as_str(), format);
                     match &format {
                         (Vec3, Some(Vec3), None) | (Vec3, Some(Vec4), None) => create_vertex_p3c4(&buffers, &primitive),
                         _ => {
-                            log::warn!("[{:?}] Unsupported vertex format: {:?}", source_url.as_str(), format);
+                            log::warn!("[{}] Unsupported vertex format: {:?}", source_id.as_str(), format);
                             continue;
                         }
                     }
@@ -88,24 +104,24 @@ impl GltfSource {
 }
 
 ///Load data from url
-fn load_source(source_url: &Url, uri: &str) -> Result<Vec<u8>, AssetError> {
+fn load_source(source_id: &AssetId, uri: &str) -> Result<Vec<u8>, AssetError> {
     if let Some(stripped) = uri.strip_prefix("data:") {
         let mut split = stripped.split(";base64,");
         let match0 = split.next();
         let match1 = split.next();
         if let Some(data) = match1 {
-            base64::decode(&data).map_err(|err| AssetError::load_failed(source_url.as_str(), err))
+            base64::decode(&data).map_err(|err| AssetError::load_failed(source_id.as_str(), err))
         } else if let Some(data) = match0 {
-            base64::decode(&data).map_err(|err| AssetError::load_failed(source_url.as_str(), err))
+            base64::decode(&data).map_err(|err| AssetError::load_failed(source_id.as_str(), err))
         } else {
             Err(AssetError::load_failed_str(
-                source_url.as_str(),
+                source_id.as_str(),
                 "Unsupported data scheme",
             ))
         }
     } else {
         Err(AssetError::load_failed_str(
-            source_url.as_str(),
+            source_id.as_str(),
             "Unsupported external data",
         ))
     }
@@ -113,21 +129,21 @@ fn load_source(source_url: &Url, uri: &str) -> Result<Vec<u8>, AssetError> {
 
 /// Import the buffer data referenced by a gltf document.
 fn import_buffer_data(
-    source_url: &Url,
+    source_id: &AssetId,
     document: &Document,
     mut blob: Option<Vec<u8>>,
 ) -> Result<Vec<buffer::Data>, AssetError> {
     let mut buffers = Vec::new();
     for buffer in document.buffers() {
         let mut data = match buffer.source() {
-            buffer::Source::Uri(uri) => load_source(source_url, uri),
+            buffer::Source::Uri(uri) => load_source(source_id, uri),
             buffer::Source::Bin => blob
                 .take()
-                .ok_or_else(|| AssetError::load_failed_str(source_url.as_str(), "Gltf error: missing blob")),
+                .ok_or_else(|| AssetError::load_failed_str(source_id.as_str(), "Gltf error: missing blob")),
         }?;
         if data.len() < buffer.length() {
             return Err(AssetError::load_failed_str(
-                source_url.as_str(),
+                source_id.as_str(),
                 "Insufficient buffer length",
             ));
         }

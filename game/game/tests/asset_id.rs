@@ -1,6 +1,5 @@
 #![cfg(feature = "cook")]
 use shine_game::assets::AssetId;
-use std::collections::HashMap;
 
 mod utils;
 

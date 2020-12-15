@@ -2,26 +2,21 @@
 
 ## TODO
 
- * [ ] use thiserror:Error for better error types
-
- * [ ] use default instead of new
+* [ ] use thiserror:Error for better error types
+* [ ] use default instead of new
 
 ### Game
 
 #### ecc based world
 
 * [ ] world trait to start/stop world
-
 * [ ] Create a most simple world
-
 * [ ] Parent/child positioning (?)
 
 #### render
 
 * [ ] use resources to store render targets and use scheduler for render pass
-
 * [ ] pipeline color/depth stage should depend on the render target
-
 * [ ] AUTO_UNIFORM those are bound automaically during pipeline pass creation - no need for FrameTextures<'_>
 
 ### Native sample
@@ -31,7 +26,5 @@
 ### WASM sample
 
 * [ ] update and render loop
-
 * [ ] select world
-
 * [ ] input handling

@@ -15,7 +15,7 @@ async fn load_gltf() {
     let id = AssetId::new("VertexColorTest.glb").unwrap();
     let source_url = id.to_url(&source_root).unwrap();
 
-    let (source, source_hash) = GltfSource::load(&io, &source_url).await.unwrap();
+    let (source, source_hash) = GltfSource::load(&io, &id, &source_url).await.unwrap();
     //assert_eq!(source., );
     assert_eq!(
         source_hash,

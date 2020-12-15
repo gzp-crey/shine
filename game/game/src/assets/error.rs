@@ -11,6 +11,9 @@ pub enum AssetError {
     #[error("Mallformed url")]
     InvalidUrl(#[from] UrlError),
 
+    #[error("Invalid asset id: {0}")]
+    InvalidAssetId(String),
+
     #[error("Unsupported input format: {0}")]
     UnsupportedFormat(String),
 

@@ -16,7 +16,7 @@ async fn load_texture_no_meta() {
     let id = AssetId::new("image_no_meta.jpg").unwrap();
     let url = id.to_url(&source_root).unwrap();
 
-    let (source, source_hash) = TextureSource::load(&io, &url).await.unwrap();
+    let (source, source_hash) = TextureSource::load(&io, &id, &url).await.unwrap();
     assert_eq!(source.image.dimensions(), (640, 426));
     assert_eq!(source.descriptor.image.encoding, ImageEncoding::Png);
     assert_eq!(
@@ -45,7 +45,7 @@ async fn load_texture_meta() {
     let id = AssetId::new("image_meta.jpg").unwrap();
     let url = id.to_url(&source_root).unwrap();
 
-    let (source, source_hash) = TextureSource::load(&io, &url).await.unwrap();
+    let (source, source_hash) = TextureSource::load(&io, &id, &url).await.unwrap();
     assert_eq!(source.image.dimensions(), (640, 426));
     assert_eq!(source.descriptor.image.encoding, ImageEncoding::Jpeg);
     assert_eq!(

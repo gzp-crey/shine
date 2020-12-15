@@ -7,15 +7,20 @@ pub struct AssetId {
 }
 
 impl AssetId {
-    pub fn new(id: &str) -> Result<AssetId, UrlError> {
+    pub fn new<S: ToString>(id: S) -> Result<AssetId, UrlError> {
+        let id = id.to_string();
         if id.chars().any(|c| c == '?' || c == '&') {
             Err(UrlError::InvalidDomainCharacter)
         } else {
-            Ok(AssetId { inner: id.to_owned() })
+            Ok(AssetId { inner: id })
         }
     }
 
-    pub fn new_relative(&self, id: &str) -> Result<AssetId, UrlError> {
+    pub fn is_relative(&self) -> bool {
+        self.inner.starts_with("./")
+    }
+
+    pub fn create_relative(&self, id: &str) -> Result<AssetId, UrlError> {
         if let Some(id) = id.strip_prefix("./") {
             let (folder, _) = self.split_folder();
             if let Some(folder) = folder {
@@ -28,12 +33,16 @@ impl AssetId {
         }
     }
 
-    pub fn to_absolute(&self, base: &str) -> Result<AssetId, UrlError> {
-        AssetId::new(&format!("{}{}", base, self.inner))
-    }
-
     pub fn as_str(&self) -> &str {
         &self.inner
+    }
+
+    pub fn to_string(&self) -> String {
+        self.inner.clone()
+    }
+
+    pub fn into_string(self) -> String {
+        self.inner
     }
 
     pub fn extension(&self) -> &str {

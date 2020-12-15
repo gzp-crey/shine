@@ -1,23 +1,33 @@
 #[cfg(feature = "cook")]
-use crate::assets::{io::HashableContent, AssetError, AssetIO, CookedPipeline, CookingError, PipelineDescriptor, Url};
-use serde::{Deserialize, Serialize};
+use crate::assets::{
+    io::HashableContent, AssetError, AssetIO, AssetId, CookedPipeline, CookingError, PipelineDescriptor, ShaderCooker,
+    ShaderType, Url,
+};
 
-#[derive(Serialize, Deserialize)]
 pub struct PipelineSource {
+    pub source_id: AssetId,
     pub source_url: Url,
     pub descriptor: PipelineDescriptor,
 }
 
 impl PipelineSource {
-    pub async fn load(io: &AssetIO, source_url: &Url) -> Result<(Self, String), AssetError> {
-        log::debug!("[{}] Downloading...", source_url.as_str());
+    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, String), AssetError> {
+        if source_id.is_relative() {
+            return Err(AssetError::InvalidAssetId(format!(
+                "Absolute id required: {}",
+                source_id.as_str()
+            )));
+        }
+
+        log::debug!("[{}] Downloading from {} ...", source_id.as_str(), source_url.as_str());
         let data = io.download_binary(&source_url).await?;
 
         let pipeline = serde_json::from_slice::<PipelineDescriptor>(&data)
-            .map_err(|err| AssetError::load_failed(source_url.as_str(), err))?;
-        log::trace!("[{}] Pipeline:\n{:#?}", source_url.as_str(), pipeline);
+            .map_err(|err| AssetError::load_failed(source_id.as_str(), err))?;
+        log::trace!("[{}] Pipeline:\n{:#?}", source_id.as_str(), pipeline);
 
         let source = PipelineSource {
+            source_id: source_id.clone(),
             source_url: source_url.clone(),
             descriptor: pipeline,
         };
@@ -25,13 +35,16 @@ impl PipelineSource {
         Ok((source, source_hash))
     }
 
-    pub async fn cook(self) -> Result<CookedPipeline, CookingError> {
-        log::debug!("[{}] Compiling...", self.source_url.as_str());
+    pub async fn cook<'a, C: ShaderCooker<'a>>(self, cookers: C) -> Result<CookedPipeline, CookingError> {
+        log::debug!("[{}] Compiling...", self.source_id.as_str());
 
         let PipelineSource {
-            source_url,
-            /*mut*/ descriptor,
+            source_id,
+            mut descriptor,
+            ..
         } = self;
+
+        log::trace!("[{}] Pipeline descriptor: ({:#?})", source_id.as_str(), descriptor);
 
         // perform some consistency check
         /*for scope in [
@@ -51,15 +64,31 @@ impl PipelineSource {
         }*/
 
         // cook dependencies
-        log::debug!("[{}] Checking vertex shader dependency...", source_url.as_str());
-        //let vertex_shader_id = AssetId::new(&pipeline.vertex_stage.shader)?.to_absolute_id(dependency_base, &pipeline_base)?;
-        //let vertex_shader_dependency = cook_shader::cook_shader(context, asset_base, &vertex_shader_id).await?;
-        //pipeline.vertex_stage.shader = vertex_shader_dependency.url().as_str().to_owned();
+        {
+            let vs = &mut descriptor.vertex_stage;
+            log::debug!(
+                "[{}] Checking vertex shader ({}) dependency...",
+                source_id.as_str(),
+                vs.shader
+            );
+            let vs_id = source_id
+                .create_relative(&vs.shader)
+                .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
+            vs.shader = cookers.cook_shader(ShaderType::Vertex, vs_id).await?.to_string();
+        }
 
-        log::debug!("[{}] Checking fragment shader dependency...", source_url.as_str());
-        //let fragment_shader_id = AssetId::new(&pipeline.fragment_stage.shader)?.to_absolute_id(asset_base, &pipeline_base)?;
-        //let fragment_shader_dependency = cook_shader::cook_shader(context, asset_base, &fragment_shader_id).await?;
-        //pipeline.fragment_stage.shader = fragment_shader_dependency.url().as_str().to_owned();
+        {
+            let fs = &mut descriptor.fragment_stage;
+            log::debug!(
+                "[{}] Checking fragment shader ({}) dependency...",
+                source_id.as_str(),
+                fs.shader
+            );
+            let fs_id = source_id
+                .create_relative(&fs.shader)
+                .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
+            fs.shader = cookers.cook_shader(ShaderType::Fragment, fs_id).await?.to_string();
+        }
 
         Ok(CookedPipeline { descriptor })
     }

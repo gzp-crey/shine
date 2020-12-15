@@ -67,6 +67,10 @@ impl Url {
         self.inner.as_str()
     }
 
+    pub fn to_string(&self) -> String {
+        self.as_str().to_owned()
+    }
+
     pub fn scheme(&self) -> &str {
         self.inner.scheme()
     }

@@ -15,7 +15,7 @@ async fn load_shader() {
     let id = AssetId::new("hello.fs").unwrap();
     let source_url = id.to_url(&source_root).unwrap();
 
-    let (source, source_hash) = ShaderSource::load(&io, &source_url).await.unwrap();
+    let (source, source_hash) = ShaderSource::load(&io, &id, &source_url).await.unwrap();
     assert_eq!(source.shader_type, ShaderType::Fragment);
     assert_eq!(
         source_hash,

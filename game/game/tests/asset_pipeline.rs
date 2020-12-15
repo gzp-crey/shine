@@ -1,5 +1,5 @@
 #![cfg(feature = "cook")]
-use shine_game::assets::{io::HashableContent, AssetIO, AssetId, PipelineSource, Url};
+use shine_game::assets::{cooker, io::HashableContent, AssetIO, AssetId, PipelineSource, Url};
 use std::collections::HashMap;
 
 mod utils;
@@ -15,18 +15,20 @@ async fn load_pipeline() {
     let id = AssetId::new("hello.pl").unwrap();
     let source_url = id.to_url(&source_root).unwrap();
 
-    let (source, source_hash) = PipelineSource::load(&io, &source_url).await.unwrap();
+    let (source, source_hash) = PipelineSource::load(&io, &id, &source_url).await.unwrap();
     //assert_eq!(source.ty, ShaderType::Fragment);
     assert_eq!(
         source_hash,
         "82556a847da246efac991053b60615df69fb90f58af4e1642c18a2d4fb6017dd"
     );
 
-    let cooked = source.cook().await.unwrap();
+    let cooked = source.cook(cooker::DummyCooker).await.unwrap();
+    log::debug!("cooked descriptor: {:#?}", cooked.descriptor);
     let cooked_hash = bincode::serialize(&cooked).unwrap().content_hash();
-    //assert_eq!(cooked.ty, ShaderType::Fragment);
+    assert_eq!(cooked.descriptor.vertex_stage.shader, "shader://hello.vs");
+    assert_eq!(cooked.descriptor.fragment_stage.shader, "shader://hello.fs");
     assert_eq!(
         cooked_hash,
-        "65e6e11d43eb90e787e475ec006f504505284a374880fd5d2232f21a1c58e48b"
+        "39c2fd987c34f732c243867cf197c8586aaee1788df5564cc1b5cbb7793c7abc"
     );
 }

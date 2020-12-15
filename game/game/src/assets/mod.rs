@@ -24,6 +24,11 @@ pub use self::model::*;
 mod pipeline;
 pub use self::pipeline::*;
 
+#[cfg(feature = "cook")]
+pub mod cooker {
+    pub struct DummyCooker;
+}
+
 //pub mod gltf;
 //mod vertex_descriptor;
 //pub use self::vertex_descriptor::*;

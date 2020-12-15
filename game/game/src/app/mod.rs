@@ -14,23 +14,15 @@ pub struct App {
 }
 
 impl App {
-    /*pub async fn load_game_from_url(&mut self, url: &Url) -> Result<(), AppError> {
-        let game = {
-            let assetio = self.world.asset_io()?;
-            Game::from_url(&*assetio, url).await?
-        };
-        self.load_game(game).await
-    }*/
-
-    pub async fn load_game<S: GameSource>(&mut self, game: S) -> Result<(), AppError> {
-        self.unload_game().await?;
+    pub async fn init_game<S: GameSource>(&mut self, game: S) -> Result<(), AppError> {
+        self.deinit_game().await?;
         let mut game = game.build()?;
         game.create(&mut self.world).await?;
         self.game_loader = Some(game);
         Ok(())
     }
 
-    pub async fn unload_game(&mut self) -> Result<(), AppError> {
+    pub async fn deinit_game(&mut self) -> Result<(), AppError> {
         if let Some(mut game_loader) = self.game_loader.take() {
             game_loader.destroy(&mut self.world).await?;
         }

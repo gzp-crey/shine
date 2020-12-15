@@ -1,29 +1,49 @@
-use crate::{Context, CookerError, Dependency, TargetNaming, cook_shader};
-use shine_game::assets::{AssetId, PipelineSource};
+use crate::{cook_shader, Context, CookerError, Dependency, TargetNaming};
+use shine_game::assets::{AssetId, CookingError, PipelineSource, ShaderType};
+use std::sync::{Arc, Mutex};
 
 pub async fn cook_pipeline(context: &Context, source_id: AssetId) -> Result<Dependency, CookerError> {
     let source_url = source_id.to_url(&context.source_root)?;
 
-    let (mut source, source_hash) = PipelineSource::load(&context.source_io, &source_url).await?;
+    let (source, source_hash) = PipelineSource::load(&context.source_io, &source_url).await?;
 
-    let mut dependencies = Vec::new();
-    {
-        let vs = &mut source.descriptor.vertex_stage;
-        let vs_id = source_id.new_relative(&vs.shader)?;
-        let dep = cook_shader::cook_shader(context, vs_id).await?;
-        vs.shader = dep.cooked_id();
-        dependencies.push(dep);
-    }
+    let dependencies = Arc::new(Mutex::new(Vec::new()));
+    let cooked = source
+        .cook(|sh, id| {
+            let dependencies = dependencies.clone();
+            let source_id = source_id.clone();
+            async move {
+                match sh {
+                    ShaderType::Vertex => {
+                        let vs_id = source_id
+                            .create_relative(&id)
+                            .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
+                        let dep = cook_shader::cook_shader(context, vs_id)
+                            .await
+                            .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
+                        let id = dep.cooked_id();
+                        dependencies.lock().unwrap().push(dep);
+                        Ok(id)
+                    }
 
-    {
-        let fs = &mut source.descriptor.fragment_stage;
-        let fs_id = source_id.new_relative(&fs.shader)?;
-        let dep = cook_shader::cook_shader(context, fs_id).await?;
-        fs.shader = dep.cooked_id();
-        dependencies.push(dep);
-    }
+                    ShaderType::Fragment => {
+                        let fs_id = source_id
+                            .create_relative(&id)
+                            .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
+                        let dep = cook_shader::cook_shader(context, fs_id)
+                            .await
+                            .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
+                        let id = dep.cooked_id();
+                        dependencies.lock().unwrap().push(dep);
+                        Ok(id)
+                    }
 
-    let cooked = source.cook().await?;
+                    _ => unreachable!(),
+                }
+            }
+        })
+        .await?;
+
     let cooked_content = bincode::serialize(&cooked)?;
 
     log::debug!("[{}] Uploading...", source_url.as_str());
@@ -35,7 +55,11 @@ pub async fn cook_pipeline(context: &Context, source_id: AssetId) -> Result<Depe
             source_hash,
             TargetNaming::Soft("pipeline".to_owned(), None),
             &cooked_content,
-            dependencies,
+            Arc::try_unwrap(dependencies)
+                .map_err(|_| ())
+                .unwrap()
+                .into_inner()
+                .unwrap(),
         )
         .await?)
 }
