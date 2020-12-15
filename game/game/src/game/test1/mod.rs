@@ -12,7 +12,14 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum Test1Type {
+    Test1,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Test1 {
+    #[serde(rename = "type")]
+    pub ty: Test1Type,
     pub pipeline: String,
 }
 

@@ -1,31 +1,34 @@
 #![cfg(feature = "cook")]
-use shine_game::assets::{io::HashableContent, AssetIO, AssetId, Url};
-use shine_game::game::test1;
+use shine_game::{
+    assets::{cooker, io::HashableContent, AssetIO, AssetId, Url},
+    game::test1,
+};
 use std::collections::HashMap;
 
 mod utils;
 
-async fn load_game(id: &str, expected_source_hash: &str, expected_cooked_hash: &str) {
+#[tokio::test(threaded_scheduler)]
+async fn load_test1() {
     utils::init_logger();
 
-    let source_root = Url::parse("file://../assets/games").unwrap();
+    let source_root = Url::parse("file://../assets/game_test/").unwrap();
     let virtual_schemes = HashMap::default();
     let io = AssetIO::new(virtual_schemes).unwrap();
 
-    let id = AssetId::new(id).unwrap();
+    let id = AssetId::new("test1.game").unwrap();
     let source_url = id.to_url(&source_root).unwrap();
 
-    let (source, source_hash) = test1::Source::load(&io, &source_url).await.unwrap();
-    //assert_eq!(source.ty, ShaderType::Fragment);
-    assert_eq!(source_hash, expected_source_hash);
+    let (source, source_hash) = test1::Source::load(&io, &id, &source_url).await.unwrap();
+    assert_eq!(
+        source_hash,
+        "ec71cc1b4a27f80ccd32673a5b06abb7ef576ce5d7c6fb2575a660c406d8aa05"
+    );
 
-    let cooked = source.cook(/*cooker::DummyCooker*/).await.unwrap();
+    let cooked = source.cook(cooker::DummyCooker).await.unwrap();
+    assert_eq!(cooked.pipeline, "pipeline://hello.pl");
     let cooked_hash = bincode::serialize(&cooked).unwrap().content_hash();
-    //assert_eq!(cooked.ty, ShaderType::Fragment);
-    assert_eq!(cooked_hash, expected_cooked_hash);
-}
-
-#[tokio::test(threaded_scheduler)]
-async fn load_test1() {
-    load_game("test1/test.game", "", "").await;
+    assert_eq!(
+        cooked_hash,
+        "00677fe9400b8f54d7c11bb361bce9eedf19c413389a04a0c7bf243dbebe9d08"
+    );
 }

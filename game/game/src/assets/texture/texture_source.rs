@@ -1,6 +1,7 @@
 #![cfg(feature = "cook")]
 use crate::assets::{
-    io::ContentHasher, AssetError, AssetIO, AssetId, CookedTexture, CookingError, ImageEncoding, TextureDescriptor, Url,
+    cooker::CookingError, io::ContentHasher, AssetError, AssetIO, AssetId, CookedTexture, ImageEncoding,
+    TextureDescriptor, Url,
 };
 use image::{imageops::FilterType, DynamicImage, GenericImageView, ImageOutputFormat};
 use tokio::task;

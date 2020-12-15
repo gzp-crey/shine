@@ -1,7 +1,7 @@
 #![cfg(feature = "cook")]
 use crate::assets::{
-    io::HashableContent, vertex, AssetError, AssetIO, AssetId, CookedModel, CookingError, IndexData, MeshData, Url,
-    VertexData,
+    cooker::CookingError, io::HashableContent, vertex, AssetError, AssetIO, AssetId, CookedModel, IndexData, MeshData,
+    Url, VertexData,
 };
 use gltf::{accessor::Dimensions, buffer, Document, Gltf, Primitive, Semantic};
 use itertools::izip;

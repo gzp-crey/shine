@@ -217,13 +217,10 @@ impl TargetDB {
         source_hash: String,
         cooked_naming: TargetNaming,
         cooked_content: &[u8],
-        dependencies: Vec<Dependency>,
-    ) -> Result<Dependency, CookerError> {
+    ) -> Result<(), CookerError> {
         let target_dependency = self
             .upload_binary_content(asset_id, cooked_naming, cooked_content)
             .await?;
-        self.update_dependencies(&target_dependency, source_url, source_hash, dependencies)
-            .await?;
-        Ok(target_dependency)
+        Ok(())
     }
 }

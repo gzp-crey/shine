@@ -92,14 +92,6 @@ impl Dependency {
     }
 }
 
-#[derive(Clone)]
-pub struct Context {
-    // all asset source is located in the root
-    pub source_root: Url,
-    pub source_io: Arc<AssetIO>,
-    pub target_db: TargetDB,
-}
-
 async fn cook(context: &Context, source_id: AssetId) -> Result<Dependency, CookerError> {
     let cooked_dependency = match source_id.extension() {
         "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, source_id).await?,

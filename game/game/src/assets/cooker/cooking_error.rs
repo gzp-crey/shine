@@ -1,5 +1,3 @@
-#![cfg(feature = "cook")]
-
 use shine_ecs::core::error::ErrorString;
 use std::error::Error as StdError;
 use thiserror::Error;

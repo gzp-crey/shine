@@ -1,7 +1,8 @@
 #[cfg(feature = "cook")]
 use crate::assets::{
-    io::HashableContent, AssetError, AssetIO, AssetId, CookedPipeline, CookingError, PipelineDescriptor, ShaderCooker,
-    ShaderType, Url,
+    cooker::{CookingError, Naming, ShaderCooker},
+    io::HashableContent,
+    AssetError, AssetIO, AssetId, CookedPipeline, PipelineDescriptor, ShaderType, Url,
 };
 
 pub struct PipelineSource {
@@ -74,7 +75,10 @@ impl PipelineSource {
             let vs_id = source_id
                 .create_relative(&vs.shader)
                 .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
-            vs.shader = cookers.cook_shader(ShaderType::Vertex, vs_id).await?.to_string();
+            vs.shader = cookers
+                .cook_shader(ShaderType::Vertex, vs_id, Naming::Hard)
+                .await?
+                .to_string();
         }
 
         {
@@ -87,7 +91,7 @@ impl PipelineSource {
             let fs_id = source_id
                 .create_relative(&fs.shader)
                 .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
-            fs.shader = cookers.cook_shader(ShaderType::Fragment, fs_id).await?.to_string();
+            fs.shader = cookers.cook_shader(ShaderType::Fragment, fs_id, Naming::Hard).await?.to_string();
         }
 
         Ok(CookedPipeline { descriptor })

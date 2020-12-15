@@ -1,8 +1,9 @@
 #![cfg(feature = "cook")]
 use crate::assets::{
-    cooker::DummyCooker, io::HashableContent, AssetError, AssetIO, AssetId, CookedShader, CookingError, ShaderType, Url,
+    cooker::{CookingError},
+    io::HashableContent,
+    AssetError, AssetIO, AssetId, CookedShader, ShaderType, Url,
 };
-use std::{future::Future, pin::Pin};
 
 pub struct ShaderSource {
     pub source_id: AssetId,
@@ -63,38 +64,6 @@ impl ShaderSource {
         Ok(CookedShader {
             shader_type,
             binary: compiled_artifact.as_binary_u8().to_owned(),
-        })
-    }
-}
-
-/// Trait to cook shader
-pub trait ShaderCooker<'a> {
-    type Fut: 'a + Future<Output = Result<Url, CookingError>>;
-
-    fn cook_shader(&self, sh: ShaderType, id: AssetId) -> Self::Fut;
-}
-
-impl<'a, F, Fut> ShaderCooker<'a> for F
-where
-    Fut: 'a + Future<Output = Result<Url, CookingError>>,
-    F: 'a + Fn(ShaderType, AssetId) -> Fut,
-{
-    type Fut = Fut;
-
-    fn cook_shader(&self, sh: ShaderType, id: AssetId) -> Fut {
-        (self)(sh, id)
-    }
-}
-
-impl<'a> ShaderCooker<'a> for DummyCooker {
-    type Fut = Pin<Box<dyn Future<Output = Result<Url, CookingError>>>>;
-
-    fn cook_shader(&self, _sh: ShaderType, id: AssetId) -> Self::Fut {
-        Box::pin(async move {
-            let url = Url::parse("shader://").map_err(|err| CookingError::from_err(id.to_string(), err))?;
-            Ok(id
-                .to_url(&url)
-                .map_err(|err| CookingError::from_err(id.to_string(), err))?)
         })
     }
 }

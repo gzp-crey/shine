@@ -8,7 +8,7 @@ mod utils;
 async fn load_shader() {
     utils::init_logger();
 
-    let source_root = Url::parse("file://../assets/game_test/assets/").unwrap();
+    let source_root = Url::parse("file://../assets/game_test/").unwrap();
     let virtual_schemes = HashMap::default();
     let io = AssetIO::new(virtual_schemes).unwrap();
 
