@@ -1,24 +1,36 @@
-use crate::{Context, CookerError, Dependency, TargetNaming};
-use shine_game::assets::{AssetId, ShaderSource};
+use crate::Context;
+use shine_game::assets::{
+    cooker::{CookingError, Naming, ShaderCooker},
+    AssetId, ShaderSource, Url,
+};
+use std::{future::Future, pin::Pin};
 
-pub async fn cook_shader(context: &Context, source_id: AssetId) -> Result<Url, CookerError> {
-    let source_url = source_id.to_url(&context.source_root)?;
+impl<'a> ShaderCooker<'a> for Context {
+    type ShaderFuture = Pin<Box<dyn Future<Output = Result<Url, CookingError>>>>;
 
-    let ext = source_url.extension();
-    let (source, source_hash) = ShaderSource::load(&context.source_io, &source_url).await?;
+    fn cook_shader(&self, source_id: AssetId, naming: Naming) -> Self::ShaderFuture {
+        Box::pin({
+            let context = self.clone();
+            async move {
+                let source_url = source_id
+                    .to_url(&context.source_root)
+                    .map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
+                let (source, source_hash) = ShaderSource::load(&context.source_io, &source_id, &source_url)
+                    .await
+                    .map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
 
-    let cooked = source.cook().await?;
-    let cooked_content = bincode::serialize(&cooked)?;
+                let cooked = source.cook().await?;
+                let cooked_content =
+                    bincode::serialize(&cooked).map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
 
-    log::debug!("[{}] Uploading...", source_url.as_str());
-    Ok(context
-        .target_db
-        .upload_cooked_binary(
-            &source_id,
-            &source_url,
-            source_hash,
-            TargetNaming::Hard("shader".to_owned(), Some(format!("{}_spv", ext))),
-            &cooked_content,
-        )
-        .await?)
+                log::debug!("[{}] Uploading...", source_url.as_str());
+                let cooked_url = context
+                    .target_io
+                    .upload_binary_content(source_id, source_hash, naming, &cooked_content)
+                    .await?;
+
+                Ok(cooked_url)
+            }
+        })
+    }
 }

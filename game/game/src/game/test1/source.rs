@@ -1,9 +1,8 @@
 #[cfg(feature = "cook")]
 use crate::{
     assets::{
-        cooker::{CookingError, Naming, PipelineCooker},
-        io::HashableContent,
-        AssetError, AssetIO, AssetId, Url,
+        cooker::{CookingError, ModelCooker, Naming, PipelineCooker, TextureCooker},
+        AssetError, AssetIO, AssetId, ContentHash, Url,
     },
     game::test1::{Test1, Test1Type},
 };
@@ -21,7 +20,11 @@ pub struct Source {
 }
 
 impl Source {
-    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, String), AssetError> {
+    pub async fn load(
+        io: &AssetIO,
+        source_id: &AssetId,
+        source_url: &Url,
+    ) -> Result<(Source, ContentHash), AssetError> {
         log::debug!("[{}] Downloading from {} ...", source_id.as_str(), source_url.as_str());
         let data = io.download_binary(&source_url).await?;
         Self::load_from_data(source_id, source_url, &data).await
@@ -31,7 +34,7 @@ impl Source {
         source_id: &AssetId,
         source_url: &Url,
         data: &[u8],
-    ) -> Result<(Self, String), AssetError> {
+    ) -> Result<(Source, ContentHash), AssetError> {
         let test = serde_json::from_slice::<Descriptor>(&data)
             .map_err(|err| AssetError::load_failed(source_url.as_str(), err))?;
         log::trace!("[{}] descriptor: {:#?}", source_id.as_str(), test);
@@ -41,11 +44,14 @@ impl Source {
             source_url: source_url.clone(),
             test,
         };
-        let source_hash = data.content_hash();
+        let source_hash = ContentHash::from_bytes(&data);
         Ok((source, source_hash))
     }
 
-    pub async fn cook<'a, C: PipelineCooker<'a>>(self, cooker: C) -> Result<Test1, CookingError> {
+    pub async fn cook<'a, C>(self, cooker: C) -> Result<Test1, CookingError>
+    where
+        C: PipelineCooker<'a> + TextureCooker<'a> + ModelCooker<'a>,
+    {
         log::debug!("[{}] Compiling...", self.source_url.as_str());
 
         let Source { source_id, test, .. } = self;
@@ -59,7 +65,10 @@ impl Source {
         let pip_id = source_id
             .create_relative(&pipeline)
             .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
-        let pipeline = cooker.cook_pipeline(pip_id, Naming::Soft).await?.to_string();
+        let pipeline = cooker
+            .cook_pipeline(pip_id, Naming::soft("pipeline", "pl"))
+            .await?
+            .to_string();
 
         Ok(Test1 {
             ty: Test1Type::Test1,

@@ -1,6 +1,3 @@
-mod hashing;
-pub use self::hashing::*;
-
 #[cfg(feature = "native")]
 mod tokio_io;
 #[cfg(feature = "native")]

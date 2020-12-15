@@ -1,5 +1,5 @@
 #![cfg(feature = "cook")]
-use shine_game::assets::{io::HashableContent, AssetIO, AssetId, GltfSource, Url};
+use shine_game::assets::{AssetIO, AssetId, ContentHash, GltfSource, Url};
 use std::collections::HashMap;
 
 mod utils;
@@ -18,15 +18,15 @@ async fn load_gltf() {
     let (source, source_hash) = GltfSource::load(&io, &id, &source_url).await.unwrap();
     //assert_eq!(source., );
     assert_eq!(
-        source_hash,
+        source_hash.hash(),
         "58006bdcff8084339da0f6e24400160890638c16dbcb83c362ccaf150e8c6e10"
     );
 
     let cooked = source.cook().await.unwrap();
-    let cooked_hash = bincode::serialize(&cooked).unwrap().content_hash();
+    let cooked_hash = ContentHash::from_bytes(&bincode::serialize(&cooked).unwrap());
     //assert_eq!(cooked., );
     assert_eq!(
-        cooked_hash,
+        cooked_hash.hash(),
         "48a50c9255cbff5aaea2bec95815fd1684ae3186854d66c1ea1b3acd03a4b9ec"
     );
 }

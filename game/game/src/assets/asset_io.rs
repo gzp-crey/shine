@@ -1,5 +1,5 @@
 use crate::assets::io::AssetLowIO;
-use crate::assets::{AssetError, Url};
+use crate::assets::{AssetError, ContentHash, Url};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -32,9 +32,9 @@ impl AssetIO {
         }
     }
 
-    pub async fn download_etag(&self, url: &Url) -> Result<String, AssetError> {
+    pub async fn download_hash(&self, url: &Url) -> Result<ContentHash, AssetError> {
         let url = self.resolve_virtual_scheme(url)?;
-        self.inner.io.download_etag(&url).await
+        self.inner.io.download_hash(&url).await
     }
 
     pub async fn download_binary(&self, url: &Url) -> Result<Vec<u8>, AssetError> {

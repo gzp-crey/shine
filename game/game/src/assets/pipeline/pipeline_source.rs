@@ -1,8 +1,7 @@
 #[cfg(feature = "cook")]
 use crate::assets::{
     cooker::{CookingError, Naming, ShaderCooker},
-    io::HashableContent,
-    AssetError, AssetIO, AssetId, CookedPipeline, PipelineDescriptor, ShaderType, Url,
+    AssetError, AssetIO, AssetId, ContentHash, CookedPipeline, PipelineDescriptor, Url,
 };
 
 pub struct PipelineSource {
@@ -12,14 +11,11 @@ pub struct PipelineSource {
 }
 
 impl PipelineSource {
-    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, String), AssetError> {
-        if source_id.is_relative() {
-            return Err(AssetError::InvalidAssetId(format!(
-                "Absolute id required: {}",
-                source_id.as_str()
-            )));
-        }
-
+    pub async fn load(
+        io: &AssetIO,
+        source_id: &AssetId,
+        source_url: &Url,
+    ) -> Result<(PipelineSource, ContentHash), AssetError> {
         log::debug!("[{}] Downloading from {} ...", source_id.as_str(), source_url.as_str());
         let data = io.download_binary(&source_url).await?;
 
@@ -32,7 +28,7 @@ impl PipelineSource {
             source_url: source_url.clone(),
             descriptor: pipeline,
         };
-        let source_hash = data.content_hash();
+        let source_hash = ContentHash::from_bytes(&data);
         Ok((source, source_hash))
     }
 
@@ -72,13 +68,16 @@ impl PipelineSource {
                 source_id.as_str(),
                 vs.shader
             );
-            let vs_id = source_id
+            let id = source_id
                 .create_relative(&vs.shader)
                 .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
-            vs.shader = cookers
-                .cook_shader(ShaderType::Vertex, vs_id, Naming::Hard)
-                .await?
-                .to_string();
+            if id.extension() != "vs" {
+                return Err(CookingError::from_err(
+                    source_id.as_str(),
+                    AssetError::UnsupportedFormat(id.extension().to_owned()),
+                ));
+            }
+            vs.shader = cookers.cook_shader(id, Naming::hard("shader", "vs")).await?.to_string();
         }
 
         {
@@ -88,10 +87,16 @@ impl PipelineSource {
                 source_id.as_str(),
                 fs.shader
             );
-            let fs_id = source_id
+            let id = source_id
                 .create_relative(&fs.shader)
                 .map_err(|err| CookingError::from_err(source_id.as_str(), err))?;
-            fs.shader = cookers.cook_shader(ShaderType::Fragment, fs_id, Naming::Hard).await?.to_string();
+            if id.extension() != "fs" {
+                return Err(CookingError::from_err(
+                    source_id.as_str(),
+                    AssetError::UnsupportedFormat(id.extension().to_owned()),
+                ));
+            }
+            fs.shader = cookers.cook_shader(id, Naming::hard("shader", "fs")).await?.to_string();
         }
 
         Ok(CookedPipeline { descriptor })

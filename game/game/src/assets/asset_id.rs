@@ -11,13 +11,11 @@ impl AssetId {
         let id = id.to_string();
         if id.chars().any(|c| c == '?' || c == '&') {
             Err(UrlError::InvalidDomainCharacter)
+        } else if id.starts_with("./") {
+            Err(UrlError::RelativeUrlWithoutBase)
         } else {
             Ok(AssetId { inner: id })
         }
-    }
-
-    pub fn is_relative(&self) -> bool {
-        self.inner.starts_with("./")
     }
 
     pub fn create_relative(&self, id: &str) -> Result<AssetId, UrlError> {

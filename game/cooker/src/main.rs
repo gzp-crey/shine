@@ -1,13 +1,15 @@
 use color_eyre::{self, Report};
-use shine_game::assets::{self, AssetIO, AssetId, Url};
-use std::sync::Arc;
+use shine_game::assets::{
+    cooker::{CookingError, ModelCooker, Naming, PipelineCooker, ShaderCooker, TextureCooker},
+    AssetError, AssetIO, AssetId, Url, UrlError,
+};
 use thiserror::Error;
 use tokio::runtime::Runtime;
 
 mod config;
 //mod cook_frame_graph;
 //mod cook_game;
-mod cook_gltf;
+mod cook_model;
 mod cook_pipeline;
 mod cook_shader;
 mod cook_texture;
@@ -19,88 +21,67 @@ pub use target_db::TargetDB;
 #[derive(Debug, Error)]
 pub enum CookerError {
     #[error(transparent)]
-    Url(#[from] assets::UrlError),
+    Url(#[from] UrlError),
+
     #[error(transparent)]
-    Asset(#[from] assets::AssetError),
+    Asset(#[from] AssetError),
+
     #[error(transparent)]
-    Cook(#[from] assets::CookingError),
+    Cook(#[from] CookingError),
+
+    #[error(transparent)]
+    Config(#[from] ::config::ConfigError),
 
     #[error("Runtime error")]
     Runtime(#[from] tokio::task::JoinError),
-
-    #[error("Serialization error - json")]
-    Json(#[from] serde_json::Error),
-    #[error("Serialization error - binary")]
-    Bincode(#[from] bincode::Error),
 
     #[error("Database error")]
     SqlDb(#[from] sqlx::Error),
 }
 
-/// Indicates, how to name the cooked assets
-pub enum TargetNaming {
-    Hard(String, Option<String>),
-    Soft(String, Option<String>),
+#[derive(Clone)]
+pub struct Context {
+    // all asset source is located in this root
+    pub source_root: Url,
+    pub source_io: AssetIO,
+    pub target_io: TargetDB,
 }
 
-/// Define the source -> cooked mapping for asset dependency handling.
-/// There are two type of dependency:
-/// - hard which requires a recooking of the dependant assets
-/// - soft where dependency graph can be cut w.r.t. asset cooking
-/// Also note that all ids are replaced by a storage_root relative id
-pub struct Dependency {
-    source_id: AssetId,
-    cooked_url: Url,
-    is_soft: bool,
-}
-
-impl Dependency {
-    pub fn soft(source_id: AssetId, cooked_url: Url) -> Dependency {
-        Dependency {
-            source_id,
-            cooked_url,
-            is_soft: true,
+impl Context {
+    pub fn create_scope(&self, asset_scope: AssetId) -> Context {
+        Context {
+            source_root: self.source_root.clone(),
+            source_io: self.source_io.clone(),
+            target_io: self.target_io.create_scope(asset_scope),
         }
     }
-
-    pub fn hard(source_id: AssetId, cooked_url: Url) -> Dependency {
-        Dependency {
-            source_id,
-            cooked_url,
-            is_soft: false,
-        }
-    }
-
-    pub fn is_soft(&self) -> bool {
-        self.is_soft
-    }
-
-    pub fn is_hard(&self) -> bool {
-        !self.is_soft
-    }
-
-    pub fn source_id(&self) -> &AssetId {
-        &self.source_id
-    }
-
-    pub fn cooked_url(&self) -> &Url {
-        &self.cooked_url
-    }
-
-    pub fn cooked_id(&self) -> String {
-        self.cooked_url.as_str().to_owned()
-    }
 }
 
-async fn cook(context: &Context, source_id: AssetId) -> Result<Dependency, CookerError> {
-    let cooked_dependency = match source_id.extension() {
-        "vs" | "fs" | "cs" => cook_shader::cook_shader(&context, source_id).await?,
-        "pl" => cook_pipeline::cook_pipeline(&context, source_id).await?,
-        //"fgr" => cook_frame_graph::cook_frame_graph(&context, &asset_base, &asset_id).await?,
-        "glb" | "gltf" => cook_gltf::cook_gltf(&context, source_id).await?,
-        "jpg" | "png" => cook_texture::cook_texture(&context, source_id).await?,
+async fn cook(context: &Context, source_id: AssetId) -> Result<Url, CookerError> {
+    let ext = source_id.extension();
+    let cooked_dependency = match ext {
+        "vs" | "fs" | "cs" => {
+            context
+                .cook_shader(source_id.clone(), Naming::soft("shader", ext))
+                .await?
+        }
+        "pl" => {
+            context
+                .cook_pipeline(source_id.clone(), Naming::soft("pipeline", "pl"))
+                .await?
+        }
+        "glb" | "gltf" => {
+            context
+                .cook_model(source_id.clone(), Naming::soft("model", "md"))
+                .await?
+        }
+        "jpg" | "png" => {
+            context
+                .cook_texture(source_id.clone(), Naming::soft("texture", "tx"))
+                .await?
+        }
         //"game" => cook_game::cook_game(&context, &asset_base, &asset_id).await?,
-        e => return Err(assets::AssetError::UnsupportedFormat(e.into()).into()),
+        e => return Err(AssetError::UnsupportedFormat(e.into()).into()),
     };
 
     Ok(cooked_dependency)
@@ -110,19 +91,19 @@ async fn run(assets: Vec<AssetId>) -> Result<(), CookerError> {
     let config = Config::new().unwrap();
 
     let context = {
-        let source_io = Arc::new(AssetIO::new(config.source_virtual_schemes.clone())?);
-        let target_db = TargetDB::new(&config).await?;
+        let source_io = AssetIO::new(config.source_virtual_schemes.clone())?;
+        let target_io = TargetDB::new(&config).await?;
         Context {
             source_root: config.source_root.clone(),
             source_io,
-            target_db,
+            target_io,
         }
     };
 
-    let root_assets = context.target_db.get_affected_roots(&assets[..]).await?;
-    log::info!("Root assets to cook: {:?}", root_assets);
+    //let root_assets = context.target_io.get_affected_roots(&assets[..]).await?;
+    //log::info!("Root assets to cook: {:?}", root_assets);
 
-    for asset_id in &root_assets {
+    for asset_id in &assets {
         log::info!("Cooking started for {:?}", asset_id);
         let _cooked_dependency = cook(&context, asset_id.clone()).await?;
         log::info!("Cooking completed for {:?}", asset_id);
@@ -143,10 +124,10 @@ fn main() -> Result<(), Report> {
     let mut rt = Runtime::new()?;
 
     let assets = [
-        //"games/test1/hello.fs",
-        //"games/test3/checker.png",
-        //"models/SimpleMeshes.gltf",
-        //"models/VertexColorTest.glb",
+        "games/test1/hello.fs",
+        "games/test3/checker.png",
+        "models/SimpleMeshes.gltf",
+        "models/VertexColorTest.glb",
         "games/test1/hello.pl",
         //"games/test1/test.game",
         //"games/test2/test.game",

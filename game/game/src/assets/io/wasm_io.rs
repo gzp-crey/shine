@@ -1,4 +1,4 @@
-use crate::assets::{AssetError, Url};
+use crate::assets::{AssetError, ContentHash, Url};
 use js_sys::Uint8Array;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -53,7 +53,7 @@ impl AssetLowIO {
         }
     }
 
-    pub async fn download_etag(&self, url: &Url) -> Result<String, AssetError> {
+    pub async fn download_hash(&self, url: &Url) -> Result<ContentHash, AssetError> {
         log::debug!("Downloading etag from {}", url.as_str());
         unimplemented!()
     }

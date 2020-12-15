@@ -1,7 +1,7 @@
 #![cfg(feature = "cook")]
 use crate::assets::{
-    cooker::CookingError, io::ContentHasher, AssetError, AssetIO, AssetId, CookedTexture, ImageEncoding,
-    TextureDescriptor, Url,
+    cooker::CookingError, AssetError, AssetIO, AssetId, ContentHash, CookedTexture, ImageEncoding, TextureDescriptor,
+    Url,
 };
 use image::{imageops::FilterType, DynamicImage, GenericImageView, ImageOutputFormat};
 use tokio::task;
@@ -14,14 +14,11 @@ pub struct TextureSource {
 }
 
 impl TextureSource {
-    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, String), AssetError> {
-        if source_id.is_relative() {
-            return Err(AssetError::InvalidAssetId(format!(
-                "Absolute id required: {}",
-                source_id.as_str()
-            )));
-        }
-
+    pub async fn load(
+        io: &AssetIO,
+        source_id: &AssetId,
+        source_url: &Url,
+    ) -> Result<(TextureSource, ContentHash), AssetError> {
         log::debug!("[{}] Downloading from {} ...", source_id.as_str(), source_url.as_str());
         let image_data = io.download_binary(&source_url).await?;
 
@@ -41,12 +38,12 @@ impl TextureSource {
         };
 
         let source_hash = {
-            let mut hasher = ContentHasher::new();
+            let mut hasher = ContentHash::builder();
             hasher.add(&image_data);
             if let Some(meta_data) = &meta_data {
                 hasher.add(&meta_data);
             }
-            hasher.hash()
+            hasher.build()
         };
 
         let descriptor = match meta_data {

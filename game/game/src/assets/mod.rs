@@ -7,6 +7,8 @@ mod url;
 pub use self::url::*;
 mod asset_id;
 pub use self::asset_id::*;
+mod content_hash;
+pub use self::content_hash::*;
 mod asset_io;
 pub use self::asset_io::*;
 mod plugin;

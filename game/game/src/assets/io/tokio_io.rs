@@ -1,4 +1,4 @@
-use crate::assets::{io::sha256_bytes, AssetError, Url};
+use crate::assets::{AssetError, ContentHash, Url};
 use reqwest::{self, Client, Response};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
@@ -29,7 +29,7 @@ impl AssetLowIO {
         }
     }
 
-    pub async fn download_etag(&self, url: &Url) -> Result<String, AssetError> {
+    pub async fn download_hash(&self, url: &Url) -> Result<ContentHash, AssetError> {
         log::debug!("Downloading etag from {}", url.as_str());
         match url.scheme() {
             "file" => {
@@ -40,7 +40,7 @@ impl AssetLowIO {
                     .read_to_end(&mut data)
                     .await
                     .map_err(|err| AssetError::load_failed(url.as_str(), err))?;
-                Ok(sha256_bytes(&data))
+                Ok(ContentHash::from_bytes(&data))
             }
             "http" | "https" => unimplemented!(),
             "blobs" => unimplemented!(),

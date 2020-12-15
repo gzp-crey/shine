@@ -1,9 +1,5 @@
 #![cfg(feature = "cook")]
-use crate::assets::{
-    cooker::{CookingError},
-    io::HashableContent,
-    AssetError, AssetIO, AssetId, CookedShader, ShaderType, Url,
-};
+use crate::assets::{cooker::CookingError, AssetError, AssetIO, AssetId, ContentHash, CookedShader, ShaderType, Url};
 
 pub struct ShaderSource {
     pub source_id: AssetId,
@@ -13,14 +9,7 @@ pub struct ShaderSource {
 }
 
 impl ShaderSource {
-    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, String), AssetError> {
-        if source_id.is_relative() {
-            return Err(AssetError::InvalidAssetId(format!(
-                "Absolute id required: {}",
-                source_id.as_str()
-            )));
-        }
-
+    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, ContentHash), AssetError> {
         log::debug!("[{}] Downloading from {}...", source_id.as_str(), source_url.as_str());
         let source = io.download_string(&source_url).await?;
         let ext = source_url.extension();
@@ -32,7 +21,7 @@ impl ShaderSource {
             shader_type,
             source,
         };
-        let source_hash = source.source.content_hash();
+        let source_hash = ContentHash::from_bytes(source.source.as_bytes());
 
         Ok((source, source_hash))
     }

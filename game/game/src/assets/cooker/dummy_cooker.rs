@@ -1,6 +1,6 @@
 use crate::assets::{
-    cooker::{CookingError, ModelCooker, Naming, PipelineCooker, ShaderCooker, TextureCooker},
-    AssetId, ShaderType, Url,
+    cooker::{ContentHash, CookingError, ModelCooker, Naming, PipelineCooker, ShaderCooker, TextureCooker},
+    AssetId, Url,
 };
 use std::{future::Future, pin::Pin};
 
@@ -10,12 +10,11 @@ pub struct DummyCooker;
 impl<'a> ShaderCooker<'a> for DummyCooker {
     type ShaderFuture = Pin<Box<dyn Future<Output = Result<Url, CookingError>>>>;
 
-    fn cook_shader(&self, _sh: ShaderType, id: AssetId, _naming: Naming) -> Self::ShaderFuture {
+    fn cook_shader(&self, source_id: AssetId, naming: Naming) -> Self::ShaderFuture {
         Box::pin(async move {
-            let url = Url::parse("shader://").map_err(|err| CookingError::from_err(id.to_string(), err))?;
-            Ok(id
-                .to_url(&url)
-                .map_err(|err| CookingError::from_err(id.to_string(), err))?)
+            Ok(naming
+                .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
+                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
         })
     }
 }
@@ -23,12 +22,11 @@ impl<'a> ShaderCooker<'a> for DummyCooker {
 impl<'a> PipelineCooker<'a> for DummyCooker {
     type PipelineFuture = Pin<Box<dyn Future<Output = Result<Url, CookingError>>>>;
 
-    fn cook_pipeline(&self, id: AssetId, _naming: Naming) -> Self::PipelineFuture {
+    fn cook_pipeline(&self, source_id: AssetId, naming: Naming) -> Self::PipelineFuture {
         Box::pin(async move {
-            let url = Url::parse("pipeline://").map_err(|err| CookingError::from_err(id.to_string(), err))?;
-            Ok(id
-                .to_url(&url)
-                .map_err(|err| CookingError::from_err(id.to_string(), err))?)
+            Ok(naming
+                .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
+                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
         })
     }
 }
@@ -36,12 +34,11 @@ impl<'a> PipelineCooker<'a> for DummyCooker {
 impl<'a> TextureCooker<'a> for DummyCooker {
     type TextureFuture = Pin<Box<dyn Future<Output = Result<Url, CookingError>>>>;
 
-    fn cook_texture(&self, id: AssetId, _naming: Naming) -> Self::TextureFuture {
+    fn cook_texture(&self, source_id: AssetId, naming: Naming) -> Self::TextureFuture {
         Box::pin(async move {
-            let url = Url::parse("texture://").map_err(|err| CookingError::from_err(id.to_string(), err))?;
-            Ok(id
-                .to_url(&url)
-                .map_err(|err| CookingError::from_err(id.to_string(), err))?)
+            Ok(naming
+                .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
+                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
         })
     }
 }
@@ -49,12 +46,11 @@ impl<'a> TextureCooker<'a> for DummyCooker {
 impl<'a> ModelCooker<'a> for DummyCooker {
     type ModelFuture = Pin<Box<dyn Future<Output = Result<Url, CookingError>>>>;
 
-    fn cook_model(&self, id: AssetId, _naming: Naming) -> Self::ModelFuture {
+    fn cook_model(&self, source_id: AssetId, naming: Naming) -> Self::ModelFuture {
         Box::pin(async move {
-            let url = Url::parse("model://").map_err(|err| CookingError::from_err(id.to_string(), err))?;
-            Ok(id
-                .to_url(&url)
-                .map_err(|err| CookingError::from_err(id.to_string(), err))?)
+            Ok(naming
+                .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
+                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
         })
     }
 }

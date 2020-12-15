@@ -1,7 +1,7 @@
 #![cfg(feature = "cook")]
 use crate::assets::{
-    cooker::CookingError, io::HashableContent, vertex, AssetError, AssetIO, AssetId, CookedModel, IndexData, MeshData,
-    Url, VertexData,
+    cooker::CookingError, vertex, AssetError, AssetIO, AssetId, ContentHash, CookedModel, IndexData, MeshData, Url,
+    VertexData,
 };
 use gltf::{accessor::Dimensions, buffer, Document, Gltf, Primitive, Semantic};
 use itertools::izip;
@@ -14,14 +14,11 @@ pub struct GltfSource {
 }
 
 impl GltfSource {
-    pub async fn load(io: &AssetIO, source_id: &AssetId, source_url: &Url) -> Result<(Self, String), AssetError> {
-        if source_id.is_relative() {
-            return Err(AssetError::InvalidAssetId(format!(
-                "Absolute id required: {}",
-                source_id.as_str()
-            )));
-        }
-
+    pub async fn load(
+        io: &AssetIO,
+        source_id: &AssetId,
+        source_url: &Url,
+    ) -> Result<(GltfSource, ContentHash), AssetError> {
         log::debug!("[{}] Downloading from {} ...", source_id.as_str(), source_url.as_str());
         let data = io.download_binary(&source_url).await?;
 
@@ -35,7 +32,7 @@ impl GltfSource {
             document,
             buffers,
         };
-        let source_hash = data.content_hash();
+        let source_hash = ContentHash::from_bytes(&data);
 
         Ok((gltf, source_hash))
     }
