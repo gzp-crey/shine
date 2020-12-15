@@ -42,7 +42,7 @@ impl ResourceId {
             bincode::deserialize::<T>(&data).map_err(|err| ECSError::ResourceId(err.into()))
         } else {
             Err(ECSError::ResourceId(Box::new(ErrorString(
-                "Not a binary id".to_string(),
+                "Not a binary id".to_owned(),
             ))))
         }
     }

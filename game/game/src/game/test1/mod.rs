@@ -28,7 +28,7 @@ impl Test1 {
         let game = {
             let assetio = app.world.asset_io()?;
             let data = assetio.download_binary(url).await?;
-            bincode::deserialize::<Test1>(&data).map_err(|err| AssetError::load_failed(url.as_str(), err))?
+            bincode::deserialize::<Test1>(&data).map_err(|err| AssetError::load_failed(&url, err))?
         };
         app.init_game(game).await
     }

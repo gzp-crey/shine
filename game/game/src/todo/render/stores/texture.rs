@@ -147,7 +147,7 @@ impl AssetIO {
         load_token.ok()?;
         log::debug!("[{:?}] Decompressing texture...", load_token);
         let texture_image = bincode::deserialize::<TextureImage>(&data)
-            .map_err(|err| AssetError::load_failed(url.as_str(), err))?
+            .map_err(|err| AssetError::load_failed(&url, err))?
             .decompress()?;
         Ok(texture_image)
     }

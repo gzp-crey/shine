@@ -32,3 +32,21 @@ async fn load_test1() {
         "00677fe9400b8f54d7c11bb361bce9eedf19c413389a04a0c7bf243dbebe9d08"
     );
 }
+
+#[tokio::test(threaded_scheduler)]
+async fn load_test1_invalid() {
+    utils::init_logger();
+
+    let source_root = Url::parse("file://../assets/game_test/").unwrap();
+    let virtual_schemes = HashMap::default();
+    let io = AssetIO::new(virtual_schemes).unwrap();
+
+    let id = AssetId::new("test1_invalid.game").unwrap();
+    let source_url = id.to_url(&source_root).unwrap();
+
+    let err = test1::Source::load(&io, &id, &source_url)
+        .await
+        .map(|_| ())
+        .unwrap_err();
+    assert!(format!("{:?}", err).contains("unknown variant `Test2`, expected `Test1`"));
+}

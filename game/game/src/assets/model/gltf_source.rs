@@ -19,11 +19,10 @@ impl GltfSource {
         source_id: &AssetId,
         source_url: &Url,
     ) -> Result<(GltfSource, ContentHash), AssetError> {
-        log::debug!("[{}] Downloading from {} ...", source_id.as_str(), source_url.as_str());
+        log::debug!("[{}] Downloading from {} ...", source_id, source_url);
         let data = io.download_binary(&source_url).await?;
 
-        let Gltf { document, blob } =
-            Gltf::from_slice(&data).map_err(|err| AssetError::load_failed(source_id.as_str(), err))?;
+        let Gltf { document, blob } = Gltf::from_slice(&data).map_err(|err| AssetError::load_failed(source_id, err))?;
         let buffers = import_buffer_data(source_id, &document, blob)?;
 
         let gltf = GltfSource {
@@ -38,7 +37,7 @@ impl GltfSource {
     }
 
     pub async fn cook(self) -> Result<CookedModel, CookingError> {
-        log::debug!("[{}] Compiling...", self.source_id.as_str());
+        log::debug!("[{}] Compiling...", self.source_id);
 
         let GltfSource {
             source_id,
@@ -47,7 +46,7 @@ impl GltfSource {
             ..
         } = self;
 
-        //log::trace!("[{}] Gltf document: \n{:#?}", source_id.as_str(), document);
+        //log::trace!("[{}] Gltf document: \n{:#?}", source_id, document);
 
         let mut model = CookedModel::default();
         for mesh in document.meshes() {
@@ -64,11 +63,11 @@ impl GltfSource {
                     let colors_0 = primitive.get(&Semantic::Colors(0)).map(|a| a.dimensions());
                     let colors_1 = primitive.get(&Semantic::Colors(1)).map(|a| a.dimensions());
                     let format = (positions, colors_0, colors_1);
-                    log::info!("[{}] vertex format: {:?}", source_id.as_str(), format);
+                    log::info!("[{}] vertex format: {:?}", source_id, format);
                     match &format {
                         (Vec3, Some(Vec3), None) | (Vec3, Some(Vec4), None) => create_vertex_p3c4(&buffers, &primitive),
                         _ => {
-                            log::warn!("[{}] Unsupported vertex format: {:?}", source_id.as_str(), format);
+                            log::warn!("[{}] Unsupported vertex format: {:?}", source_id, format);
                             continue;
                         }
                     }
@@ -107,20 +106,14 @@ fn load_source(source_id: &AssetId, uri: &str) -> Result<Vec<u8>, AssetError> {
         let match0 = split.next();
         let match1 = split.next();
         if let Some(data) = match1 {
-            base64::decode(&data).map_err(|err| AssetError::load_failed(source_id.as_str(), err))
+            base64::decode(&data).map_err(|err| AssetError::load_failed(source_id, err))
         } else if let Some(data) = match0 {
-            base64::decode(&data).map_err(|err| AssetError::load_failed(source_id.as_str(), err))
+            base64::decode(&data).map_err(|err| AssetError::load_failed(source_id, err))
         } else {
-            Err(AssetError::load_failed_str(
-                source_id.as_str(),
-                "Unsupported data scheme",
-            ))
+            Err(AssetError::load_failed_str(source_id, "Unsupported data scheme"))
         }
     } else {
-        Err(AssetError::load_failed_str(
-            source_id.as_str(),
-            "Unsupported external data",
-        ))
+        Err(AssetError::load_failed_str(source_id, "Unsupported external data"))
     }
 }
 
@@ -136,13 +129,10 @@ fn import_buffer_data(
             buffer::Source::Uri(uri) => load_source(source_id, uri),
             buffer::Source::Bin => blob
                 .take()
-                .ok_or_else(|| AssetError::load_failed_str(source_id.as_str(), "Gltf error: missing blob")),
+                .ok_or_else(|| AssetError::load_failed_str(source_id, "Gltf error: missing blob")),
         }?;
         if data.len() < buffer.length() {
-            return Err(AssetError::load_failed_str(
-                source_id.as_str(),
-                "Insufficient buffer length",
-            ));
+            return Err(AssetError::load_failed_str(source_id, "Insufficient buffer length"));
         }
         data.resize(((data.len() + 3) / 4) * 4, 0);
         buffers.push(buffer::Data(data));

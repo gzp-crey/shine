@@ -42,9 +42,7 @@ impl Naming {
                 let hashed_path = hash.to_path();
                 Url::parse(&format!("hash-{}://{}.{}", scheme, hashed_path, ext))
             }
-            Naming::Soft(scheme, ext) => {
-                Url::parse(&format!("{}://{}", scheme, source_id.as_str()))?.set_extension(&ext)
-            }
+            Naming::Soft(scheme, ext) => Url::parse(&format!("{}://{}", scheme, source_id))?.set_extension(&ext),
         }
     }
 }

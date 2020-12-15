@@ -104,7 +104,7 @@ async fn run(assets: Vec<AssetId>) -> Result<(), CookerError> {
     //log::info!("Root assets to cook: {:?}", root_assets);
 
     for asset_id in &assets {
-        log::info!("Cooking started for {:?}", asset_id);
+        log::info!("Cooking started for {}", asset_id);
         let _cooked_dependency = cook(&context, asset_id.clone()).await?;
         log::info!("Cooking completed for {:?}", asset_id);
     }
@@ -124,10 +124,10 @@ fn main() -> Result<(), Report> {
     let mut rt = Runtime::new()?;
 
     let assets = [
-        "games/test1/hello.fs",
-        "games/test3/checker.png",
-        "models/SimpleMeshes.gltf",
-        "models/VertexColorTest.glb",
+        //"games/test1/hello.fs",
+        //"games/test3/checker.png",
+        //"models/SimpleMeshes.gltf",
+        //"models/VertexColorTest.glb",
         "games/test1/hello.pl",
         //"games/test1/test.game",
         //"games/test2/test.game",

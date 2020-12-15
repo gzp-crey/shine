@@ -44,8 +44,7 @@ impl AssetIO {
 
     pub async fn download_string(&self, url: &Url) -> Result<String, AssetError> {
         let url = self.resolve_virtual_scheme(url)?;
-        String::from_utf8(self.inner.io.download_binary(&url).await?)
-            .map_err(|err| AssetError::load_failed(url.as_str(), err))
+        String::from_utf8(self.inner.io.download_binary(&url).await?).map_err(|err| AssetError::load_failed(url, err))
     }
 
     pub async fn upload_binary(&self, url: &Url, data: &[u8]) -> Result<(), AssetError> {

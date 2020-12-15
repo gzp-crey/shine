@@ -16,8 +16,7 @@ impl AssetLowIO {
         opts.method(method);
         opts.mode(RequestMode::Cors);
 
-        let request = Request::new_with_str_and_init(url.as_str(), &opts)
-            .map_err(|err| AssetError::source_error(url.as_str(), err))?;
+        let request = Request::new_with_str_and_init(url, &opts).map_err(|err| AssetError::source_error(url, err))?;
         Ok(request)
     }
 
@@ -25,7 +24,7 @@ impl AssetLowIO {
         let window = web_sys::window().unwrap();
         let resp = JsFuture::from(window.fetch_with_request(&request))
             .await
-            .map_err(|err| AssetError::source_error(url.as_str(), err))?
+            .map_err(|err| AssetError::source_error(url, err))?
             .dyn_into::<Response>()
             .unwrap();
 
@@ -35,7 +34,7 @@ impl AssetLowIO {
                 Err(_) => "".to_owned(),
             };
             Err(AssetError::source_error_str(
-                url.as_str(),
+                url,
                 format!("Unexpected status code ({}): {}", resp.status(), err),
             ))
         } else {
@@ -49,12 +48,12 @@ impl AssetLowIO {
                 let array_buffer = JsFuture::from(promise).await.unwrap();
                 Ok(Uint8Array::new_with_byte_offset(&array_buffer, 0).to_vec())
             }
-            Err(err) => Err(AssetError::load_failed(url.as_str(), err)),
+            Err(err) => Err(AssetError::load_failed(url, err)),
         }
     }
 
     pub async fn download_hash(&self, url: &Url) -> Result<ContentHash, AssetError> {
-        log::debug!("Downloading etag from {}", url.as_str());
+        log::debug!("Downloading etag from {}", url);
         unimplemented!()
     }
 

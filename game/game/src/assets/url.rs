@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fmt, path::PathBuf};
 pub use url::ParseError as UrlError;
 pub use url::Position;
 
@@ -67,10 +67,6 @@ impl Url {
         self.inner.as_str()
     }
 
-    pub fn to_string(&self) -> String {
-        self.as_str().to_owned()
-    }
-
     pub fn scheme(&self) -> &str {
         self.inner.scheme()
     }
@@ -123,6 +119,12 @@ impl Url {
             path,
             &self.inner[url::Position::AfterPath..]
         ))
+    }
+}
+
+impl fmt::Display for Url {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

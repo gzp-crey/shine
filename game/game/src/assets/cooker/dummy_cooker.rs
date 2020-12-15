@@ -14,7 +14,7 @@ impl<'a> ShaderCooker<'a> for DummyCooker {
         Box::pin(async move {
             Ok(naming
                 .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
-                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
+                .map_err(|err| CookingError::from_err(&source_id, err))?)
         })
     }
 }
@@ -26,7 +26,7 @@ impl<'a> PipelineCooker<'a> for DummyCooker {
         Box::pin(async move {
             Ok(naming
                 .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
-                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
+                .map_err(|err| CookingError::from_err(&source_id, err))?)
         })
     }
 }
@@ -38,7 +38,7 @@ impl<'a> TextureCooker<'a> for DummyCooker {
         Box::pin(async move {
             Ok(naming
                 .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
-                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
+                .map_err(|err| CookingError::from_err(&source_id, err))?)
         })
     }
 }
@@ -50,7 +50,7 @@ impl<'a> ModelCooker<'a> for DummyCooker {
         Box::pin(async move {
             Ok(naming
                 .to_url(&source_id, &ContentHash::from_str(source_id.as_str()))
-                .map_err(|err| CookingError::from_err(source_id.to_string(), err))?)
+                .map_err(|err| CookingError::from_err(&source_id, err))?)
         })
     }
 }

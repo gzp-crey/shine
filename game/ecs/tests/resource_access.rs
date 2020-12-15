@@ -59,8 +59,8 @@ fn simple_test_core(case: SimpleTestCase) {
     resources.register_unmanaged::<TestTwo>().unwrap();
     resources.register_unmanaged::<NotSync>().unwrap();
 
-    resources.insert(TestOne("one".to_string())).unwrap();
-    resources.insert(TestTwo("two".to_string())).unwrap();
+    resources.insert(TestOne("one".to_owned())).unwrap();
+    resources.insert(TestTwo("two".to_owned())).unwrap();
     resources.insert_with_id(id.clone(), NotSync(std::ptr::null())).unwrap();
 
     assert!(resources.get_store::<TestOne>().unwrap().contains(&gid));
@@ -150,20 +150,20 @@ fn multi_test_core(case: MultiTestCase) {
     let ida = ResourceId::from_tag("a").unwrap();
     let idb = ResourceId::from_tag("b").unwrap();
 
-    resources.insert(TestOne("one".to_string())).unwrap();
+    resources.insert(TestOne("one".to_owned())).unwrap();
     resources
-        .insert_with_id(ida.clone(), TestOne("one_a".to_string()))
+        .insert_with_id(ida.clone(), TestOne("one_a".to_owned()))
         .unwrap();
     resources
-        .insert_with_id(idb.clone(), TestOne("one_b".to_string()))
+        .insert_with_id(idb.clone(), TestOne("one_b".to_owned()))
         .unwrap();
 
-    resources.insert(TestTwo("two".to_string())).unwrap();
+    resources.insert(TestTwo("two".to_owned())).unwrap();
     resources
-        .insert_with_id(ida.clone(), TestTwo("two_a".to_string()))
+        .insert_with_id(ida.clone(), TestTwo("two_a".to_owned()))
         .unwrap();
     resources
-        .insert_with_id(idb.clone(), TestTwo("two_b".to_string()))
+        .insert_with_id(idb.clone(), TestTwo("two_b".to_owned()))
         .unwrap();
 
     assert_eq!(resources.get::<TestOne>().unwrap().0, "one");

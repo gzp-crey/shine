@@ -6,6 +6,7 @@ pub struct ContentHash {
 }
 
 impl ContentHash {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(data: &str) -> ContentHash {
         let mut context = RingContext::new(&SHA256);
         context.update(data.as_bytes());

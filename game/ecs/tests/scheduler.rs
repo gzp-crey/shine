@@ -49,7 +49,7 @@ fn resource_access() {
 
     resources.insert(1usize);
     resources.insert(2u32);
-    resources.insert("string".to_string());
+    resources.insert("string".to_owned());
     resources.insert(3u8);
     resources.insert_tagged("five", 5u8);
     resources.insert_tagged("six", 6u8);

@@ -14,28 +14,28 @@ impl<'a> ModelCooker<'a> for Context {
             async move {
                 let source_url = source_id
                     .to_url(&context.source_root)
-                    .map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
+                    .map_err(|err| CookingError::from_err(&source_id, err))?;
 
                 let ext = source_url.extension();
                 let (cooked, source_hash) = match ext {
                     "gltf" | "glb" => {
                         let (source, source_hash) = GltfSource::load(&context.source_io, &source_id, &source_url)
                             .await
-                            .map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
+                            .map_err(|err| CookingError::from_err(&source_id, err))?;
                         (source.cook().await?, source_hash)
                     }
 
                     ext => {
                         return Err(CookingError::from_err(
-                            source_id.to_string(),
-                            AssetError::UnsupportedFormat(ext.to_string()),
+                            &source_id,
+                            AssetError::UnsupportedFormat(ext.to_owned()),
                         ));
                     }
                 };
                 let cooked_content =
-                    bincode::serialize(&cooked).map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
+                    bincode::serialize(&cooked).map_err(|err| CookingError::from_err(&source_id, err))?;
 
-                log::debug!("[{}] Uploading...", source_url.as_str());
+                log::debug!("[{}] Uploading...", source_url);
                 let cooked_url = context
                     .target_io
                     .upload_binary_content(source_id, source_hash, naming, &cooked_content)

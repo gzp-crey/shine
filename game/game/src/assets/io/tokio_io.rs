@@ -21,7 +21,7 @@ impl AssetLowIO {
         if !status.is_success() {
             let err = response.text().await.unwrap_or_else(|_| "".to_owned());
             Err(AssetError::source_error_str(
-                url.as_str(),
+                url,
                 format!("Unexpected status code ({}): {}", status, err),
             ))
         } else {
@@ -30,16 +30,16 @@ impl AssetLowIO {
     }
 
     pub async fn download_hash(&self, url: &Url) -> Result<ContentHash, AssetError> {
-        log::debug!("Downloading etag from {}", url.as_str());
+        log::debug!("Downloading etag from {}", url);
         match url.scheme() {
             "file" => {
                 let mut data = Vec::new();
                 let _ = fs::File::open(&url.to_file_path())
                     .await
-                    .map_err(|err| AssetError::source_error(url.as_str(), err))?
+                    .map_err(|err| AssetError::source_error(url, err))?
                     .read_to_end(&mut data)
                     .await
-                    .map_err(|err| AssetError::load_failed(url.as_str(), err))?;
+                    .map_err(|err| AssetError::load_failed(url, err))?;
                 Ok(ContentHash::from_bytes(&data))
             }
             "http" | "https" => unimplemented!(),
@@ -49,16 +49,16 @@ impl AssetLowIO {
     }
 
     pub async fn download_binary(&self, url: &Url) -> Result<Vec<u8>, AssetError> {
-        log::debug!("Downloading data from {}", url.as_str());
+        log::debug!("Downloading data from {}", url);
         match url.scheme() {
             "file" => {
                 let mut data = Vec::new();
                 let _ = fs::File::open(&url.to_file_path())
                     .await
-                    .map_err(|err| AssetError::source_error(url.as_str(), err))?
+                    .map_err(|err| AssetError::source_error(url, err))?
                     .read_to_end(&mut data)
                     .await
-                    .map_err(|err| AssetError::load_failed(url.as_str(), err))?;
+                    .map_err(|err| AssetError::load_failed(url, err))?;
                 Ok(data)
             }
             "http" | "https" => {
@@ -67,12 +67,12 @@ impl AssetLowIO {
                     .get(url.as_str())
                     .send()
                     .await
-                    .map_err(|err| AssetError::source_error(url.as_str(), err))?;
+                    .map_err(|err| AssetError::source_error(url, err))?;
                 Self::check_response(url, response)
                     .await?
                     .bytes()
                     .await
-                    .map_err(|err| AssetError::load_failed(url.as_str(), err))
+                    .map_err(|err| AssetError::load_failed(url, err))
                     .map(|d| d.to_vec())
             }
             "blobs" => {
@@ -82,12 +82,12 @@ impl AssetLowIO {
                     .get(translated_url.as_str())
                     .send()
                     .await
-                    .map_err(|err| AssetError::source_error(url.as_str(), err))?;
+                    .map_err(|err| AssetError::source_error(url, err))?;
                 Self::check_response(url, response)
                     .await?
                     .bytes()
                     .await
-                    .map_err(|err| AssetError::load_failed(url.as_str(), err))
+                    .map_err(|err| AssetError::load_failed(url, err))
                     .map(|d| d.to_vec())
             }
             sch => Err(AssetError::UnsupportedScheme(sch.to_owned())),
@@ -95,15 +95,15 @@ impl AssetLowIO {
     }
 
     pub async fn upload_binary(&self, url: &Url, data: &[u8]) -> Result<(), AssetError> {
-        log::debug!("Uploading data to {}", url.as_str());
+        log::debug!("Uploading data to {}", url);
         match url.scheme() {
             "file" => {
                 fs::create_dir_all(url.to_file_folder())
                     .await
-                    .map_err(|err| AssetError::save_failed(url.as_str(), err))?;
+                    .map_err(|err| AssetError::save_failed(url, err))?;
                 fs::write(&url.to_file_path(), data)
                     .await
-                    .map_err(|err| AssetError::save_failed(url.as_str(), err))?;
+                    .map_err(|err| AssetError::save_failed(url, err))?;
                 Ok(())
             }
             "http" | "https" => {
@@ -113,7 +113,7 @@ impl AssetLowIO {
                     .body(data.to_vec())
                     .send()
                     .await
-                    .map_err(|err| AssetError::source_error(url.as_str(), err))?;
+                    .map_err(|err| AssetError::source_error(url, err))?;
                 let _ = Self::check_response(url, response).await?;
                 Ok(())
             }
@@ -126,7 +126,7 @@ impl AssetLowIO {
                     .body(data.to_vec())
                     .send()
                     .await
-                    .map_err(|err| AssetError::source_error(url.as_str(), err))?;
+                    .map_err(|err| AssetError::source_error(url, err))?;
                 let _ = Self::check_response(url, response).await?;
                 Ok(())
             }

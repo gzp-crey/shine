@@ -21,25 +21,25 @@ pub async fn cook_frame_graph(
 ) -> Result<Dependency, CookingError> {
     let frame_graph_url = frame_graph_id.to_url(asset_base)?;
 
-    log::info!("[{}] Cooking...", frame_graph_url.as_str());
+    log::info!("[{}] Cooking...", frame_graph_url);
     let source_hash = find_frame_graph_etag(context, &frame_graph_url).await?;
 
-    log::debug!("[{}] Downloading...", frame_graph_url.as_str());
+    log::debug!("[{}] Downloading...", frame_graph_url);
     let data = context.source_io.download_binary(&frame_graph_url).await?;
     let frame_graph = serde_json::from_slice::<FrameGraphDescriptor>(&data)?;
-    log::trace!("[{}] Frame graph:\n{:#?}", frame_graph_url.as_str(), frame_graph);
+    log::trace!("[{}] Frame graph:\n{:#?}", frame_graph_url, frame_graph);
 
     let dependnecies = Vec::new();
     let frame_graph_base = frame_graph_url.to_folder()?;
 
-    log::debug!("[{}] Cooking frame graph content...", frame_graph_url.as_str());
+    log::debug!("[{}] Cooking frame graph content...", frame_graph_url);
     /*for ref mut pass in frame_graph.passes.values_mut() {
         match pass.method {
             FramePassMethod::FullScreenQuad(ref mut pipeline) => {
-                log::debug!("[{}] Cooking FullScreenQuad pipeline...", frame_graph_url.as_str());
+                log::debug!("[{}] Cooking FullScreenQuad pipeline...", frame_graph_url);
                 let pipeline_id = AssetId::new(&pipeline)?.to_absolute_id(asset_base, &frame_graph_base)?;
                 let pipeline_dependency = cook_pipeline::cook_pipeline(context, asset_base, &pipeline_id).await?;
-                *pipeline = pipeline_dependency.url().as_str().to_owned();
+                *pipeline = pipeline_dependency.url().to_owned();
                 dependnecies.push(pipeline_dependency);
             }
             FramePassMethod::Scene(_) => {}

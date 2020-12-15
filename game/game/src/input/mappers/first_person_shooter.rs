@@ -128,6 +128,7 @@ impl InputMapper for FirstPersonShooter {
         guestures.add_guesture(guestures::ButtonAxis::new(self.pitch_pos, self.pitch_neg, self.pitch));
     }
 
+    #[allow(clippy::single_match)]
     fn update_state<'e>(&self, event: InputEvent<'e>, input_state: &mut InputState) {
         match event {
             #[cfg(feature = "native")]

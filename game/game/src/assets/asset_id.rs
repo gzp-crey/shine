@@ -1,4 +1,5 @@
 use crate::assets::{Url, UrlError};
+use std::fmt;
 
 /// Id of an asset used to identify asset in the container
 #[derive(Debug, Clone)]
@@ -33,10 +34,6 @@ impl AssetId {
 
     pub fn as_str(&self) -> &str {
         &self.inner
-    }
-
-    pub fn to_string(&self) -> String {
-        self.inner.clone()
     }
 
     pub fn into_string(self) -> String {
@@ -75,5 +72,11 @@ impl AssetId {
 
     pub fn to_url(&self, base: &Url) -> Result<Url, UrlError> {
         base.join(&self.inner)
+    }
+}
+
+impl fmt::Display for AssetId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }

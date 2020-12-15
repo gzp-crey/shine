@@ -329,7 +329,7 @@ impl AssetIO {
         let data = self.download_binary(&url).await?;
         load_token.ok()?;
         let descriptor = bincode::deserialize::<PipelineDescriptor>(&data)
-            .map_err(|err| AssetError::load_failed(url.as_str(), err))?;
+            .map_err(|err| AssetError::load_failed(&url, err))?;
         log::trace!("pipeline: {:#?}", descriptor);
 
         Ok(PipelineLoadResponseInner::PipelineDescriptor(Box::new(descriptor)))

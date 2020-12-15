@@ -21,11 +21,11 @@ struct TestData {
 impl TestData {
     fn build(context: &ResourceLoadRequester<Self, String>, handle: ResourceHandle<Self>, id: &ResourceId) -> TestData {
         log::trace!("Creating [{:?}]", id);
-        context.send_request(handle, "build".to_string());
+        context.send_request(handle, "build".to_owned());
         TestData {
             id: id.clone(),
             response_count: 0,
-            text: "!".to_string(),
+            text: "!".to_owned(),
         }
     }
 

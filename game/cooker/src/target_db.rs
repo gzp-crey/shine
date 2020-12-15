@@ -49,7 +49,7 @@ impl TargetDB {
     ) -> Result<Url, CookingError> {
         if naming.is_hard() && self.scopes.is_empty() {
             return Err(CookingError::from_str(
-                source_id.to_string(),
+                &source_id,
                 format!("Hard naming without an asset scope"),
             ));
         }
@@ -57,11 +57,11 @@ impl TargetDB {
         let cooked_hash = ContentHash::from_bytes(cooked_content);
         let target_url = naming
             .to_url(&source_id, &cooked_hash)
-            .map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
+            .map_err(|err| CookingError::from_err(&source_id, err))?;
         self.asset_io
             .upload_binary(&target_url, &cooked_content)
             .await
-            .map_err(|err| CookingError::from_err(source_id.to_string(), err))?;
+            .map_err(|err| CookingError::from_err(&source_id, err))?;
 
         // update dependency of owner_id
         Ok(target_url)
