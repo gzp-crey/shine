@@ -144,8 +144,8 @@ fn multi_test_core(case: MultiTestCase) {
 
     let mut resources = Resources::default();
 
-    resources.register(TestOneExtension(11));
-    resources.register(UnmanagedResource::<TestTwo>::default());
+    resources.register(TestOneExtension(11)).unwrap();
+    resources.register(UnmanagedResource::<TestTwo>::default()).unwrap();
 
     let ida = ResourceId::from_tag("a").unwrap();
     let idb = ResourceId::from_tag("b").unwrap();

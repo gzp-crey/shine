@@ -1,49 +1,49 @@
 use crate::{
-    app::AppError,
+    app::{AppError, Plugin, PluginFuture},
     assets::{AssetIO, Url},
     World,
 };
 use serde::{Deserialize, Serialize};
-use shine_ecs::resources::Resource;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap, error::Error as StdError};
+
+pub const ASSET_PLUGIN_NAME: &str = "asset";
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct AssetConfig {
     pub virtual_schemes: HashMap<String, Url>,
 }
 
-impl World {
-    /// Name of the asset plugin
-    pub fn asset_plugin_name() -> &'static str {
-        "asset"
+pub struct AssetPlugin {
+    config: AssetConfig,
+}
+
+impl AssetPlugin {
+    pub fn new(config: AssetConfig) -> AssetPlugin {
+        AssetPlugin { config }
+    }
+}
+
+fn into_plugin_err<E: 'static + StdError>(error: E) -> AppError {
+    AppError::game(ASSET_PLUGIN_NAME, error)
+}
+
+impl Plugin for AssetPlugin {
+    fn name() -> Cow<'static, str> {
+        ASSET_PLUGIN_NAME.into()
     }
 
-    /// Request the registered asset io outside of a scheduler.
-    pub fn asset_io(&self) -> Result<AssetIO, AppError> {
-        let res = self
-            .resources
-            .get::<AssetIO>()
-            .map_err(|err| AppError::plugin_dependency(Self::asset_plugin_name(), err))?;
-        Ok(res.clone())
+    fn init(self, world: &mut World) -> PluginFuture<()> {
+        Box::pin(async move {
+            let asset_io = AssetIO::new(self.config.virtual_schemes).map_err(into_plugin_err)?;
+            world.resources.quick_insert(asset_io).map_err(into_plugin_err)?;
+            Ok(())
+        })
     }
 
-    fn add_asset_resource<T: Resource>(&mut self, resource: T) -> Result<(), AppError> {
-        let _ = self
-            .resources
-            .quick_insert(resource)
-            .map_err(|err| AppError::plugin(Self::asset_plugin_name(), err))?;
-        Ok(())
-    }
-
-    pub async fn add_asset_plugin(&mut self, config: AssetConfig) -> Result<&mut Self, AppError> {
-        log::info!("Adding asset plugin");
-        let asset_io = AssetIO::new(config.virtual_schemes)?;
-        self.add_asset_resource(asset_io)?;
-        Ok(self)
-    }
-
-    pub async fn remove_asset_plugin(&mut self) -> Result<&mut Self, AppError> {
-        self.resources.remove::<AssetIO>();
-        Ok(self)
+    fn deinit(world: &mut World) -> PluginFuture<()> {
+        Box::pin(async move {
+            world.resources.remove::<AssetIO>();
+            Ok(())
+        })
     }
 }

@@ -12,6 +12,7 @@ pub trait GameSource {
 
 /// Manage the lifecyle of a game by tearing up/down the world.
 pub trait GameLifecycle: 'static + Send + Sync {
+    fn name(&self) -> String;
     fn create<'a>(&'a mut self, world: &'a mut World) -> GameFuture<'a, Result<(), AppError>>;
     fn destroy<'a>(&'a mut self, world: &'a mut World) -> GameFuture<'a, Result<(), AppError>>;
 }

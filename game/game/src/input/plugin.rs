@@ -1,11 +1,16 @@
 use crate::{
-    app::AppError,
+    app::{AppError, Plugin, PluginFuture},
     input::{mappers, InputEvent, InputMapper},
     World,
 };
-use shine_ecs::resources::{Resource, ResourceRead, ResourceWrite};
 use shine_input::{GuestureManager, InputManager, InputState};
-use std::ops::{Deref, DerefMut};
+use std::{
+    borrow::Cow,
+    error::Error as StdError,
+    ops::{Deref, DerefMut},
+};
+
+pub const INPUT_PLUGIN_NAME: &str = "input";
 
 /// The input state for the current frame.
 #[derive(Default)]
@@ -55,53 +60,55 @@ impl InputHandler {
     }
 }
 
-impl World {
-    pub fn input_plugin_name() -> &'static str {
-        "input"
+pub struct InputPlugin;
+
+fn into_plugin_err<E: 'static + StdError>(error: E) -> AppError {
+    AppError::game(INPUT_PLUGIN_NAME, error)
+}
+
+impl Plugin for InputPlugin {
+    fn name() -> Cow<'static, str> {
+        INPUT_PLUGIN_NAME.into()
     }
 
-    fn add_input_resource<T: Resource>(&mut self, resource: T) -> Result<(), AppError> {
-        let _ = self
-            .resources
-            .quick_insert(resource)
-            .map_err(|err| AppError::plugin(Self::input_plugin_name(), err))?;
-        Ok(())
+    fn init(self, world: &mut World) -> PluginFuture<()> {
+        Box::pin(async move {
+            world
+                .resources
+                .quick_insert(InputHandler::default())
+                .map_err(into_plugin_err)?;
+            world
+                .resources
+                .quick_insert(CurrentInputState::default())
+                .map_err(into_plugin_err)?;
+            world
+                .resources
+                .quick_insert(WrapInputMapper::wrap(mappers::Unmapped))
+                .map_err(into_plugin_err)?;
+            Ok(())
+        })
     }
 
-    fn get_input_resource<T: Resource>(&self) -> Result<ResourceRead<'_, T>, AppError> {
-        Ok(self
-            .resources
-            .get::<T>()
-            .map_err(|err| AppError::plugin_dependency(Self::input_plugin_name(), err))?)
+    fn deinit(world: &mut World) -> PluginFuture<()> {
+        Box::pin(async move {
+            let _ = world.resources.remove::<InputHandler>();
+            let _ = world.resources.remove::<CurrentInputState>();
+            let _ = world.resources.remove::<WrapInputMapper>();
+            Ok(())
+        })
     }
+}
 
-    fn get_mut_input_resource<T: Resource>(&self) -> Result<ResourceWrite<'_, T>, AppError> {
-        Ok(self
-            .resources
-            .get_mut::<T>()
-            .map_err(|err| AppError::plugin_dependency(Self::input_plugin_name(), err))?)
-    }
+pub trait InputWorld {
+    fn set_input_mapper<I: InputMapper>(&mut self, input_mapper: I) -> Result<(), AppError>;
+    fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), AppError>;
+}
 
-    pub async fn add_input_plugin(&mut self) -> Result<(), AppError> {
-        log::info!("Adding input plugin");
-        self.add_input_resource(InputHandler::default())?;
-        self.add_input_resource(CurrentInputState::default())?;
-        self.add_input_resource(WrapInputMapper::wrap(mappers::Unmapped))?;
-        Ok(())
-    }
-
-    pub async fn remove_input_plugin(&mut self) -> Result<(), AppError> {
-        log::info!("Removing input plugin");
-        let _ = self.resources.remove::<InputHandler>();
-        let _ = self.resources.remove::<CurrentInputState>();
-        let _ = self.resources.remove::<WrapInputMapper>();
-        Ok(())
-    }
-
-    pub fn set_input_mapper<I: InputMapper>(&mut self, input_mapper: I) -> Result<(), AppError> {
-        let mut mapper = self.get_mut_input_resource::<WrapInputMapper>()?;
-        let mut handler = self.get_mut_input_resource::<InputHandler>()?;
-        let mut state = self.get_mut_input_resource::<CurrentInputState>()?;
+impl InputWorld for World {
+    fn set_input_mapper<I: InputMapper>(&mut self, input_mapper: I) -> Result<(), AppError> {
+        let mut mapper = self.resources.get_mut::<WrapInputMapper>().map_err(into_plugin_err)?;
+        let mut handler = self.resources.get_mut::<InputHandler>().map_err(into_plugin_err)?;
+        let mut state = self.resources.get_mut::<CurrentInputState>().map_err(into_plugin_err)?;
 
         *handler = InputHandler::default();
         *state = CurrentInputState::default();
@@ -110,9 +117,9 @@ impl World {
         Ok(())
     }
 
-    pub fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), AppError> {
-        let mapper = self.get_input_resource::<WrapInputMapper>()?;
-        let mut handler = self.get_mut_input_resource::<InputHandler>()?;
+    fn inject_input<'e, E: Into<InputEvent<'e>>>(&mut self, event: E) -> Result<(), AppError> {
+        let mapper = self.resources.get::<WrapInputMapper>().map_err(into_plugin_err)?;
+        let mut handler = self.resources.get_mut::<InputHandler>().map_err(into_plugin_err)?;
 
         handler.inject_input(&mapper, event.into());
         Ok(())

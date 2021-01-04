@@ -1,4 +1,6 @@
-use shine_ecs::resources::{ResourceHandle, ResourceId, ResourceLoadRequester, ResourceLoader, Resources};
+use shine_ecs::resources::{
+    ResourceHandle, ResourceId, ResourceLoadRequester, ResourceLoadResponder, ResourceLoader, Resources,
+};
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -29,11 +31,16 @@ impl TestData {
         }
     }
 
-    async fn on_load(cnt: &Arc<AtomicUsize>, handle: ResourceHandle<Self>, request: String) -> Option<String> {
+    async fn on_load(
+        responder: ResourceLoadResponder<Self, String>,
+        cnt: &Arc<AtomicUsize>,
+        handle: ResourceHandle<Self>,
+        request: String,
+    ) {
         log::trace!("on_load [{:?}]: {:?}", handle, request);
         cnt.fetch_add(1, Ordering::Relaxed);
         thread::sleep(Duration::from_micros(50)); // emulate an active wait
-        Some(format!("l({})", request))
+        responder.send_response(handle, format!("l({})", request));
     }
 
     fn on_load_response(
@@ -55,12 +62,14 @@ async fn simple() {
 
     let mut resources = Resources::default();
     let load_count = Arc::new(AtomicUsize::new(0));
-    resources.register(ResourceLoader::new(
-        TestData::build,
-        load_count.clone(),
-        TestData::on_load,
-        TestData::on_load_response,
-    ));
+    resources
+        .register(ResourceLoader::new(
+            TestData::build,
+            load_count.clone(),
+            TestData::on_load,
+            TestData::on_load_response,
+        ))
+        .unwrap();
 
     {
         log::debug!("Create a resource");

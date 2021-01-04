@@ -1,5 +1,5 @@
 use shine_ecs::{
-    resources::{ResourceId, Resources},
+    resources::Resources,
     scheduler::{prelude::*, Res, ResMut, Schedule, TagRes, TagResMut},
 };
 
@@ -47,14 +47,14 @@ fn resource_access() {
     resources.register_unmanaged::<u8>().unwrap();
     resources.register_unmanaged::<String>().unwrap();
 
-    resources.insert(1usize);
-    resources.insert(2u32);
-    resources.insert("string".to_owned());
-    resources.insert(3u8);
-    resources.insert_tagged("five", 5u8);
-    resources.insert_tagged("six", 6u8);
-    resources.insert(4u16);
-    resources.insert_tagged("16", 16u16);
+    resources.insert(1usize).unwrap();
+    resources.insert(2u32).unwrap();
+    resources.insert("string".to_owned()).unwrap();
+    resources.insert(3u8).unwrap();
+    resources.insert_tagged("five", 5u8).unwrap();
+    resources.insert_tagged("six", 6u8).unwrap();
+    resources.insert(4u16).unwrap();
+    resources.insert_tagged("16", 16u16).unwrap();
 
     log::info!("registering systems...");
     let mut sh = Schedule::default();

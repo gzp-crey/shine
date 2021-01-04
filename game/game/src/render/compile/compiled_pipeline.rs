@@ -1,11 +1,8 @@
 use crate::{
-    assets::{
-        AssetError, PipelineDescriptor, PipelineUniform, PipelineUniformLayout, Uniform, UniformScope,
-        VertexBufferLayout, VertexStage,
-    },
+    assets::{AssetError, PipelineDescriptor, PipelineStateDescriptor, VertexBufferLayout, VertexStage},
     render::Compile,
 };
-
+/*
 struct PipelineBindGroupLayout {
     layout: wgpu::BindGroupLayout,
     uniforms: Vec<PipelineUniform>,
@@ -16,25 +13,15 @@ pub struct PipelineBindGroup {
     pub global: wgpu::BindGroup,
     pub local: wgpu::BindGroup,
 }
-
+*/
 /// Compiled pipeline with related binding information
 pub struct CompiledPipeline {
+    pub vertex_layouts: Vec<VertexBufferLayout>,
     pub pipeline: wgpu::RenderPipeline,
-    auto_bind_group_layout: PipelineBindGroupLayout,
-    global_bind_group_layout: PipelineBindGroupLayout,
-    local_bind_group_layout: PipelineBindGroupLayout,
 }
 
 impl CompiledPipeline {
-    fn get_bind_group(&self, scope: UniformScope) -> &PipelineBindGroupLayout {
-        match scope {
-            UniformScope::Auto => &self.auto_bind_group_layout,
-            UniformScope::Global => &self.global_bind_group_layout,
-            UniformScope::Local => &self.local_bind_group_layout,
-        }
-    }
-
-    fn get_uniform_buffer_size(&self, scope: UniformScope) -> usize {
+    /*    fn get_uniform_buffer_size(&self, scope: UniformScope) -> usize {
         let bind_group = self.get_bind_group(scope);
         bind_group.uniforms.iter().fold(0, |size, u| {
             if let Uniform::UniformBuffer(b) = u.uniform() {
@@ -110,7 +97,7 @@ impl CompiledPipeline {
             global: self.create_bind_group(device, UniformScope::Global, get_global),
             local: self.create_bind_group(device, UniformScope::Local, get_local),
         }
-    }
+    }*/
 }
 
 impl PipelineDescriptor {
@@ -144,7 +131,7 @@ impl PipelineDescriptor {
         Ok(descriptors)
     }
 
-    fn create_bind_group_layout_entries(
+    /*fn create_bind_group_layout_entries(
         layout: &PipelineUniformLayout,
     ) -> Result<Vec<wgpu::BindGroupLayoutEntry>, AssetError> {
         let mut descriptor = Vec::new();
@@ -171,7 +158,7 @@ impl PipelineDescriptor {
                     visibility: *stages,
                     ty: wgpu::BindingType::UniformBuffer {
                         dynamic: false,
-                        min_binding_size: wgpu::BufferSize::new(sem.size() as u64),
+                        min_binding_size: Some(wgpu::BufferSize::new(sem.size() as u64)),
                     },
                     count: None,
                 },
@@ -198,26 +185,25 @@ impl PipelineDescriptor {
         });
 
         Ok(PipelineBindGroupLayout { layout, uniforms })
-    }
+    }*/
 }
 
 pub struct PipelineCompile<'a> {
+    pub vertex_layouts: Vec<VertexBufferLayout>,
+    pub render_states: PipelineStateDescriptor,
     pub descriptor: &'a PipelineDescriptor,
-    pub color_state_format: wgpu::TextureFormat,
-    pub vertex_layouts: &'a [VertexBufferLayout],
-
     pub vertex_shader: &'a wgpu::ShaderModule,
     pub fragment_shader: &'a wgpu::ShaderModule,
 }
 
 impl<'a> Compile for PipelineCompile<'a> {
-    type Compiled = Result<CompiledPipeline, AssetError>;
+    type Output = Result<CompiledPipeline, AssetError>;
 
-    fn compile(self, device: &wgpu::Device) -> Self::Compiled {
+    fn compile(self, device: &wgpu::Device) -> Self::Output {
         let PipelineCompile {
-            descriptor,
-            color_state_format,
             vertex_layouts,
+            render_states,
+            descriptor,
             vertex_shader,
             fragment_shader,
         } = self;
@@ -238,16 +224,17 @@ impl<'a> Compile for PipelineCompile<'a> {
         };
         log::trace!("Vertex state: {:#?}", vertex_state);
 
-        let auto_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Auto)?;
+        let uniform_layout = descriptor.get_uniform_layout()?;
+        /*let auto_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Auto)?;
         let global_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Global)?;
-        let local_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Local)?;
+        let local_bind_group_layout = descriptor.create_bind_group_layout(device, UniformScope::Local)?;*/
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[
-                &auto_bind_group_layout.layout,
+                /*&auto_bind_group_layout.layout,
                 &global_bind_group_layout.layout,
-                &local_bind_group_layout.layout,
+                &local_bind_group_layout.layout,*/
             ],
             push_constant_ranges: &[],
         });
@@ -256,40 +243,26 @@ impl<'a> Compile for PipelineCompile<'a> {
             label: None,
             layout: Some(&pipeline_layout),
             primitive_topology: descriptor.primitive_topology,
-
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: vertex_shader,
                 entry_point: "main",
             },
-
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: fragment_shader,
                 entry_point: "main",
             }),
-
             rasterization_state: None,
-
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: color_state_format,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-
-            depth_stencil_state: None,
-
+            color_states: &render_states.color_states,
+            depth_stencil_state: render_states.depth_state,
             vertex_state,
-
             sample_count: 1,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
         });
 
         Ok(CompiledPipeline {
+            vertex_layouts,
             pipeline,
-            auto_bind_group_layout,
-            global_bind_group_layout,
-            local_bind_group_layout,
         })
     }
 }

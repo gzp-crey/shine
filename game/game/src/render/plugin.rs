@@ -1,10 +1,13 @@
 use crate::{
-    app::AppError,
+    app::{AppError, Plugin, PluginFuture},
+    assets::AssetIO,
     render::{Context, FrameTarget, RenderError, Shader, Surface},
     World,
 };
 use serde::{Deserialize, Serialize};
-use shine_ecs::resources::{Resource, ResourceWrite};
+use std::{borrow::Cow, error::Error as StdError};
+
+pub const RENDER_PLUGIN_NAME: &str = "render";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderConfig {
@@ -13,40 +16,72 @@ pub struct RenderConfig {
     pub wgpu_trace: Option<String>,
 }
 
+pub struct RenderPlugin {
+    config: RenderConfig,
+    wgpu_instance: wgpu::Instance,
+    surface: Surface,
+}
+
+impl RenderPlugin {
+    pub fn new(config: RenderConfig, wgpu_instance: wgpu::Instance, surface: Surface) -> RenderPlugin {
+        RenderPlugin {
+            config,
+            wgpu_instance,
+            surface,
+        }
+    }
+}
+
+fn into_plugin_err<E: 'static + StdError>(error: E) -> AppError {
+    AppError::plugin(RENDER_PLUGIN_NAME, error)
+}
+
+impl Plugin for RenderPlugin {
+    fn name() -> Cow<'static, str> {
+        RENDER_PLUGIN_NAME.into()
+    }
+
+    fn init(self, world: &mut World) -> PluginFuture<()> {
+        Box::pin(async move {
+            let assetio = world.resources.get::<AssetIO>().map_err(into_plugin_err)?.clone();
+
+            let context = Context::new(self.wgpu_instance, &self.surface, &self.config)
+                .await
+                .map_err(|err| RenderError::device_error("Failed to create context", err))
+                .map_err(into_plugin_err)?;
+            let device = context.device();
+            let frame_target = FrameTarget::default();
+
+            world.resources.quick_insert(self.surface).map_err(into_plugin_err)?;
+            world.resources.quick_insert(context).map_err(into_plugin_err)?;
+            world.resources.quick_insert(frame_target).map_err(into_plugin_err)?;
+
+            Shader::register_resource(&mut world.resources, assetio, device).map_err(into_plugin_err)?;
+
+            Ok(())
+        })
+    }
+
+    fn deinit(world: &mut World) -> PluginFuture<()> {
+        Box::pin(async move {
+            let _ = world.resources.remove::<FrameTarget>();
+            let _ = world.resources.remove::<Context>();
+            let _ = world.resources.remove::<Surface>();
+
+            Shader::unregister_resource(&mut world.resources);
+            Ok(())
+        })
+    }
+}
+
 impl World {
-    pub fn render_plugin_name() -> &'static str {
-        "render"
-    }
-
-    fn add_render_resource<T: Resource>(&mut self, resource: T) -> Result<(), AppError> {
-        let _ = self
-            .resources
-            .quick_insert(resource)
-            .map_err(|err| AppError::plugin(Self::render_plugin_name(), err))?;
-        Ok(())
-    }
-
-    /*fn get_render_resource<T: Resource>(&self) -> Result<ResourceRead<'_, T>, AppError> {
-        Ok(self
-            .resources
-            .get::<T>()
-            .map_err(|err| AppError::plugin_dependency(Self::render_plugin_name(), err))?)
-    }*/
-
-    fn get_mut_render_resource<T: Resource>(&self) -> Result<ResourceWrite<'_, T>, AppError> {
-        Ok(self
-            .resources
-            .get_mut::<T>()
-            .map_err(|err| AppError::plugin_dependency(Self::render_plugin_name(), err))?)
-    }
-
     fn start_frame(&mut self, size: (u32, u32)) -> Result<(), AppError> {
-        let mut surface = self.get_mut_render_resource::<Surface>()?;
-        let mut context = self.get_mut_render_resource::<Context>()?;
-        let mut frame_output = self.get_mut_render_resource::<FrameTarget>()?;
+        let mut surface = self.resources.get_mut::<Surface>().map_err(into_plugin_err)?;
+        let mut context = self.resources.get_mut::<Context>().map_err(into_plugin_err)?;
+        let mut frame_output = self.resources.get_mut::<FrameTarget>().map_err(into_plugin_err)?;
 
         surface.set_size(size);
-        let (output_texture, descriptor) = context.create_frame(&surface)?;
+        let (output_texture, descriptor) = context.create_frame(&surface).map_err(into_plugin_err)?;
         frame_output.set(output_texture, descriptor);
         Ok(())
     }
@@ -56,49 +91,21 @@ impl World {
     }
 
     fn end_frame(&mut self) -> Result<(), AppError> {
-        let mut context = self.get_mut_render_resource::<Context>()?;
-        let mut frame_output = self.get_mut_render_resource::<FrameTarget>()?;
+        let mut context = self.resources.get_mut::<Context>().map_err(into_plugin_err)?;
+        let mut frame_output = self.resources.get_mut::<FrameTarget>().map_err(into_plugin_err)?;
+
         context.submit_commands();
         frame_output.present();
         Ok(())
     }
+}
 
-    pub async fn add_render_plugin(
-        &mut self,
-        config: RenderConfig,
-        wgpu_instance: wgpu::Instance,
-        surface: Surface,
-    ) -> Result<&mut Self, AppError> {
-        log::info!("Adding render plugin");
+pub trait RenderWorld {
+    fn render(&mut self, size: (u32, u32)) -> Result<(), AppError>;
+}
 
-        let context = Context::new(wgpu_instance, &surface, &config)
-            .await
-            .map_err(|err| RenderError::device_error("Failed to create context", err))?;
-
-        let assetio = self.asset_io()?;
-        let device = context.device();
-
-        self.add_render_resource(surface)?;
-        self.add_render_resource(context)?;
-        self.add_render_resource(FrameTarget::default())?;
-
-        Shader::register_resource(&mut self.resources, assetio, device)
-            .map_err(|err| AppError::plugin(Self::render_plugin_name(), err))?;
-
-        Ok(self)
-    }
-
-    pub async fn remove_render_plugin(&mut self) -> Result<&mut Self, AppError> {
-        //let _ = self.resources.remove::<RenderStores>();
-        let _ = self.resources.remove::<FrameTarget>();
-        let _ = self.resources.remove::<Context>();
-        let _ = self.resources.remove::<Surface>();
-
-        Shader::unregister_resource(&mut self.resources);
-        Ok(self)
-    }
-
-    pub fn render(&mut self, size: (u32, u32)) -> Result<(), AppError> {
+impl RenderWorld for World {
+    fn render(&mut self, size: (u32, u32)) -> Result<(), AppError> {
         self.start_frame(size)?;
         self.bake_resources(false);
         let res = self.run_stage("render");

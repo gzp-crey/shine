@@ -1,4 +1,3 @@
-#![cfg(feature = "cook")]
 use crate::assets::{
     cooker::CookingError, vertex, AssetError, AssetIO, AssetId, ContentHash, CookedModel, IndexData, MeshData, Url,
     VertexData,

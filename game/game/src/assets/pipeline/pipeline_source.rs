@@ -1,8 +1,9 @@
-#[cfg(feature = "cook")]
 use crate::assets::{
     cooker::{CookingError, Naming, ShaderCooker},
     AssetError, AssetIO, AssetId, ContentHash, CookedPipeline, PipelineDescriptor, Url,
 };
+
+pub const MAX_UNIFORM_GROUP_COUNT: usize = 4;
 
 pub struct PipelineSource {
     pub source_id: AssetId,
@@ -43,22 +44,20 @@ impl PipelineSource {
 
         log::trace!("[{}] Pipeline descriptor: ({:#?})", source_id, descriptor);
 
-        // perform some consistency check
-        /*for scope in [
-            PipelineUniformScope::Auto,
-            PipelineUniformScope::Global,
-            PipelineUniformScope::Local,
-        ]
-        .iter()
-        {
-            let layout = descriptor.get_uniform_layout(*scope)?;
-            log::trace!(
-                "[{}] Uniform group({:?}) layout:\n{:#?}",
-                source_url,
-                scope,
-                layout
-            );
-        }*/
+        let uniform_layout = descriptor
+            .get_uniform_layout()
+            .map_err(|err| CookingError::from_err(&source_id, err))?;
+        log::trace!("[{}] Uniform layout:\n{:#?}", source_id, uniform_layout);
+        if uniform_layout.len() > MAX_UNIFORM_GROUP_COUNT {
+            return Err(CookingError::from_str(
+                source_id,
+                format!(
+                    "Uniform group count exceeds limit ({}), {}",
+                    MAX_UNIFORM_GROUP_COUNT,
+                    uniform_layout.len()
+                ),
+            ));
+        }
 
         // cook dependencies
         {

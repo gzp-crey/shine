@@ -1,10 +1,10 @@
-#![feature(async_closure)]
-
 use shine_game::{
     app::{App, AppError, Config},
-    assets::Url,
-    render::Surface,
-    wgpu, World,
+    assets::{AssetPlugin, Url},
+    game::test1,
+    input::{InputPlugin, InputWorld},
+    render::{RenderPlugin, RenderWorld, Surface},
+    wgpu,
 };
 use std::time::{Duration, Instant};
 use tokio::runtime::{Handle as RuntimeHandle, Runtime};
@@ -50,29 +50,24 @@ async fn run() {
 
         let surface = Surface::new(surface, size);
         let config = Config::new().unwrap();
-        let test1_url = Url::parse("game://games/test1/test.game").unwrap();
-        let test2_url = Url::parse("game://games/test2/test.game").unwrap();
-        let test3_url = Url::parse("game://games/test3/test.game").unwrap();
-        let test4_url = Url::parse("game://games/test4/test.game").unwrap();
-        let test5_url = Url::parse("game://games/test5/test.game").unwrap();
-        let mut app = rt
-            .block_on(async move {
-                let mut app = App::default();
-                app.world
-                    .add_asset_plugin(config.asset.clone())
-                    .await?
-                    .add_render_plugin(config.render.clone(), wgpu_instance, surface)
-                    .await?;
-                app.world.add_input_plugin().await?;
-                Ok::<_, AppError>(app)
-            })
-            .unwrap();
+        let mut app = App::default();
 
+        log::debug!("Init plugins");
+        rt.block_on(async {
+            app.add_plugin(AssetPlugin::new(config.asset.clone()))
+                .await?
+                .add_plugin(RenderPlugin::new(config.render.clone(), wgpu_instance, surface))
+                .await?
+                .add_plugin(InputPlugin)
+                .await
+        })
+        .unwrap();
+
+        log::debug!("Starting logic thread");
         let event_proxy = event_loop.create_proxy();
         tokio::task::spawn(logic(event_proxy));
 
-        //rt.block_on(app.load_game_from_url(&test1_url)).unwrap();
-
+        log::debug!("Starting main loop thread");
         let mut prev_render_time = Instant::now();
         let mut is_closing = false;
         event_loop.run(move |event, _, control_flow| {
@@ -93,11 +88,16 @@ async fn run() {
                     WindowEvent::KeyboardInput { input, .. } => {
                         let _ = app.world.inject_input(input);
                         if input.state == ElementState::Pressed {
-                            let alt = input.modifiers.shift();
                             match input.virtual_keycode {
                                 Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
-                                Some(VirtualKeyCode::Key0) => rt.block_on(app.unload_game()).unwrap(),
-                                //Some(VirtualKeyCode::Key1) => rt.block_on(app.load_game_from_url(&test1_url)).unwrap(),
+                                Some(VirtualKeyCode::Key0) => rt.block_on(app.deinit_game()).unwrap(),
+                                Some(VirtualKeyCode::Key1) => rt
+                                    .block_on(async {
+                                        let url = Url::parse("game://games/test/test1.g1")
+                                            .map_err(|err| AppError::game("test1", err))?;
+                                        test1::Test1::load_into_app(&mut app, &url).await
+                                    })
+                                    .unwrap(),
                                 //Some(VirtualKeyCode::Key2) => rt.block_on(app.load_game_from_url(&test2_url)).unwrap(),
                                 //Some(VirtualKeyCode::Key3) => rt.block_on(app.load_game_from_url(&test3_url)).unwrap(),
                                 //Some(VirtualKeyCode::Key4) => rt.block_on(app.load_game_from_url(&test4_url)).unwrap(),
@@ -122,7 +122,7 @@ async fn run() {
             }
 
             if control_flow == &ControlFlow::Exit {
-                rt.block_on(app.unload_game()).unwrap();
+                rt.block_on(app.deinit_game()).unwrap();
                 is_closing = true;
                 return;
             }
@@ -155,7 +155,7 @@ fn main() {
         .filter_module("shine_ecs", log::LevelFilter::Trace)
         .filter_module("shine_game", log::LevelFilter::Trace)
         .filter_module("shine_input", log::LevelFilter::Info)
-        .filter_module("gfx_backend_vulkan", log::LevelFilter::Trace)
+        //.filter_module("gfx_backend_vulkan", log::LevelFilter::Trace)
         .try_init();
     let mut rt = Runtime::new().unwrap();
 

@@ -16,9 +16,14 @@ async fn load_pipeline() {
     let source_url = id.to_url(&source_root).unwrap();
 
     let (source, source_hash) = PipelineSource::load(&io, &id, &source_url).await.unwrap();
+    let uniform_layout = source.descriptor.get_uniform_layout().unwrap();
+    log::debug!("uniform_layout: {:#?}", uniform_layout);
+    assert_eq!(uniform_layout.len(), 4);
+    assert!(uniform_layout[0].is_empty());
+    assert!(uniform_layout[1].is_empty());
     assert_eq!(
         source_hash.hash(),
-        "82556a847da246efac991053b60615df69fb90f58af4e1642c18a2d4fb6017dd"
+        "39d34ac02c5543b2f379acc4f7f2f03b994be11297b533bc3e75e087b1247448"
     );
 
     let cooked = source.cook(cooker::DummyCooker).await.unwrap();
@@ -34,6 +39,6 @@ async fn load_pipeline() {
     );
     assert_eq!(
         cooked_hash.hash(),
-        "332df9317060ff78d282f128bd429fab2d4715d1a20cd8fa9ea9f34e166416b9"
+        "9cfcff89ca030161cbf52abbaf186c24e8ef40e526a4f325e640a7e170c607e3"
     );
 }

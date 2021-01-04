@@ -1,4 +1,3 @@
-#![cfg(feature = "cook")]
 use crate::assets::{
     cooker::CookingError, AssetError, AssetIO, AssetId, ContentHash, CookedTexture, ImageEncoding, TextureDescriptor,
     Url,

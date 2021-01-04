@@ -5,7 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use shine_ecs::{
     core::observer::ObserveDispatcher,
-    resources::{ResourceHandle, ResourceId, ResourceLoadRequester, ResourceLoader, Resources},
+    resources::{ResourceHandle, ResourceId, ResourceLoadRequester, ResourceLoadResponder, ResourceLoader, Resources},
     ECSError,
 };
 use std::sync::Arc;
@@ -84,7 +84,7 @@ impl Shader {
 
     async fn on_load_impl(
         (io, device): &(AssetIO, Arc<wgpu::Device>),
-        handle: ResourceHandle<Self>,
+        handle: &ResourceHandle<Self>,
         shader_id: String,
     ) -> Result<CompiledShader, ShaderError> {
         log::debug!("[{:?}] Loading shader...", shader_id);
@@ -105,12 +105,14 @@ impl Shader {
     }
 
     async fn on_load(
+        responder: ResourceLoadResponder<Shader, ShaderResponse>,
         ctx: &(AssetIO, Arc<wgpu::Device>),
         handle: ResourceHandle<Self>,
         request: ShaderRequest,
-    ) -> Option<ShaderResponse> {
+    ) {
         let ShaderRequest(shader_id) = request;
-        Some(ShaderResponse(Self::on_load_impl(ctx, handle, shader_id).await))
+        let response = ShaderResponse(Self::on_load_impl(ctx, &handle, shader_id).await);
+        responder.send_response(handle, response);
     }
 
     fn on_load_response(

@@ -38,8 +38,20 @@ pub struct VertexBufferLayout {
     pub attributes: Vec<VertexAttribute>,
 }
 
-pub type VertexBufferLayouts = Vec<VertexBufferLayout>;
-
 pub trait Vertex: 'static + bytemuck::Pod + bytemuck::Zeroable {
     fn buffer_layout() -> VertexBufferLayout;
+}
+
+/// Trait to describe the vertex layout of a multi-buffered data
+pub trait VertexBufferDescriptor {
+    fn buffer_layouts() -> Vec<VertexBufferLayout>;
+}
+
+impl<V> VertexBufferDescriptor for V
+where
+    V: Vertex,
+{
+    fn buffer_layouts() -> Vec<VertexBufferLayout> {
+        vec![V::buffer_layout()]
+    }
 }

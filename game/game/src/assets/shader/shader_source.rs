@@ -1,4 +1,3 @@
-#![cfg(feature = "cook")]
 use crate::assets::{cooker::CookingError, AssetError, AssetIO, AssetId, ContentHash, CookedShader, ShaderType, Url};
 
 pub struct ShaderSource {

@@ -1,0 +1,6 @@
+{
+	"type": "Test5",
+	"frame_graph": "./test5/hello.fgr",
+	scene_pipeline": "./test5/scene.pl",
+	present_pipeline": "./test5/present.pl"
+}

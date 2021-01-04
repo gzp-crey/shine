@@ -9,9 +9,9 @@ pub struct TestScene {
 impl TestScene {
     pub fn new(test: &Test1) -> TestScene {
         TestScene {
-  //          pipeline: PipelineDependency::default()
-                //.with_id(test.pipeline.clone())
-                //.with_vertex_layout::<vertex::Null>(),
+            /*pipeline: PipelineDependency::default()
+                .with_id(test.pipeline.clone())
+                .with_vertex_layout::<vertex::Null>(),*/
             //bind_group: None,
         }
     }

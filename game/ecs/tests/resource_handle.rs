@@ -39,13 +39,15 @@ fn simple_test_core(case: TestCase) {
 
     let mut resources = Resources::default();
 
-    resources.register(ManagedResource::new({
-        let cnt = build_counter.clone();
-        move |id| {
-            *cnt.borrow_mut() += 1;
-            SimpleTest(format!("one {:?}", id), *cnt.borrow())
-        }
-    }));
+    resources
+        .register(ManagedResource::new({
+            let cnt = build_counter.clone();
+            move |id| {
+                *cnt.borrow_mut() += 1;
+                SimpleTest(format!("one {:?}", id), *cnt.borrow())
+            }
+        }))
+        .unwrap();
 
     resources
         .get_with_id::<SimpleTest>(&ida)
@@ -184,10 +186,12 @@ fn threaded_test() {
     let resources = {
         let mut resources = Resources::default();
 
-        resources.register(ManagedResource::new({
-            let counter = counter.clone();
-            move |id| ThreadedTest::new(counter.clone(), id)
-        }));
+        resources
+            .register(ManagedResource::new({
+                let counter = counter.clone();
+                move |id| ThreadedTest::new(counter.clone(), id)
+            }))
+            .unwrap();
         resources
     };
 

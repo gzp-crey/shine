@@ -1,7 +1,0 @@
-{
-	"Test5":{
-		"frame_graph": "hello.fgr",
-		"scene_pipeline": "scene.pl",
-		"present_pipeline": "present.pl"
-	}
-}

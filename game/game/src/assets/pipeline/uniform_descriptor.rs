@@ -14,7 +14,7 @@ pub enum TextureSemantic {
     Custom(TextureName),
 }
 
-/// Shader parameters and uniforms
+/// Shader parameters a.k.a uniforms
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum UniformSemantic {
     Sampler(TextureSemantic),

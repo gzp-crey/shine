@@ -1,4 +1,3 @@
-#[cfg(feature = "cook")]
 use crate::{
     assets::{
         cooker::{CookingError, ModelCooker, Naming, PipelineCooker, TextureCooker},
@@ -55,7 +54,7 @@ impl Source {
             .create_relative(&pipeline)
             .map_err(|err| CookingError::from_err(&source_id, err))?;
         let pipeline = cooker
-            .cook_pipeline(pip_id, Naming::soft("pipeline", "pl"))
+            .cook_pipeline(pip_id, Naming::hard("pipeline", "pl"))
             .await?
             .to_string();
 

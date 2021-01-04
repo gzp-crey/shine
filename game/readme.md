@@ -1,10 +1,5 @@
 # Shine game
 
-## TODO
-
-* [ ] use thiserror:Error for better error types
-* [ ] use default instead of new
-
 ### Game
 
 #### ecc based world
@@ -13,11 +8,17 @@
 * [ ] Create a most simple world
 * [ ] Parent/child positioning (?)
 
+#### asset
+
+* [ ] remove wgpu from asset
+  * no wgpu serde dependency
+  * allow to replace wgpu (very low prio)
+* [ ] make asset a different crate
+
 #### render
 
-* [ ] use resources to store render targets and use scheduler for render pass
 * [ ] pipeline color/depth stage should depend on the render target
-* [ ] AUTO_UNIFORM those are bound automaically during pipeline pass creation - no need for FrameTextures<'_>
+* [ ] wrap pipeline into real render logic traits/structs
 
 ### Native sample
 

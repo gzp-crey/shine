@@ -1,0 +1,5 @@
+{
+	"type": "Test3",
+	"pipeline": "./test3/hello.pl",
+	"texture": "./test3/checker.png"
+}

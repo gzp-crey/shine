@@ -1,0 +1,4 @@
+{
+	"type": "Test2",
+	"pipeline": "./test2/hello.pl"
+}

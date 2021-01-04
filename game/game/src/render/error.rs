@@ -1,4 +1,3 @@
-use crate::{app::AppError, World};
 use shine_ecs::core::error::ErrorString;
 use std::error::Error as StdError;
 use thiserror::Error;
@@ -28,11 +27,5 @@ impl RenderError {
             message: message.to_string(),
             source: Box::new(err),
         }
-    }
-}
-
-impl From<RenderError> for AppError {
-    fn from(err: RenderError) -> Self {
-        AppError::plugin(World::render_plugin_name(), err)
     }
 }

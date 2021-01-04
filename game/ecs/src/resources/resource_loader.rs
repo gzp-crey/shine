@@ -1,7 +1,7 @@
 use crate::resources::{Resource, ResourceBakeContext, ResourceConfig, ResourceHandle, ResourceId};
 use futures::{
     channel::mpsc::{self, UnboundedReceiver, UnboundedSender},
-    SinkExt, StreamExt,
+    StreamExt,
 };
 use std::{any::Any, future::Future};
 
@@ -14,9 +14,15 @@ where
     RP: 'static + Send,
     RQ: 'static + Send,
 {
-    type Fut: 'a + Future<Output = Option<RP>>;
+    type Fut: 'a + Future<Output = ()>;
 
-    fn call(&self, context: &'a CTX, handle: ResourceHandle<T>, request: RQ) -> Self::Fut;
+    fn call(
+        &self,
+        responder: ResourceLoadResponder<T, RP>,
+        context: &'a CTX,
+        handle: ResourceHandle<T>,
+        request: RQ,
+    ) -> Self::Fut;
 }
 
 impl<'a, CTX, T, RP, RQ, LoadFut, FnLoad> FnResourceLoad<'a, CTX, T, RQ, RP> for FnLoad
@@ -25,17 +31,23 @@ where
     CTX: 'static + Send,
     RP: 'static + Send,
     RQ: 'static + Send,
-    LoadFut: 'a + Future<Output = Option<RP>>,
-    FnLoad: 'static + Send + Fn(&'a CTX, ResourceHandle<T>, RQ) -> LoadFut,
+    LoadFut: 'a + Future<Output = ()>,
+    FnLoad: 'static + Send + Fn(ResourceLoadResponder<T, RP>, &'a CTX, ResourceHandle<T>, RQ) -> LoadFut,
 {
     type Fut = LoadFut;
 
-    fn call(&self, context: &'a CTX, handle: ResourceHandle<T>, request: RQ) -> Self::Fut {
-        (self)(context, handle, request)
+    fn call(
+        &self,
+        responder: ResourceLoadResponder<T, RP>,
+        context: &'a CTX,
+        handle: ResourceHandle<T>,
+        request: RQ,
+    ) -> Self::Fut {
+        (self)(responder, context, handle, request)
     }
 }
 
-/// Context to request (async) resource load
+/// Request a resource to be loaded
 pub struct ResourceLoadRequester<T: Resource, RQ> {
     request_sender: UnboundedSender<(ResourceHandle<T>, RQ)>,
 }
@@ -45,6 +57,20 @@ impl<T: Resource, RQ> ResourceLoadRequester<T, RQ> {
         log::trace!("[{:?}] Sending load request", handle);
         if let Err(err) = self.request_sender.unbounded_send((handle, rq)) {
             log::info!("Failed to notify load worker: {:?}", err);
+        }
+    }
+}
+
+/// Respond to a resource to load request
+pub struct ResourceLoadResponder<T: Resource, RP> {
+    response_sender: UnboundedSender<(ResourceHandle<T>, RP)>,
+}
+
+impl<T: Resource, RP> ResourceLoadResponder<T, RP> {
+    pub fn send_response(&self, handle: ResourceHandle<T>, rp: RP) {
+        log::trace!("[{:?}] Sending load response", handle);
+        if let Err(err) = self.response_sender.unbounded_send((handle, rp)) {
+            log::info!("Failed to send response: {:?}", err);
         }
     }
 }
@@ -184,39 +210,23 @@ where
     RP: 'static + Send,
     for<'a> FnLoad: FnResourceLoad<'a, CTX, T, RQ, RP>,
 {
-    async fn handle_one(&mut self) -> bool {
-        let (handle, rq) = match self.request_receiver.next().await {
-            Some((handle, rq)) => (handle, rq),
-            None => {
-                log::warn!("Failed to get next load request, channel closed");
-                return false;
+    pub async fn run(&mut self) {
+        while let Some((handle, rq)) = self.request_receiver.next().await {
+            log::trace!("Loading {:?}", handle);
+            if !handle.is_alive() {
+                continue;
             }
-        };
+            let responder = ResourceLoadResponder {
+                response_sender: self.response_sender.clone(),
+            };
+            self.load.call(responder, &self.context, handle.clone(), rq).await;
 
-        log::trace!("Loading {:?}", handle);
-        if !handle.is_alive() {
-            return true;
-        }
-        let response = match self.load.call(&self.context, handle.clone(), rq).await {
-            Some(output) => output,
-            None => return true,
-        };
-        if !handle.is_alive() {
-            return true;
-        }
-
-        log::trace!("[{:?}] Sending load response", handle);
-        match self.response_sender.send((handle, response)).await {
-            Ok(_) => true,
-            Err(err) => {
-                log::info!("Loader response failed: {:?}", err);
-                false
+            // when channels are closed, we are done
+            // response_sender is checked explicitly, but request_receiver is checked in the loop
+            if self.response_sender.is_closed() {
+                break;
             }
         }
-    }
-
-    async fn run(&mut self) {
-        while self.handle_one().await {}
     }
 
     #[cfg(feature = "native")]

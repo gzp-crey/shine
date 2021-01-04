@@ -8,7 +8,7 @@ use tokio::runtime::Runtime;
 
 mod config;
 //mod cook_frame_graph;
-//mod cook_game;
+mod cook_game;
 mod cook_model;
 mod cook_pipeline;
 mod cook_shader;
@@ -80,7 +80,7 @@ async fn cook(context: &Context, source_id: AssetId) -> Result<Url, CookerError>
                 .cook_texture(source_id.clone(), Naming::soft("texture", "tx"))
                 .await?
         }
-        //"game" => cook_game::cook_game(&context, &asset_base, &asset_id).await?,
+        "game" => context.cook_game(source_id.clone()).await?,
         e => return Err(AssetError::UnsupportedFormat(e.into()).into()),
     };
 
@@ -124,16 +124,15 @@ fn main() -> Result<(), Report> {
     let mut rt = Runtime::new()?;
 
     let assets = [
-        //"games/test1/hello.fs",
-        //"games/test3/checker.png",
+        //"games/test/test1/hello.fs",
+        //"games/test/test3/checker.png",
         //"models/SimpleMeshes.gltf",
         //"models/VertexColorTest.glb",
-        "games/test1/hello.pl",
-        //"games/test1/test.game",
-        //"games/test2/test.game",
-        //"games/test3/test.game",
-        //"games/test4/test.game",
-        //"games/test5/test.wrld",
+        "games/test/test1.game",
+        //"games/test/test2.game",
+        //"games/test/test3.game",
+        //"games/test/test4.game",
+        //"games/test/test5.game",
     ]
     .iter()
     .map(|x| AssetId::new(x))

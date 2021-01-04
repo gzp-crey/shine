@@ -1,6 +1,9 @@
 use crate::assets::{AssetError, UniformSemantic, VertexBufferLayout, VertexSemantic};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::{Deref, DerefMut},
+};
 
 /// Vertex attribute requirement of the pipeline
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -24,23 +27,6 @@ impl PipelineAttribute {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PipelineUniformScope {
-    Auto,
-    Global,
-    Local,
-}
-
-impl PipelineUniformScope {
-    pub fn bind_location(self) -> u32 {
-        match self {
-            PipelineUniformScope::Auto => 0,
-            PipelineUniformScope::Global => 1,
-            PipelineUniformScope::Local => 2,
-        }
-    }
-}
-
 /// Uniform requirement of the pipeline
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct PipelineUniform(u32, UniformSemantic);
@@ -59,48 +45,11 @@ impl PipelineUniform {
     }
 }
 
-/// List of uniform requirements of the pipeline for each share stage
-#[derive(Debug)]
-pub struct PipelineUniformLayout(Vec<(PipelineUniform, wgpu::ShaderStage)>);
-
-impl PipelineUniformLayout {
-    pub fn merge_from_stages(layouts: &[(&[PipelineUniform], wgpu::ShaderStage)]) -> Result<Self, AssetError> {
-        let mut merged: HashMap<u32, (PipelineUniform, wgpu::ShaderStage)> = Default::default();
-        for (layout, stage) in layouts.iter() {
-            for uniform in layout.iter() {
-                if let Some(u) = merged.get_mut(&uniform.location()) {
-                    if u.0 != *uniform {
-                        return Err(AssetError::Content(format!(
-                            "Incompatible uniform binding at {} location: {:?} vs {:?}",
-                            uniform.location(),
-                            u,
-                            (uniform, stage)
-                        )));
-                    }
-                    u.1 |= *stage;
-                } else {
-                    merged.insert(uniform.location(), (uniform.clone(), *stage));
-                }
-            }
-        }
-
-        let mut result: Vec<_> = merged.values().cloned().collect();
-        result.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
-        Ok(PipelineUniformLayout(result))
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &(PipelineUniform, wgpu::ShaderStage)> {
-        self.0.iter()
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct VertexStage {
     pub shader: String,
     pub attributes: Vec<PipelineAttribute>,
-    //pub auto_uniforms: Vec<PipelineUniform>,
-    //pub global_uniforms: Vec<PipelineUniform>,
-    //pub local_uniforms: Vec<PipelineUniform>,
+    pub uniforms: Vec<(u32, Vec<PipelineUniform>)>,
 }
 
 impl VertexStage {
@@ -152,9 +101,7 @@ impl VertexStage {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FragmentStage {
     pub shader: String,
-    //pub auto_uniforms: Vec<PipelineUniform>,
-    //pub global_uniforms: Vec<PipelineUniform>,
-    //pub local_uniforms: Vec<PipelineUniform>,
+    pub uniforms: Vec<(u32, Vec<PipelineUniform>)>,
 }
 
 /// Deserialized pipeline data
@@ -166,22 +113,102 @@ pub struct PipelineDescriptor {
 }
 
 impl PipelineDescriptor {
-    /*pub fn get_uniform_layout(&self, scope: PipelineUniformScope) -> Result<PipelineUniformLayout, AssetError> {
-        let (vs_uniforms, fs_uniforms) = match scope {
-            PipelineUniformScope::Auto => (&self.vertex_stage.auto_uniforms, &self.fragment_stage.auto_uniforms),
-            PipelineUniformScope::Global => (&self.vertex_stage.global_uniforms, &self.fragment_stage.global_uniforms),
-            PipelineUniformScope::Local => (&self.vertex_stage.local_uniforms, &self.fragment_stage.local_uniforms),
-        };
+    pub fn get_uniform_layout(&self) -> Result<PipelineUniformLayout, AssetError> {
+        // store the uniform info for each location for each group to check validity
+        let mut check: HashMap<u32, (UniformSemantic, u32, wgpu::ShaderStage)> = Default::default();
+        let mut merged: HashMap<u32, HashMap<u32, (UniformSemantic, wgpu::ShaderStage)>> = Default::default();
 
-        PipelineUniformLayout::merge_from_stages(&[
-            (vs_uniforms, wgpu::ShaderStage::VERTEX),
-            (fs_uniforms, wgpu::ShaderStage::FRAGMENT),
-        ])
-    }*/
+        for (stage_uniforms, stage) in &[
+            (&self.vertex_stage.uniforms, wgpu::ShaderStage::VERTEX),
+            (&self.fragment_stage.uniforms, wgpu::ShaderStage::FRAGMENT),
+        ] {
+            for (binding_group_id, stage_uniforms) in stage_uniforms.iter() {
+                for uniform in stage_uniforms.iter() {
+                    //check consisentcy
+                    if let Some(u) = check.get_mut(&uniform.location()) {
+                        if u.1 != *binding_group_id {
+                            return Err(AssetError::Content(format!(
+                                "mismatching uniform group {:?}/{}/{} ({:?} vs {:?})",
+                                stage,
+                                binding_group_id,
+                                uniform.location(),
+                                u.1,
+                                binding_group_id
+                            )));
+                        }
+                        if u.0 != *uniform.semantic() {
+                            return Err(AssetError::Content(format!(
+                                "Incompatible uniform semantic for {:?}/{}/{} ({:?} vs {:?})",
+                                stage,
+                                binding_group_id,
+                                uniform.location(),
+                                u.0,
+                                uniform.semantic()
+                            )));
+                        }
+                        if u.2 & *stage == *stage {
+                            return Err(AssetError::Content(format!(
+                                "Duplicate uniform binding for {:?}/{}/{}",
+                                stage,
+                                binding_group_id,
+                                uniform.location(),
+                            )));
+                        }
+                        u.2 |= *stage;
+                    } else {
+                        check.insert(
+                            uniform.location(),
+                            (uniform.semantic().clone(), *binding_group_id, *stage),
+                        );
+                    }
+
+                    //update layout
+                    let binding_group = merged.entry(*binding_group_id).or_insert_with(Default::default);
+                    let binding_group_entry = binding_group
+                        .entry(uniform.location())
+                        .or_insert_with(|| (uniform.semantic().clone(), *stage));
+                    binding_group_entry.1 |= *stage;
+                }
+            }
+        }
+
+        // convert map of map into vec of vec
+        let mut result = PipelineUniformLayout::default();
+
+        let binding_group_count = merged.keys().map(|&x| x as usize + 1).max().unwrap_or(0);
+        result.resize_with(binding_group_count, Default::default);
+
+        for (binding_group_id, mut merge_group) in merged.drain() {
+            let binding_group_id = binding_group_id as usize;
+            result[binding_group_id] = merge_group
+                .drain()
+                .map(|(loc, (sem, stage))| (PipelineUniform::new(loc, sem), stage))
+                .collect()
+        }
+
+        Ok(result)
+    }
 }
 
-/*#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone)]
+pub struct PipelineUniformLayout(Vec<Vec<(PipelineUniform, wgpu::ShaderStage)>>);
+
+impl Deref for PipelineUniformLayout {
+    type Target = Vec<Vec<(PipelineUniform, wgpu::ShaderStage)>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for PipelineUniformLayout {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PipelineStateDescriptor {
     pub color_states: Vec<wgpu::ColorStateDescriptor>,
     pub depth_state: Option<wgpu::DepthStencilStateDescriptor>,
-}*/
+}
