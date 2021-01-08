@@ -18,8 +18,8 @@ where
 
     fn call(
         &self,
-        responder: ResourceLoadResponder<T, RP>,
         context: &'a CTX,
+        responder: &'a ResourceLoadResponder<T, RP>,
         handle: ResourceHandle<T>,
         request: RQ,
     ) -> Self::Fut;
@@ -32,18 +32,18 @@ where
     RP: 'static + Send,
     RQ: 'static + Send,
     LoadFut: 'a + Future<Output = ()>,
-    FnLoad: 'static + Send + Fn(ResourceLoadResponder<T, RP>, &'a CTX, ResourceHandle<T>, RQ) -> LoadFut,
+    FnLoad: 'static + Send + Fn(&'a CTX, &'a ResourceLoadResponder<T, RP>, ResourceHandle<T>, RQ) -> LoadFut,
 {
     type Fut = LoadFut;
 
     fn call(
         &self,
-        responder: ResourceLoadResponder<T, RP>,
         context: &'a CTX,
+        responder: &'a ResourceLoadResponder<T, RP>,
         handle: ResourceHandle<T>,
         request: RQ,
     ) -> Self::Fut {
-        (self)(responder, context, handle, request)
+        (self)(context, responder, handle, request)
     }
 }
 
@@ -219,7 +219,7 @@ where
             let responder = ResourceLoadResponder {
                 response_sender: self.response_sender.clone(),
             };
-            self.load.call(responder, &self.context, handle.clone(), rq).await;
+            self.load.call(&self.context, &responder, handle.clone(), rq).await;
 
             // when channels are closed, we are done
             // response_sender is checked explicitly, but request_receiver is checked in the loop

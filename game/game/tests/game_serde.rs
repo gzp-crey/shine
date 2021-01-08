@@ -25,11 +25,11 @@ async fn load_test1() {
     );
 
     let cooked = source.cook(cooker::DummyCooker).await.unwrap();
-    assert_eq!(cooked.pipeline, "pipeline://hello.pl");
+    assert_eq!(cooked.pipeline, "hash-pipeline://b128/e929af683c6b4ce763dbffb94124.pl");
     let cooked_hash = ContentHash::from_bytes(&bincode::serialize(&cooked).unwrap());
     assert_eq!(
         cooked_hash.hash(),
-        "00677fe9400b8f54d7c11bb361bce9eedf19c413389a04a0c7bf243dbebe9d08"
+        "9a779d2420837d31c57a83d57e28aba671d45c34fa1006189a688b023c729e94"
     );
 }
 

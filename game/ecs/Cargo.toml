@@ -17,7 +17,7 @@ thiserror = "1.0"
 serde = "1.0"
 bincode = "1.3"
 downcast-rs = "1.2"
-hecs = "0.2"
+hecs = "0.3"
 fxhash = "0.2"
 
 # native
@@ -31,5 +31,5 @@ wasm-bindgen-futures = { version = "0.4", optional = true }
 [dev-dependencies]
 env_logger = "0.8"
 permutohedron = "0.2"
-rand = "0.7"
+rand = "0.8"
 rayon = "1.5"

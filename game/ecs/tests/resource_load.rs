@@ -32,8 +32,8 @@ impl TestData {
     }
 
     async fn on_load(
-        responder: ResourceLoadResponder<Self, String>,
         cnt: &Arc<AtomicUsize>,
+        responder: &ResourceLoadResponder<Self, String>,
         handle: ResourceHandle<Self>,
         request: String,
     ) {

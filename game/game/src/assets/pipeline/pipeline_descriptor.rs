@@ -207,7 +207,7 @@ impl DerefMut for PipelineUniformLayout {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct PipelineStateDescriptor {
     pub color_states: Vec<wgpu::ColorStateDescriptor>,
     pub depth_state: Option<wgpu::DepthStencilStateDescriptor>,

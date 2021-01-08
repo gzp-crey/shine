@@ -55,19 +55,23 @@ impl Shader {
     }
 }
 
-struct ShaderRequest(String);
-struct ShaderResponse(Result<CompiledShader, ShaderError>);
+struct LoadRequest(String);
+
+enum LoadResponse {
+    Compiled(CompiledShader),
+    Error(ShaderError),
+}
 
 /// Implement functions to make it a resource
 impl Shader {
     fn build(
-        context: &ResourceLoadRequester<Self, ShaderRequest>,
+        context: &ResourceLoadRequester<Self, LoadRequest>,
         handle: ResourceHandle<Self>,
         id: &ResourceId,
     ) -> Self {
         log::trace!("Creating [{:?}]", id);
         if let Ok(ShaderKey(id)) = id.to_object::<ShaderKey>() {
-            context.send_request(handle, ShaderRequest(id.clone()));
+            context.send_request(handle, LoadRequest(id.clone()));
             Shader {
                 id,
                 shader: Ok(None),
@@ -82,7 +86,7 @@ impl Shader {
         }
     }
 
-    async fn on_load_impl(
+    async fn load_and_compile(
         (io, device): &(AssetIO, Arc<wgpu::Device>),
         handle: &ResourceHandle<Self>,
         shader_id: String,
@@ -105,24 +109,30 @@ impl Shader {
     }
 
     async fn on_load(
-        responder: ResourceLoadResponder<Shader, ShaderResponse>,
         ctx: &(AssetIO, Arc<wgpu::Device>),
+        responder: &ResourceLoadResponder<Shader, LoadResponse>,
         handle: ResourceHandle<Self>,
-        request: ShaderRequest,
+        request: LoadRequest,
     ) {
-        let ShaderRequest(shader_id) = request;
-        let response = ShaderResponse(Self::on_load_impl(ctx, &handle, shader_id).await);
+        let LoadRequest(shader_id) = request;
+        let response = match Self::load_and_compile(ctx, &handle, shader_id).await {
+            Ok(shader) => LoadResponse::Compiled(shader),
+            Err(err) => LoadResponse::Error(err),
+        };
         responder.send_response(handle, response);
     }
 
     fn on_load_response(
         this: &mut Self,
-        _requester: &ResourceLoadRequester<Self, ShaderRequest>,
+        _requester: &ResourceLoadRequester<Self, LoadRequest>,
         _handle: &ResourceHandle<Self>,
-        response: ShaderResponse,
+        response: LoadResponse,
     ) {
-        log::debug!("[{:?}] Load completed (success: {})", this.id, response.0.is_ok());
-        this.shader = response.0.map(Some);
+        log::debug!("[{:?}] Load completed", this.id);
+        match response {
+            LoadResponse::Compiled(shader) => this.shader = Ok(Some(shader)),
+            LoadResponse::Error(err) => this.shader = Err(err),
+        };
         this.dispatcher.notify_all(ShaderEvent::Loaded);
     }
 
@@ -147,3 +157,5 @@ impl Shader {
         resources.bake::<Shader>(gc);
     }
 }
+
+pub type ShaderHandle = ResourceHandle<Shader>;

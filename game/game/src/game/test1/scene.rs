@@ -1,18 +1,22 @@
-use crate::{assets::vertex, game::test1::Test1};
+use crate::{
+    assets::vertex,
+    game::test1::Test1,
+    render::{PipelineDependency, PipelineKey},
+};
 
 /// Resources for the test
 pub struct TestScene {
-    //pipeline: PipelineDependency,
-//bind_group: Option<PipelineBindGroup>,
+    pipeline: PipelineDependency,
+    //bind_group: Option<PipelineBindGroup>,
 }
 
 impl TestScene {
     pub fn new(test: &Test1) -> TestScene {
         TestScene {
-            /*pipeline: PipelineDependency::default()
-                .with_id(test.pipeline.clone())
-                .with_vertex_layout::<vertex::Null>(),*/
-            //bind_group: None,
+            pipeline: PipelineDependency::new(PipelineKey::new::<vertex::Null>(
+                test.pipeline.clone(),
+                Default::default(),
+            )),
         }
     }
 }

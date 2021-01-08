@@ -12,7 +12,7 @@ pub use self::resource_query::*;
 
 pub mod prelude {
     pub use super::{
-        FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, ResourceQuery, WithTagRes, WithTagResMut,
+        FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, MultiRes, MultiResMut, Res, ResMut,
+        ResourceQuery, Schedule, WithMultiRes, WithMultiResMut,
     };
-    pub use std::convert::TryFrom;
 }

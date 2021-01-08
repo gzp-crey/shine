@@ -1,7 +1,4 @@
-use shine_ecs::{
-    resources::Resources,
-    scheduler::{prelude::*, Res, ResMut, Schedule, TagRes, TagResMut},
-};
+use shine_ecs::{resources::Resources, scheduler::prelude::*};
 
 mod utils;
 
@@ -18,7 +15,7 @@ fn sys3(r1: Res<usize>, r2: ResMut<String>, r3: Res<u8>) {
     assert!(*r3 == 3);
 }
 
-fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: TagRes<u8>, r4: TagResMut<u16>) {
+fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: MultiRes<u8>, r4: MultiResMut<u16>) {
     log::info!("claims: u8: {:?}", r3.claim());
     log::info!("claims: u16: {:?}", r4.claim());
     log::info!("r1={:?}", &*r1);
@@ -63,8 +60,10 @@ fn resource_access() {
     sh.schedule(sys3.system()).unwrap();
     sh.schedule(
         sys4.system()
-            .with_tag::<u8>(&["five", "six"])
-            .with_tag_mut::<u16>(&["16"]),
+            .try_claim_res::<u8, _>(|claim| claim.try_append_tags(&["five", "six"]))
+            .unwrap()
+            .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["16"]))
+            .unwrap(),
     )
     .unwrap();
 

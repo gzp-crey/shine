@@ -17,7 +17,8 @@ impl TargetDB {
     pub async fn new(config: &Config) -> Result<TargetDB, CookerError> {
         log::info!("Connecting to db...");
         let pool = if let Some(conn) = &config.target_db_connection {
-            Some(PgPool::new(&conn).await?)
+            //Some(PgPool::new(&conn).await?)
+            unimplemented!()
         } else {
             None
         };

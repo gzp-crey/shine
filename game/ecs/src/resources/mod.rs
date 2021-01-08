@@ -1,15 +1,18 @@
-mod resource;
-mod resource_config;
-mod resource_handle;
 mod resource_id;
-mod resource_loader;
-mod resource_store;
-mod resources;
-
-pub use resource::*;
-pub use resource_config::*;
-pub use resource_handle::*;
 pub use resource_id::*;
-pub use resource_loader::*;
+mod resource_handle;
+pub use resource_handle::*;
+mod resource_key_handle;
+pub use resource_key_handle::*;
+
+mod resource;
+pub use resource::*;
+mod resource_store;
 pub use resource_store::*;
+mod resources;
 pub use resources::*;
+
+mod resource_config;
+pub use resource_config::*;
+mod resource_loader;
+pub use resource_loader::*;

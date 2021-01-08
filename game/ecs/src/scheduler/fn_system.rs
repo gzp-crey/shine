@@ -3,12 +3,12 @@ use crate::{
     hlist_type,
     resources::{Resource, Resources},
     scheduler::{
-        FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, ResourceClaims, ResourceQuery, System,
-        SystemGroup, SystemName, TagResClaim, TagResMutClaim,
+        FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, MultiResClaim, MultiResMutClaim,
+        ResourceClaims, ResourceQuery, System, SystemGroup, SystemName,
     },
     ECSError,
 };
-use std::{any, borrow::Cow, convert::TryFrom, marker::PhantomData};
+use std::{any, borrow::Cow, marker::PhantomData};
 
 /// Create a system from a function
 pub struct FnSystemBuilder<Func, C, R> {
@@ -43,40 +43,113 @@ impl<Func, C, R> FnSystemBuilder<Func, C, R> {
 }
 
 /// Helper trait to set the tags for shared tagged resource claims
-pub trait WithTagRes<C, HIndex> {
-    fn with_tag<T: Resource>(self, claim: &[&str]) -> Self
+/// #Example
+/// ```
+/// use shine_ecs::scheduler::prelude::*;
+/// fn some_system(r1: MultiRes<u8>, r2: MultiRes<u16>) {}
+///
+/// let mut sh = Schedule::default();
+/// sh.schedule(
+///    some_system.system()
+///        .try_claim_res::<u8, _>(|claim| claim.try_append_tags(&["one", "two"]))
+///        .unwrap()
+///        .try_claim_res::<u16, _>(|claim| claim.try_append_tags(&["three"]))
+///        .unwrap(),
+/// )
+/// .unwrap();
+
+/// ```
+pub trait WithMultiRes<C, HIndex> {
+    fn claim_res<T, F>(self, claim: F) -> Self
     where
         Self: Sized,
-        C: HFind<TagResClaim<T>, HIndex>;
+        C: HFind<MultiResClaim<T>, HIndex>,
+        T: Resource,
+        F: FnMut(&mut MultiResClaim<T>);
+
+    fn try_claim_res<T, F>(self, claim: F) -> Result<Self, ECSError>
+    where
+        Self: Sized,
+        C: HFind<MultiResClaim<T>, HIndex>,
+        T: Resource,
+        F: FnMut(&mut MultiResClaim<T>) -> Result<(), ECSError>;
 }
 
-impl<Func, C, R, HIndex> WithTagRes<C, HIndex> for FnSystemBuilder<Func, C, R> {
-    fn with_tag<T: Resource>(mut self, claim: &[&str]) -> Self
+impl<Func, C, R, HIndex> WithMultiRes<C, HIndex> for FnSystemBuilder<Func, C, R> {
+    fn claim_res<T, F>(mut self, mut claim: F) -> Self
     where
         Self: Sized,
-        C: HFind<TagResClaim<T>, HIndex>,
+        C: HFind<MultiResClaim<T>, HIndex>,
+        T: Resource,
+        F: FnMut(&mut MultiResClaim<T>),
     {
-        *self.claims.get_mut() = TagResClaim::<T>::try_from(claim).unwrap();
+        claim(self.claims.get_mut());
         self
+    }
+
+    fn try_claim_res<T, F>(mut self, mut claim: F) -> Result<Self, ECSError>
+    where
+        Self: Sized,
+        C: HFind<MultiResClaim<T>, HIndex>,
+        T: Resource,
+        F: FnMut(&mut MultiResClaim<T>) -> Result<(), ECSError>,
+    {
+        claim(self.claims.get_mut())?;
+        Ok(self)
     }
 }
 
 /// Helper trait to set the tags for unique tagged resource claims
-pub trait WithTagResMut<C, Index> {
-    fn with_tag_mut<T: Resource>(self, claim: &[&str]) -> Self
+/// #Example
+/// ```
+/// use shine_ecs::scheduler::prelude::*;
+/// fn some_system(r1: MultiResMut<u8>, r2: MultiResMut<u16>) {}
+///
+/// let mut sh = Schedule::default();
+/// sh.schedule(
+///    some_system.system()
+///        .try_claim_res_mut::<u8, _>(|claim| claim.try_append_tags(&["one", "two"]))
+///        .unwrap()
+///        .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["three"]))
+///        .unwrap(),
+/// )
+/// .unwrap();
+/// ```
+pub trait WithMultiResMut<C, Index> {
+    fn claim_res_mut<T: Resource, F: FnMut(&mut MultiResMutClaim<T>)>(self, claim: F) -> Self
     where
         Self: Sized,
-        C: HFind<TagResMutClaim<T>, Index>;
+        C: HFind<MultiResMutClaim<T>, Index>;
+
+    fn try_claim_res_mut<T, F>(self, claim: F) -> Result<Self, ECSError>
+    where
+        Self: Sized,
+        C: HFind<MultiResMutClaim<T>, Index>,
+        T: Resource,
+        F: FnMut(&mut MultiResMutClaim<T>) -> Result<(), ECSError>;
 }
 
-impl<Func, C, R, Index> WithTagResMut<C, Index> for FnSystemBuilder<Func, C, R> {
-    fn with_tag_mut<T: Resource>(mut self, claim: &[&str]) -> Self
+impl<Func, C, R, Index> WithMultiResMut<C, Index> for FnSystemBuilder<Func, C, R> {
+    fn claim_res_mut<T, F>(mut self, mut claim: F) -> Self
     where
         Self: Sized,
-        C: HFind<TagResMutClaim<T>, Index>,
+        C: HFind<MultiResMutClaim<T>, Index>,
+        T: Resource,
+        F: FnMut(&mut MultiResMutClaim<T>),
     {
-        *self.claims.get_mut() = TagResMutClaim::<T>::try_from(claim).unwrap();
+        claim(self.claims.get_mut());
         self
+    }
+
+    fn try_claim_res_mut<T, F>(mut self, mut claim: F) -> Result<Self, ECSError>
+    where
+        Self: Sized,
+        C: HFind<MultiResMutClaim<T>, Index>,
+        T: Resource,
+        F: FnMut(&mut MultiResMutClaim<T>) -> Result<(), ECSError>,
+    {
+        claim(self.claims.get_mut())?;
+        Ok(self)
     }
 }
 

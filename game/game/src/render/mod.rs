@@ -11,8 +11,8 @@ mod compile;
 pub use self::compile::*;
 mod shader;
 pub use self::shader::*;
-//mod pipeline;
-//pub use self::pipeline::*;
+mod pipeline;
+pub use self::pipeline::*;
 mod frame_target;
 pub use self::frame_target::*;
 

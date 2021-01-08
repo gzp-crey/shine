@@ -1,7 +1,7 @@
 use crate::{
     app::{AppError, Plugin, PluginFuture},
     assets::AssetIO,
-    render::{Context, FrameTarget, RenderError, Shader, Surface},
+    render::{Context, FrameTarget, Pipeline, RenderError, Shader, Surface},
     World,
 };
 use serde::{Deserialize, Serialize};
@@ -56,7 +56,9 @@ impl Plugin for RenderPlugin {
             world.resources.quick_insert(context).map_err(into_plugin_err)?;
             world.resources.quick_insert(frame_target).map_err(into_plugin_err)?;
 
-            Shader::register_resource(&mut world.resources, assetio, device).map_err(into_plugin_err)?;
+            Shader::register_resource(&mut world.resources, assetio.clone(), device.clone())
+                .map_err(into_plugin_err)?;
+            Pipeline::register_resource(&mut world.resources, assetio, device).map_err(into_plugin_err)?;
 
             Ok(())
         })
@@ -69,6 +71,7 @@ impl Plugin for RenderPlugin {
             let _ = world.resources.remove::<Surface>();
 
             Shader::unregister_resource(&mut world.resources);
+            Pipeline::unregister_resource(&mut world.resources);
             Ok(())
         })
     }
@@ -88,6 +91,7 @@ impl World {
 
     fn bake_resources(&mut self, gc: bool) {
         Shader::bake_resource(&mut self.resources, gc);
+        Pipeline::bake_resource(&mut self.resources, gc);
     }
 
     fn end_frame(&mut self) -> Result<(), AppError> {
