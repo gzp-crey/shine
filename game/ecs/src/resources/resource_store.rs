@@ -196,7 +196,7 @@ impl<T: Resource> ResourceStoreCell<T> {
 
     #[inline]
     pub fn read(&self) -> &ResourceStore<T> {
-        debug_assert!(self.rw_token.is_read());
+        debug_assert!(self.rw_token.is_read_lock());
         // safety:
         //  rw_token ensures the appropriate lock
         //  the store itself is Send and Sync (safety of ResourceCell takes care for for T)
@@ -220,7 +220,7 @@ impl<T: Resource> ResourceStoreCell<T> {
     #[inline]
     #[allow(clippy::mut_from_ref)]
     pub fn write(&self) -> &mut ResourceStore<T> {
-        debug_assert!(self.rw_token.is_write());
+        debug_assert!(self.rw_token.is_write_lock());
         // safety:
         //  rw_token ensures the appropriate lock
         //  the store itself is Send and Sync (safety of ResourceCell takes care of T)

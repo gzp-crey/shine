@@ -4,7 +4,7 @@ use crate::{
     resources::{Resource, Resources},
     scheduler::{
         FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, MultiResClaim, MultiResMutClaim,
-        ResourceClaims, ResourceQuery, System, SystemGroup, SystemName,
+        ResourceClaims, ResourceQuery, System, TaskGroup, SystemName,
     },
     ECSError,
 };
@@ -181,10 +181,10 @@ where
         &self.resource_claims
     }
 
-    fn run(&mut self, resources: &Resources) -> Result<SystemGroup, ECSError> {
+    fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {
         log::trace!("Running system [{:?}] - {:?}", self.name, self.debug_name());
         (self.func)(resources, &self.claims)?;
-        Ok(SystemGroup::default())
+        Ok(TaskGroup::default())
     }
 }
 

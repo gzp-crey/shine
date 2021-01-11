@@ -1,6 +1,6 @@
 use crate::{
     resources::Resources,
-    scheduler::{IntoSystem, SystemGroup},
+    scheduler::{IntoSystem, TaskGroup},
     ECSError,
 };
 
@@ -9,17 +9,17 @@ use crate::{
 /// They are run on a given [World] and [Resources] reference.
 #[derive(Default)]
 pub struct Schedule {
-    system_group: SystemGroup,
+    task_group: TaskGroup,
 }
 
 impl Schedule {
     pub fn schedule<R, Func: IntoSystem<R>>(&mut self, func: Func) -> Result<(), ECSError> {
-        self.system_group.add(func)
+        self.task_group.add(func)
     }
 
     pub fn run(&mut self, resources: &Resources) -> Result<(), ECSError> {
-        for system in self.system_group.iter() {
-            let mut system = system.lock().unwrap();
+        for task in self.task_group.iter() {
+            let mut system = task.system()?;
             system.run(resources)?;
         }
         Ok(())

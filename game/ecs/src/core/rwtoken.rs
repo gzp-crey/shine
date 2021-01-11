@@ -58,7 +58,7 @@ impl RWToken {
     }
 
     #[inline]
-    pub fn is_read(&self) -> bool {
+    pub fn is_read_lock(&self) -> bool {
         let value = self.0.load(Ordering::Relaxed);
         value != 0 && (value & WRITE_BIT == 0)
     }
@@ -86,7 +86,7 @@ impl RWToken {
     }
 
     #[inline]
-    pub fn is_write(&self) -> bool {
+    pub fn is_write_lock(&self) -> bool {
         let value = self.0.load(Ordering::Relaxed);
         value & WRITE_BIT != 0
     }

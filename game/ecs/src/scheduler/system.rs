@@ -1,7 +1,8 @@
-use crate::{core::ids::SmallStringId, resources::Resources, scheduler::ResourceClaims, ECSError};
-use std::{
-    slice::Iter,
-    sync::{Arc, Mutex},
+use crate::{
+    core::ids::SmallStringId,
+    resources::Resources,
+    scheduler::{ResourceClaims, TaskGroup},
+    ECSError,
 };
 
 pub type SystemName = SmallStringId<16>;
@@ -20,7 +21,7 @@ pub trait System: Send + Sync {
     fn resource_claims(&self) -> &ResourceClaims;
 
     /// Execute the task. On completion it can request a new set of system to be executed.
-    fn run(&mut self, resources: &Resources) -> Result<SystemGroup, ECSError>;
+    fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError>;
 }
 
 /// Trait to convert anything into a System.
@@ -36,25 +37,4 @@ pub trait IntoSystemBuilder<R> {
 
     #[must_use]
     fn system(self) -> Self::Builder;
-}
-
-/// A group of systems
-#[derive(Default)]
-pub struct SystemGroup {
-    systems: Vec<Arc<Mutex<Box<dyn System>>>>,
-}
-
-impl SystemGroup {
-    pub fn add<R, S: IntoSystem<R>>(&mut self, sys: S) -> Result<(), ECSError> {
-        self.add_system(sys.into_system()?);
-        Ok(())
-    }
-
-    pub fn add_system(&mut self, sys: Box<dyn System>) {
-        self.systems.push(Arc::new(Mutex::new(sys)));
-    }
-
-    pub fn iter(&self) -> Iter<'_, Arc<Mutex<Box<dyn System>>>> {
-        self.systems.iter()
-    }
 }

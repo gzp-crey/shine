@@ -54,7 +54,7 @@ impl<T: Resource> ResourceCell<T> {
 
     /// Set the resource of an empty cell and release the write lock
     pub unsafe fn set(&self, resource: T) {
-        debug_assert!(self.rw_token.is_write());
+        debug_assert!(self.rw_token.is_write_lock());
         // safety
         //  rw_token ensures the appropriate lock
         let res = &mut *self.resource.get();
@@ -77,7 +77,7 @@ impl<T: Resource> ResourceCell<T> {
     /// Types which are !Sync should only be accessed on the thread which owns the resource collection.
     #[inline]
     pub unsafe fn read(&self) -> &T {
-        debug_assert!(self.rw_token.is_read());
+        debug_assert!(self.rw_token.is_read_lock());
         // safety:
         //  rw_token ensures the appropriate lock
         (&*self.resource.get()).as_ref().unwrap()
@@ -98,7 +98,7 @@ impl<T: Resource> ResourceCell<T> {
     #[inline]
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn write(&self) -> &mut T {
-        debug_assert!(self.rw_token.is_write());
+        debug_assert!(self.rw_token.is_write_lock());
         // safety:
         // rw_state ensures the appropriate lock
         (&mut *self.resource.get()).as_mut().unwrap()

@@ -21,4 +21,7 @@ pub enum ECSError {
 
     #[error("Invalid resource claim")]
     ResourceClaimError,
+
+    #[error("System lock could not be claimed")]
+    SystemLockError,
 }
