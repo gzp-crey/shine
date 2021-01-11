@@ -4,7 +4,7 @@ use crate::{
     resources::{Resource, Resources},
     scheduler::{
         FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, MultiResClaim, MultiResMutClaim,
-        ResourceClaims, ResourceQuery, System, TaskGroup, SystemName,
+        ResourceClaims, ResourceQuery, System, SystemName, TaskGroup,
     },
     ECSError,
 };
@@ -45,11 +45,11 @@ impl<Func, C, R> FnSystemBuilder<Func, C, R> {
 /// Helper trait to set the tags for shared tagged resource claims
 /// #Example
 /// ```
-/// use shine_ecs::scheduler::prelude::*;
+/// use shine_ecs::scheduler::*;
 /// fn some_system(r1: MultiRes<u8>, r2: MultiRes<u16>) {}
 ///
-/// let mut sh = Schedule::default();
-/// sh.schedule(
+/// let mut tg = TaskGroup::default();
+/// tg.add(
 ///    some_system.system()
 ///        .try_claim_res::<u8, _>(|claim| claim.try_append_tags(&["one", "two"]))
 ///        .unwrap()
@@ -57,7 +57,6 @@ impl<Func, C, R> FnSystemBuilder<Func, C, R> {
 ///        .unwrap(),
 /// )
 /// .unwrap();
-
 /// ```
 pub trait WithMultiRes<C, HIndex> {
     fn claim_res<T, F>(self, claim: F) -> Self
@@ -102,11 +101,11 @@ impl<Func, C, R, HIndex> WithMultiRes<C, HIndex> for FnSystemBuilder<Func, C, R>
 /// Helper trait to set the tags for unique tagged resource claims
 /// #Example
 /// ```
-/// use shine_ecs::scheduler::prelude::*;
+/// use shine_ecs::scheduler::*;
 /// fn some_system(r1: MultiResMut<u8>, r2: MultiResMut<u16>) {}
 ///
-/// let mut sh = Schedule::default();
-/// sh.schedule(
+/// let mut tg = TaskGroup::default();
+/// tg.add(
 ///    some_system.system()
 ///        .try_claim_res_mut::<u8, _>(|claim| claim.try_append_tags(&["one", "two"]))
 ///        .unwrap()
@@ -173,8 +172,8 @@ where
         &self.debug_name
     }
 
-    fn name(&self) -> &Option<SystemName> {
-        &self.name
+    fn name(&self) -> Option<&SystemName> {
+        self.name.as_ref()
     }
 
     fn resource_claims(&self) -> &ResourceClaims {
@@ -241,7 +240,7 @@ macro_rules! impl_into_system {
 
                 $(resource_claims.add_claim({
                         let $resource : &<$resource as ResourceQuery>::Claim = claims.get();
-                        $resource.into_claim()
+                        $resource.to_claim()
                     });)*
 
                 Ok(Box::new(FnSystem {

@@ -28,7 +28,7 @@ pub struct PipelineKey {
 impl PipelineKey {
     pub fn new<V: VertexBufferDescriptor>(id: String, render_state: PipelineStateDescriptor) -> PipelineKey {
         PipelineKey {
-            id: id,
+            id,
             vertex_layouts: <V as VertexBufferDescriptor>::buffer_layouts(),
             render_state,
         }

@@ -1,25 +1,62 @@
 use crate::{
+    app::AppError,
     assets::vertex,
-    game::test1::Test1,
-    render::{PipelineDependency, PipelineKey},
+    game::test1::into_game_err,
+    render::{FrameTarget, PipelineKey},
+};
+use shine_ecs::{
+    resources::{ResourceId, Resources},
+    scheduler::{ResourceClaims, System, SystemName, TaskGroup},
+    ECSError,
 };
 
-/// Resources for the test
-pub struct TestScene {
-    pipeline: PipelineDependency,
-    //bind_group: Option<PipelineBindGroup>,
+pub struct TestPass {
+    pipeline_key: PipelineKey,
+    pipeline_id: Option<ResourceId>,
+    claims: ResourceClaims,
 }
 
-impl TestScene {
-    pub fn new(test: &Test1) -> TestScene {
-        TestScene {
-            pipeline: PipelineDependency::new(PipelineKey::new::<vertex::Null>(
-                test.pipeline.clone(),
-                Default::default(),
-            )),
+impl TestPass {
+    pub fn new(pipeline: String) -> Box<TestPass> {
+        Box::new(TestPass {
+            pipeline_key: PipelineKey::new::<vertex::Null>(pipeline, Default::default()),
+            pipeline_id: None,
+            claims: Default::default(),
+        })
+    }
+
+    pub fn set_render_state(&mut self, target: &FrameTarget) -> Result<(), AppError> {
+        let pipeline_states = target.get_render_states();
+        if self.pipeline_key.render_state != pipeline_states {
+            self.pipeline_key.render_state = pipeline_states;
+            self.pipeline_id = None;
+            self.pipeline_id = Some(ResourceId::from_object(&self.pipeline_key).map_err(into_game_err)?);
         }
+
+        Ok(())
     }
 }
+
+impl System for TestPass {
+    fn debug_name(&self) -> &str {
+        "TestPass"
+    }
+
+    fn name(&self) -> Option<&SystemName> {
+        None
+    }
+
+    /// Resources claims. Claim shall not change once scheduler execution was started.
+    fn resource_claims(&self) -> &ResourceClaims {
+        &self.claims
+    }
+
+    fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {
+        unimplemented!();
+        //Ok(TaskGroup::default())
+    }
+}
+
 /*
 fn render_system(claim: RenderTargetClaim) -> Box<dyn System> {
     render.system().with_claim::<RenderTargetRes>(claim)

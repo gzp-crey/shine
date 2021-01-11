@@ -1,5 +1,4 @@
 #![feature(async_closure)]
-#![feature(clamp)]
 #![allow(clippy::match_like_matches_macro)]
 
 mod world;

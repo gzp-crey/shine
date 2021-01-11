@@ -13,7 +13,7 @@ pub trait System: Send + Sync {
     fn debug_name(&self) -> &str;
 
     /// Name of the system to create explicit dependencies
-    fn name(&self) -> &Option<SystemName>;
+    fn name(&self) -> Option<&SystemName>;
     // Explicit dependency, those must complete before this system
     //fn dependencies(&self) -> &Vec<SystemName>;
 

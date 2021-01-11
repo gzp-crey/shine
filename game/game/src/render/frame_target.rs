@@ -1,3 +1,5 @@
+use crate::assets::PipelineStateDescriptor;
+
 //use shine_ecs::resources::{Res, ResMut};
 
 struct Inner {
@@ -28,5 +30,9 @@ impl FrameTarget {
 
     pub fn descriptor(&self) -> Option<&wgpu::SwapChainDescriptor> {
         self.inner.as_ref().map(|x| &x.descriptor)
+    }
+
+    pub fn get_render_states(&self) -> PipelineStateDescriptor {
+        self.inner.as_ref().map(|x| unimplemented!()).unwrap_or_default()
     }
 }

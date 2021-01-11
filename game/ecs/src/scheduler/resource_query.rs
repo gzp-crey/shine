@@ -16,7 +16,7 @@ use std::{
 };
 
 pub trait IntoResourceClaim {
-    fn into_claim(&self) -> ResourceClaim;
+    fn to_claim(&self) -> ResourceClaim;
 }
 
 pub trait ResourceQuery {
@@ -41,7 +41,7 @@ impl<T: Resource> Default for ResClaim<T> {
 }
 
 impl<T: Resource> IntoResourceClaim for ResClaim<T> {
-    fn into_claim(&self) -> ResourceClaim {
+    fn to_claim(&self) -> ResourceClaim {
         ResourceClaim::new(Some((TypeId::of::<T>(), ResourceId::Global)), None)
     }
 }
@@ -84,7 +84,7 @@ impl<T: Resource> Default for ResMutClaim<T> {
 }
 
 impl<T: Resource> IntoResourceClaim for ResMutClaim<T> {
-    fn into_claim(&self) -> ResourceClaim {
+    fn to_claim(&self) -> ResourceClaim {
         ResourceClaim::new(None, Some((TypeId::of::<T>(), ResourceId::Global)))
     }
 }
@@ -136,7 +136,7 @@ impl<T: Resource> MultiResClaim<T> {
         Self(ids, PhantomData)
     }
 
-    pub fn append_ids<'a, I: IntoIterator<Item = ResourceId>>(&mut self, iter: I) {
+    pub fn append_ids<I: IntoIterator<Item = ResourceId>>(&mut self, iter: I) {
         self.0.extend(iter);
     }
 
@@ -153,7 +153,7 @@ impl<T: Resource> MultiResClaim<T> {
         Ok(())
     }
 
-    pub fn try_append_objects<'a, I, K>(&mut self, iter: I) -> Result<(), ECSError>
+    pub fn try_append_objects<I, K>(&mut self, iter: I) -> Result<(), ECSError>
     where
         I: IntoIterator,
         I::Item: AsRef<K>,
@@ -169,7 +169,7 @@ impl<T: Resource> MultiResClaim<T> {
 }
 
 impl<T: Resource> IntoResourceClaim for MultiResClaim<T> {
-    fn into_claim(&self) -> ResourceClaim {
+    fn to_claim(&self) -> ResourceClaim {
         let immutable = self.0.iter().map(|c| (TypeId::of::<T>(), c.clone()));
         ResourceClaim::new(immutable, None)
     }
@@ -248,7 +248,7 @@ impl<T: Resource> MultiResMutClaim<T> {
         Self(ids, PhantomData)
     }
 
-    pub fn append_ids<'a, I: IntoIterator<Item = ResourceId>>(&mut self, iter: I) -> &mut Self {
+    pub fn append_ids<I: IntoIterator<Item = ResourceId>>(&mut self, iter: I) -> &mut Self {
         self.0.extend(iter);
         self
     }
@@ -282,7 +282,7 @@ impl<T: Resource> MultiResMutClaim<T> {
 }
 
 impl<T: Resource> IntoResourceClaim for MultiResMutClaim<T> {
-    fn into_claim(&self) -> ResourceClaim {
+    fn to_claim(&self) -> ResourceClaim {
         let mutable = self.0.iter().map(|c| (TypeId::of::<T>(), c.clone()));
         ResourceClaim::new(None, mutable)
     }

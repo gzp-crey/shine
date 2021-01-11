@@ -1,4 +1,9 @@
-use shine_ecs::{resources::Resources, scheduler::prelude::*};
+use shine_ecs::{
+    resources::Resources,
+    scheduler::{
+        IntoSystemBuilder, MultiRes, MultiResMut, Res, ResMut, Scheduler, TaskGroup, WithMultiRes, WithMultiResMut,
+    },
+};
 
 mod utils;
 
@@ -54,19 +59,21 @@ fn resource_access() {
     resources.insert_tagged("16", 16u16).unwrap();
 
     log::info!("registering systems...");
-    let mut sh = Schedule::default();
+    let mut tasks = TaskGroup::default();
+    let mut scheduler = Scheduler::default();
 
-    sh.schedule(sys0.system()).unwrap();
-    sh.schedule(sys3.system()).unwrap();
-    sh.schedule(
-        sys4.system()
-            .try_claim_res::<u8, _>(|claim| claim.try_append_tags(&["five", "six"]))
-            .unwrap()
-            .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["16"]))
-            .unwrap(),
-    )
-    .unwrap();
+    tasks.add(sys0.system()).unwrap();
+    tasks.add(sys3.system()).unwrap();
+    tasks
+        .add(
+            sys4.system()
+                .try_claim_res::<u8, _>(|claim| claim.try_append_tags(&["five", "six"]))
+                .unwrap()
+                .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["16"]))
+                .unwrap(),
+        )
+        .unwrap();
 
     log::info!("runing systems...");
-    sh.run(&mut resources).unwrap();
+    scheduler.run(&mut resources, &tasks).unwrap();
 }

@@ -20,6 +20,7 @@ impl Inner {
         self.lock.is_write_lock()
     }
 
+    #[allow(clippy::mut_from_ref)]
     fn unchecked_system(&self) -> &mut dyn System {
         assert!(self.lock.is_write_lock());
         // safety:
@@ -52,6 +53,7 @@ impl Task {
         self.inner.lock()
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn unchecked_system(&self) -> &mut dyn System {
         self.inner.unchecked_system()
     }

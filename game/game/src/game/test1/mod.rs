@@ -3,14 +3,18 @@ mod source;
 #[cfg(feature = "cook")]
 pub use self::source::*;
 
-mod scene;
-use self::scene::*;
+mod technique;
+mod test_pass;
+
+use self::technique::Technique;
+use self::test_pass::TestPass;
 use crate::{
     app::{App, AppError, GameFuture, GameLifecycle, GameSource},
     assets::{AssetError, AssetIO, Url},
     World,
 };
 use serde::{Deserialize, Serialize};
+use shine_ecs::scheduler::{IntoSystemBuilder, TaskGroup};
 use std::error::Error as StdError;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,7 +22,7 @@ pub enum Test1Type {
     Test1,
 }
 
-fn into_game_err<E: 'static + StdError>(error: E) -> AppError {
+pub fn into_game_err<E: 'static + StdError>(error: E) -> AppError {
     AppError::game("test1", error)
 }
 
@@ -57,14 +61,14 @@ impl GameLifecycle for Test1 {
         Box::pin(async move {
             world
                 .resources
-                .quick_insert(TestScene::new(&self))
+                .quick_insert(Technique::new(self.pipeline.clone()))
                 .map_err(into_game_err)?;
 
-            /*{
-                let mut render_schedule = Schedule::default();
-                render_schedule.schedule(render_system(claim));
-                world.add_stage("render", render_schedule);
-            }*/
+            {
+                let mut render_tasks = TaskGroup::default();
+                render_tasks.add(technique::render.system()).map_err(into_game_err)?;
+                world.add_stage("render", render_tasks);
+            }
 
             Ok(())
         })
@@ -73,7 +77,7 @@ impl GameLifecycle for Test1 {
     fn destroy<'a>(&'a mut self, world: &'a mut World) -> GameFuture<'a, Result<(), AppError>> {
         Box::pin(async move {
             world.clear_stages();
-            let _ = world.resources.remove::<TestScene>();
+            let _ = world.resources.remove::<Technique>();
 
             Ok(())
         })

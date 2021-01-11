@@ -389,16 +389,19 @@ impl<'store, T: Resource> ResourceStoreWrite<'store, T> {
         Self { cell }
     }
 
+    #[inline]
     fn store(&self) -> &ResourceStore<T> {
         self.cell.write()
     }
 
+    #[inline]
     #[allow(clippy::mut_from_ref)]
     fn store_mut(&self) -> &mut ResourceStore<T> {
         self.cell.write()
     }
 
     /// Return the unique id of the store
+    #[inline]
     pub fn generation(&self) -> usize {
         self.store().generation()
     }
