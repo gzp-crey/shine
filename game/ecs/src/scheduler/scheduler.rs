@@ -13,7 +13,7 @@ impl Scheduler {
             let _unlock_guard = finally(|| task.unlock());
             // safety:
             //  task.lock and _unlock_guard ansures the task can be executed
-            let mut system = unsafe { task.system() };
+            let system = unsafe { task.system() };
             system.run(resources)?;
         }
         Ok(())

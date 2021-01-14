@@ -3,69 +3,34 @@ use crate::{
     hlist_type,
     resources::{Resource, Resources},
     scheduler::{
-        FetchResource, IntoResourceClaim, IntoSystem, IntoSystemBuilder, MultiResClaim, MultiResMutClaim,
-        ResourceClaims, ResourceQuery, System, SystemName, TaskGroup,
+        FetchResource, IntoResourceClaim, IntoSystem, MultiResClaim, MultiResMutClaim, ResourceClaims, ResourceQuery,
+        System, SystemName, TaskGroup,
     },
     ECSError,
 };
-use std::{any, borrow::Cow, marker::PhantomData};
-
-/// Create a system from a function
-pub struct FnSystemBuilder<Func, C, R> {
-    func: Func,
-    name: Option<SystemName>,
-    dependencies: Vec<SystemName>,
-    claims: C,
-    _phantom: PhantomData<R>,
-}
-
-impl<Func, C, R> FnSystemBuilder<Func, C, R> {
-    #[must_use]
-    pub fn with_name(mut self, name: Option<SystemName>) -> Self {
-        self.name = name;
-        self
-    }
-
-    #[must_use]
-    pub fn with_dependencies(mut self, names: &[SystemName]) -> Self {
-        self.dependencies.extend(names.iter().cloned());
-        self
-    }
-
-    #[must_use]
-    pub fn with_claim<Claim, Index>(mut self, claim: Claim) -> Self
-    where
-        C: HFind<Claim, Index>,
-    {
-        *self.claims.get_mut() = claim;
-        self
-    }
-}
+use std::{any, borrow::Cow};
 
 /// Helper trait to set the tags for shared tagged resource claims
 /// #Example
 /// ```
-/// use shine_ecs::{ECSError, scheduler::*};
+/// # use shine_ecs::{ECSError, resources::ResourceId, scheduler::*};
 /// fn some_system(r1: MultiRes<u8>, r2: MultiRes<u16>) -> Result<TaskGroup, ECSError> {
 ///    Ok(TaskGroup::default())
 /// }
 ///
 /// let mut tg = TaskGroup::default();
-/// tg.add(
-///    some_system.system()
-///        .try_claim_res::<u8, _>(|claim| claim.try_append_tags(&["one", "two"]))
-///        .unwrap()
-///        .try_claim_res::<u16, _>(|claim| claim.try_append_tags(&["three"]))
-///        .unwrap(),
-/// )
-/// .unwrap();
+/// tg.add_system(
+///    some_system.into_system()
+///        .claim_res::<u8, _>(|claim| claim.append_ids(Some(ResourceId::Global)))
+///        .try_claim_res::<u16, _>(|claim| claim.try_append_tags(&["tag"])).unwrap(),
+/// );
 /// ```
 pub trait WithMultiRes<C, HIndex> {
     fn claim_res<T, F>(self, claim: F) -> Self
     where
         Self: Sized,
-        C: HFind<MultiResClaim<T>, HIndex>,
         T: Resource,
+        C: HFind<MultiResClaim<T>, HIndex>,
         F: FnMut(&mut MultiResClaim<T>);
 
     fn try_claim_res<T, F>(self, claim: F) -> Result<Self, ECSError>
@@ -76,53 +41,28 @@ pub trait WithMultiRes<C, HIndex> {
         F: FnMut(&mut MultiResClaim<T>) -> Result<(), ECSError>;
 }
 
-impl<Func, C, R, HIndex> WithMultiRes<C, HIndex> for FnSystemBuilder<Func, C, R> {
-    fn claim_res<T, F>(mut self, mut claim: F) -> Self
-    where
-        Self: Sized,
-        C: HFind<MultiResClaim<T>, HIndex>,
-        T: Resource,
-        F: FnMut(&mut MultiResClaim<T>),
-    {
-        claim(self.claims.get_mut());
-        self
-    }
-
-    fn try_claim_res<T, F>(mut self, mut claim: F) -> Result<Self, ECSError>
-    where
-        Self: Sized,
-        C: HFind<MultiResClaim<T>, HIndex>,
-        T: Resource,
-        F: FnMut(&mut MultiResClaim<T>) -> Result<(), ECSError>,
-    {
-        claim(self.claims.get_mut())?;
-        Ok(self)
-    }
-}
-
 /// Helper trait to set the tags for unique tagged resource claims
 /// #Example
 /// ```
-/// use shine_ecs::{ECSError, scheduler::*};
+/// # use shine_ecs::{ECSError, resources::ResourceId, scheduler::*};
 /// fn some_system(r1: MultiResMut<u8>, r2: MultiResMut<u16>) -> Result<TaskGroup, ECSError> {
 ///    Ok(TaskGroup::default())
 /// }
 ///
 /// let mut tg = TaskGroup::default();
-/// tg.add(
-///    some_system.system()
-///        .try_claim_res_mut::<u8, _>(|claim| claim.try_append_tags(&["one", "two"]))
-///        .unwrap()
-///        .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["three"]))
-///        .unwrap(),
-/// )
-/// .unwrap();
+/// tg.add_system(
+///    some_system.into_system()
+///        .claim_res_mut::<u8, _>(|claim| claim.append_ids(Some(ResourceId::Global)))
+///        .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["tag"])).unwrap(),
+/// );
 /// ```
 pub trait WithMultiResMut<C, Index> {
-    fn claim_res_mut<T: Resource, F: FnMut(&mut MultiResMutClaim<T>)>(self, claim: F) -> Self
+    fn claim_res_mut<T, F>(self, claim: F) -> Self
     where
         Self: Sized,
-        C: HFind<MultiResMutClaim<T>, Index>;
+        T: Resource,
+        C: HFind<MultiResMutClaim<T>, Index>,
+        F: FnMut(&mut MultiResMutClaim<T>);
 
     fn try_claim_res_mut<T, F>(self, claim: F) -> Result<Self, ECSError>
     where
@@ -132,39 +72,9 @@ pub trait WithMultiResMut<C, Index> {
         F: FnMut(&mut MultiResMutClaim<T>) -> Result<(), ECSError>;
 }
 
-impl<Func, C, R, Index> WithMultiResMut<C, Index> for FnSystemBuilder<Func, C, R> {
-    fn claim_res_mut<T, F>(mut self, mut claim: F) -> Self
-    where
-        Self: Sized,
-        C: HFind<MultiResMutClaim<T>, Index>,
-        T: Resource,
-        F: FnMut(&mut MultiResMutClaim<T>),
-    {
-        claim(self.claims.get_mut());
-        self
-    }
-
-    fn try_claim_res_mut<T, F>(mut self, mut claim: F) -> Result<Self, ECSError>
-    where
-        Self: Sized,
-        C: HFind<MultiResMutClaim<T>, Index>,
-        T: Resource,
-        F: FnMut(&mut MultiResMutClaim<T>) -> Result<(), ECSError>,
-    {
-        claim(self.claims.get_mut())?;
-        Ok(self)
-    }
-}
-
-macro_rules! fn_call {
-    ($func:ident, ($($resource: ident),*)) => {
-        $func($($resource,)*)
-    };
-}
-
 macro_rules! impl_into_system {
     ($sys: ident, ($($resource: ident),*)) => {
-        impl<Func, $($resource,)*> IntoSystemBuilder<($($resource,)*)> for Func
+        impl<Func, $($resource,)*> IntoSystem<($($resource,)*)> for Func
         where
             Func:
                 FnMut($($resource,)*) -> Result<TaskGroup, ECSError> +
@@ -172,17 +82,15 @@ macro_rules! impl_into_system {
                 + Send + Sync + 'static,
             $($resource: ResourceQuery,)*
         {
-            type Builder = FnSystemBuilder<Func,
-                             hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
-                             ($($resource,)*)>;
+            type System = $sys<Func, $($resource,)*>;
 
-            fn system(self) -> Self::Builder {
-                FnSystemBuilder {
+            fn into_system(self) -> Self::System {
+                $sys {
+                    debug_name: any::type_name::<Func>().into(),
                     name: None,
-                    func: self,
-                    dependencies: Default::default(),
-                    _phantom: PhantomData,
                     claims: Default::default(),
+                    resource_claims: None,
+                    func: self
                 }
             }
         }
@@ -199,7 +107,7 @@ macro_rules! impl_into_system {
             debug_name: Cow<'static, str>,
             name: Option<SystemName>,
             claims: hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
-            resource_claims: ResourceClaims,
+            resource_claims: Option<ResourceClaims>,
             func: Func,
         }
 
@@ -211,35 +119,83 @@ macro_rules! impl_into_system {
                 Send + Sync + 'static,
             $($resource: ResourceQuery,)*
         {
-            #[allow(unused_mut)]
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            pub fn new(
-                builder: FnSystemBuilder<
-                    Func,
-                    hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
-                    ($($resource,)*),
-                >
-            ) -> Result<Self, ECSError> {
-                let FnSystemBuilder{ func, name, claims, .. } = builder;
-                let debug_name = any::type_name::<Func>().into();
-                let mut resource_claims = ResourceClaims::default();
-
-                $(resource_claims.add_claim({
-                        let $resource : &<$resource as ResourceQuery>::Claim = claims.get();
-                        $resource.to_claim()
-                    });)*
-
-                Ok(Self {
-                    name,
-                    debug_name,
-                    claims,
-                    resource_claims,
-                    func
-                })
+            pub fn with_name(mut self, name: Option<SystemName>) -> Self {
+                self.name = name;
+                self
             }
         }
 
+        impl<HIndex, Func, $($resource,)*> WithMultiRes<hlist_type![$(<$resource as ResourceQuery>::Claim,)*], HIndex>
+            for $sys<Func, $($resource,)*>
+        where
+            Func:
+                FnMut( $($resource,)*) -> Result<TaskGroup, ECSError> +
+                FnMut( $(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*) -> Result<TaskGroup, ECSError> +
+                Send + Sync + 'static,
+            $($resource: ResourceQuery,)*
+        {
+            fn claim_res<T, F>(mut self, mut claim: F) -> Self
+            where
+                Self: Sized,
+                T: Resource,
+                hlist_type![$(<$resource as ResourceQuery>::Claim,)*]: HFind<MultiResClaim<T>, HIndex>,
+                F: FnMut(&mut MultiResClaim<T>),
+            {
+                claim(self.claims.get_mut());
+                self.resource_claims = None;
+                self
+            }
+
+            fn try_claim_res<T, F>(mut self, mut claim: F) -> Result<Self, ECSError>
+            where
+                Self: Sized,
+                T: Resource,
+                hlist_type![$(<$resource as ResourceQuery>::Claim,)*]: HFind<MultiResClaim<T>, HIndex>,
+                F: FnMut(&mut MultiResClaim<T>) -> Result<(), ECSError>,
+            {
+                claim(self.claims.get_mut())?;
+                self.resource_claims = None;
+                Ok(self)
+            }
+        }
+
+        impl<HIndex, Func, $($resource,)*> WithMultiResMut<hlist_type![$(<$resource as ResourceQuery>::Claim,)*], HIndex>
+            for $sys<Func, $($resource,)*>
+        where
+            Func:
+                FnMut( $($resource,)*) -> Result<TaskGroup, ECSError> +
+                FnMut( $(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*) -> Result<TaskGroup, ECSError> +
+                Send + Sync + 'static,
+            $($resource: ResourceQuery,)*
+        {
+            fn claim_res_mut<T, F>(mut self, mut claim: F) -> Self
+            where
+                Self: Sized,
+                T: Resource,
+                hlist_type![$(<$resource as ResourceQuery>::Claim,)*]: HFind<MultiResMutClaim<T>, HIndex>,
+                F: FnMut(&mut MultiResMutClaim<T>),
+            {
+                claim(self.claims.get_mut());
+                self.resource_claims = None;
+                self
+            }
+
+            fn try_claim_res_mut<T, F>(mut self, mut claim: F) -> Result<Self, ECSError>
+            where
+                Self: Sized,
+                T: Resource,
+                hlist_type![$(<$resource as ResourceQuery>::Claim,)*]: HFind<MultiResMutClaim<T>, HIndex>,
+                F: FnMut(&mut MultiResMutClaim<T>) -> Result<(), ECSError>,
+            {
+                claim(self.claims.get_mut())?;
+                self.resource_claims = None;
+                Ok(self)
+            }
+        }
+
+        #[allow(unused_variables)]
+        #[allow(unused_mut)]
+        #[allow(non_snake_case)]
         impl<Func, $($resource,)*> System for $sys<Func, $($resource,)*>
         where
             Func:
@@ -256,11 +212,19 @@ macro_rules! impl_into_system {
                 self.name.as_ref()
             }
 
-            fn resource_claims(&self) -> &ResourceClaims {
-                &self.resource_claims
+            fn resource_claims(&mut self) -> &ResourceClaims {
+                let claims = &self.claims;
+                self.resource_claims.get_or_insert_with(|| {
+                    let mut resource_claims = ResourceClaims::default();
+                    $(resource_claims.add_claim({
+                        let $resource : &<$resource as ResourceQuery>::Claim = claims.get();
+                        $resource.to_claim()
+                    });)*
+                    resource_claims
+                })
             }
 
-            fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {                
+            fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {
                 $(
                     let mut $resource = <<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::fetch(
                         resources,

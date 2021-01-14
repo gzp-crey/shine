@@ -1,5 +1,5 @@
 use crate::{
-    scheduler::{IntoSystem, System, Task},
+    scheduler::{System, Task},
     ECSError,
 };
 use std::{ops::Deref, sync::Arc};
@@ -7,7 +7,10 @@ use std::{ops::Deref, sync::Arc};
 pub trait Runnable {
     /// Prepare and lock for run
     fn lock(&self) -> Result<(), ECSError>;
-    /// Get the system to run. Unsafe as locking is not guarded.
+    /// Get the system to run.
+    /// # Safety
+    ///  Calling this function while the object is not locked may result in undefined behaviour.
+    #[allow(clippy::mut_from_ref)]
     unsafe fn system(&self) -> &mut dyn System;
     /// Release after run
     fn unlock(&self);
@@ -20,24 +23,38 @@ pub struct TaskGroup {
 }
 
 impl TaskGroup {
-    pub fn from_tasks<I>(&mut self, tasks: I) -> TaskGroup
+    pub fn from_tasks<I>(tasks: I) -> TaskGroup
     where
         I: IntoIterator,
         I::Item: Into<Arc<dyn Runnable>>,
     {
-        TaskGroup {
-            tasks: tasks.into_iter().map(|x| x.into()).collect(),
-        }
+        let mut task = TaskGroup::default();
+        task.add_tasks(tasks);
+        task
     }
 
-    /*pub fn add<R, S: IntoSystem<R>>(&mut self, sys: S) -> Result<(), ECSError> {
-        let system = Task::new(sys)?;
-        self.add_task(system.into());
-        Ok(())
-    }*/
+    pub fn add_task<T: Into<Arc<dyn Runnable>>>(&mut self, task: T) {
+        self.tasks.push(task.into());
+    }
 
-    pub fn add(&mut self, sys: Arc<dyn Runnable>) {
-        self.tasks.push(sys);
+    pub fn add_tasks<I>(&mut self, tasks: I)
+    where
+        I: IntoIterator,
+        I::Item: Into<Arc<dyn Runnable>>,
+    {
+        self.tasks.extend(tasks.into_iter().map(|t| t.into()));
+    }
+
+    pub fn from_system<S: 'static + System>(&mut self, sys: S) -> TaskGroup {
+        let mut task = TaskGroup::default();
+        task.add_system(sys);
+        task
+    }
+
+    pub fn add_system<S: 'static + System>(&mut self, sys: S) {
+        let task = Task::new(sys);
+        let task: Arc<dyn Runnable> = task;
+        self.add_task(task);
     }
 }
 

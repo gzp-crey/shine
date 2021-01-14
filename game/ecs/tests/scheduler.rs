@@ -1,8 +1,6 @@
 use shine_ecs::{
     resources::Resources,
-    scheduler::{
-        IntoSystemBuilder, MultiRes, MultiResMut, Res, ResMut, Scheduler, TaskGroup, WithMultiRes, WithMultiResMut,
-    },
+    scheduler::{IntoSystem, MultiRes, MultiResMut, Res, ResMut, Scheduler, TaskGroup, WithMultiRes, WithMultiResMut},
     ECSError,
 };
 
@@ -66,17 +64,13 @@ fn resource_access() {
     let mut tasks = TaskGroup::default();
     let mut scheduler = Scheduler::default();
 
-    tasks.add(sys0.system()).unwrap();
-    tasks.add(sys3.system()).unwrap();
-    tasks
-        .add(
-            sys4.system()
-                .try_claim_res::<u8, _>(|claim| claim.try_append_tags(&["five", "six"]))
-                .unwrap()
-                .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["16"]))
-                .unwrap(),
-        )
-        .unwrap();
+    tasks.add_system(sys0.into_system());
+    tasks.add_system(sys3.into_system().with_name(None));
+    tasks.add_system(
+        sys4.into_system()
+            .claim_res::<u8, _>(|claim| claim.try_append_tags(&["five", "six"]).unwrap())
+            .claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["16"]).unwrap()),
+    );
 
     log::info!("runing systems...");
     scheduler.run(&mut resources, &tasks).unwrap();

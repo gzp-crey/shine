@@ -17,24 +17,17 @@ pub trait System: Send + Sync {
     // Explicit dependency, those must complete before this system
     //fn dependencies(&self) -> &Vec<SystemName>;
 
-    /// Resources claims. Claim shall not change once scheduler execution was started.
-    fn resource_claims(&self) -> &ResourceClaims;
+    /// Collect and return resources claims.  
+    fn resource_claims(&mut self) -> &ResourceClaims;
 
     /// Execute the task. On completion it can request a new set of system to be executed.
     fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError>;
 }
 
 /// Trait to convert anything into a System.
-/// The R genereic parameter is a tuple of all the resource queries
+/// The R generic parameter is a tuple of all the resource queries
 pub trait IntoSystem<R> {
-    fn into_system(self) -> Result<Box<dyn System>, ECSError>;
-}
+    type System: System;
 
-/// Trait to convert anything into a (system) Builder. Before constructing the system one may add extra
-/// scheduling parameters.
-pub trait IntoSystemBuilder<R> {
-    type Builder: IntoSystem<R>;
-
-    #[must_use]
-    fn system(self) -> Self::Builder;
+    fn into_system(self) -> Self::System;
 }

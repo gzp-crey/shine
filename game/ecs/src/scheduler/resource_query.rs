@@ -248,9 +248,8 @@ impl<T: Resource> MultiResMutClaim<T> {
         Self(ids, PhantomData)
     }
 
-    pub fn append_ids<I: IntoIterator<Item = ResourceId>>(&mut self, iter: I) -> &mut Self {
+    pub fn append_ids<I: IntoIterator<Item = ResourceId>>(&mut self, iter: I) {
         self.0.extend(iter);
-        self
     }
 
     pub fn try_append_tags<I>(&mut self, iter: I) -> Result<(), ECSError>

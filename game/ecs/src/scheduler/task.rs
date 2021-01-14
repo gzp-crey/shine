@@ -1,11 +1,13 @@
-use crate::{core::rwtoken::RWToken, scheduler::System, ECSError};
+use crate::{
+    core::rwtoken::RWToken,
+    scheduler::{Runnable, System},
+    ECSError,
+};
 use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
-
-use super::{IntoSystem, Runnable};
 
 /// Wrapper for system to add required bookeeping and locking for the scheduler.
 pub struct Task<S: System> {
@@ -31,7 +33,6 @@ impl<S: System> Runnable for Task<S> {
         self.lock.try_write_lock().map_err(|_| ECSError::SystemLockError)
     }
 
-    #[allow(clippy::mut_from_ref)]
     unsafe fn system(&self) -> &mut dyn System {
         assert!(self.lock.is_write_lock());
         &mut *self.system.get()
