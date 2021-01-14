@@ -33,6 +33,17 @@ impl FrameTarget {
     }
 
     pub fn get_render_states(&self) -> PipelineStateDescriptor {
-        self.inner.as_ref().map(|x| unimplemented!()).unwrap_or_default()
+        self.inner
+            .as_ref()
+            .map(|x| PipelineStateDescriptor {
+                color_states: vec![wgpu::ColorStateDescriptor {
+                    format: x.descriptor.format,
+                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    color_blend: wgpu::BlendDescriptor::REPLACE,
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
+                depth_state: None,
+            })
+            .unwrap_or_default()
     }
 }

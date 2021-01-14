@@ -222,10 +222,12 @@ impl Resources {
             .get_with_id(id)
     }
 
-    pub fn get_with_ids<'i, T: Resource, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiRead<'_, T>, ECSError> {
+    pub fn get_with_ids<T, I>(&self, ids: I) -> Result<ResourceMultiRead<'_, T>, ECSError>
+    where
+        T: Resource,
+        I: IntoIterator,
+        I::Item: AsRef<ResourceId>,
+    {
         self.get_store::<T>()
             .ok_or_else(|| ECSError::ResourceTypeNotFound(type_name::<T>().into()))?
             .get_with_ids(ids)
@@ -241,10 +243,12 @@ impl Resources {
             .get_mut_with_id(id)
     }
 
-    pub fn get_mut_with_ids<'i, T: Resource, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiWrite<'_, T>, ECSError> {
+    pub fn get_mut_with_ids<T, I>(&self, ids: I) -> Result<ResourceMultiWrite<'_, T>, ECSError>
+    where
+        T: Resource,
+        I: IntoIterator,
+        I::Item: AsRef<ResourceId>,
+    {
         self.get_store::<T>()
             .ok_or_else(|| ECSError::ResourceTypeNotFound(type_name::<T>().into()))?
             .get_mut_with_ids(ids)
@@ -314,10 +318,12 @@ impl<'a> SyncResources<'a> {
             .get_with_id(id)
     }
 
-    pub fn get_with_ids<'i, T: Resource + Sync + Send, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiRead<'_, T>, ECSError> {
+    pub fn get_with_ids<T, I>(&self, ids: I) -> Result<ResourceMultiRead<'_, T>, ECSError>
+    where
+        T: Resource + Send + Sync,
+        I: IntoIterator,
+        I::Item: AsRef<ResourceId>,
+    {
         self.get_store::<T>()
             .ok_or_else(|| ECSError::ResourceTypeNotFound(type_name::<T>().into()))?
             .get_with_ids(ids)
@@ -336,10 +342,12 @@ impl<'a> SyncResources<'a> {
             .get_mut_with_id(id)
     }
 
-    pub fn get_mut_with_ids<'i, T: Resource + Sync + Send, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiWrite<'_, T>, ECSError> {
+    pub fn get_mut_with_ids<T, I>(&self, ids: I) -> Result<ResourceMultiWrite<'_, T>, ECSError>
+    where
+        T: Resource + Send + Sync,
+        I: IntoIterator,
+        I::Item: AsRef<ResourceId>,
+    {
         self.get_store::<T>()
             .ok_or_else(|| ECSError::ResourceTypeNotFound(type_name::<T>().into()))?
             .get_mut_with_ids(ids)

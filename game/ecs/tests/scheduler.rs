@@ -3,24 +3,27 @@ use shine_ecs::{
     scheduler::{
         IntoSystemBuilder, MultiRes, MultiResMut, Res, ResMut, Scheduler, TaskGroup, WithMultiRes, WithMultiResMut,
     },
+    ECSError,
 };
 
 mod utils;
 
-fn sys0() {
+fn sys0() -> Result<TaskGroup, ECSError> {
     log::info!("sys0");
+    Ok(TaskGroup::default())
 }
 
-fn sys3(r1: Res<usize>, r2: ResMut<String>, r3: Res<u8>) {
+fn sys3(r1: Res<usize>, r2: ResMut<String>, r3: Res<u8>) -> Result<TaskGroup, ECSError> {
     log::info!("r1={:?}", &*r1);
     assert!(*r1 == 1);
     log::info!("r2={:?}", &*r2);
     assert!(&*r2 == "string");
     log::info!("r3={:?}", &*r3);
     assert!(*r3 == 3);
+    Ok(TaskGroup::default())
 }
 
-fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: MultiRes<u8>, r4: MultiResMut<u16>) {
+fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: MultiRes<u8>, r4: MultiResMut<u16>) -> Result<TaskGroup, ECSError> {
     log::info!("claims: u8: {:?}", r3.claim());
     log::info!("claims: u16: {:?}", r4.claim());
     log::info!("r1={:?}", &*r1);
@@ -35,6 +38,7 @@ fn sys4(r1: Res<usize>, r2: ResMut<String>, r3: MultiRes<u8>, r4: MultiResMut<u1
     assert!(r4.len() == 1);
     log::info!("r4[0]={:?}", r4[0]);
     assert!(r4[0] == 16);
+    Ok(TaskGroup::default())
 }
 
 #[test]

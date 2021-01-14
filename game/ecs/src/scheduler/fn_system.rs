@@ -45,8 +45,10 @@ impl<Func, C, R> FnSystemBuilder<Func, C, R> {
 /// Helper trait to set the tags for shared tagged resource claims
 /// #Example
 /// ```
-/// use shine_ecs::scheduler::*;
-/// fn some_system(r1: MultiRes<u8>, r2: MultiRes<u16>) {}
+/// use shine_ecs::{ECSError, scheduler::*};
+/// fn some_system(r1: MultiRes<u8>, r2: MultiRes<u16>) -> Result<TaskGroup, ECSError> {
+///    Ok(TaskGroup::default())
+/// }
 ///
 /// let mut tg = TaskGroup::default();
 /// tg.add(
@@ -101,8 +103,10 @@ impl<Func, C, R, HIndex> WithMultiRes<C, HIndex> for FnSystemBuilder<Func, C, R>
 /// Helper trait to set the tags for unique tagged resource claims
 /// #Example
 /// ```
-/// use shine_ecs::scheduler::*;
-/// fn some_system(r1: MultiResMut<u8>, r2: MultiResMut<u16>) {}
+/// use shine_ecs::{ECSError, scheduler::*};
+/// fn some_system(r1: MultiResMut<u8>, r2: MultiResMut<u16>) -> Result<TaskGroup, ECSError> {
+///    Ok(TaskGroup::default())
+/// }
 ///
 /// let mut tg = TaskGroup::default();
 /// tg.add(
@@ -152,41 +156,6 @@ impl<Func, C, R, Index> WithMultiResMut<C, Index> for FnSystemBuilder<Func, C, R
     }
 }
 
-pub struct FnSystem<Func, Claims>
-where
-    Func: FnMut(&Resources, &Claims) -> Result<(), ECSError>,
-{
-    debug_name: Cow<'static, str>,
-    name: Option<SystemName>,
-    claims: Claims,
-    resource_claims: ResourceClaims,
-    func: Func,
-}
-
-impl<Func, Claims> System for FnSystem<Func, Claims>
-where
-    Func: FnMut(&Resources, &Claims) -> Result<(), ECSError> + Send + Sync,
-    Claims: 'static + Send + Sync,
-{
-    fn debug_name(&self) -> &str {
-        &self.debug_name
-    }
-
-    fn name(&self) -> Option<&SystemName> {
-        self.name.as_ref()
-    }
-
-    fn resource_claims(&self) -> &ResourceClaims {
-        &self.resource_claims
-    }
-
-    fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {
-        log::trace!("Running system [{:?}] - {:?}", self.name, self.debug_name());
-        (self.func)(resources, &self.claims)?;
-        Ok(TaskGroup::default())
-    }
-}
-
 macro_rules! fn_call {
     ($func:ident, ($($resource: ident),*)) => {
         $func($($resource,)*)
@@ -194,12 +163,12 @@ macro_rules! fn_call {
 }
 
 macro_rules! impl_into_system {
-    (($($resource: ident),*)) => {
+    ($sys: ident, ($($resource: ident),*)) => {
         impl<Func, $($resource,)*> IntoSystemBuilder<($($resource,)*)> for Func
         where
             Func:
-                FnMut($($resource,)*) +
-                FnMut($(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*)
+                FnMut($($resource,)*) -> Result<TaskGroup, ECSError> +
+                FnMut($(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*) -> Result<TaskGroup, ECSError>
                 + Send + Sync + 'static,
             $($resource: ResourceQuery,)*
         {
@@ -218,23 +187,41 @@ macro_rules! impl_into_system {
             }
         }
 
-        impl<Func, $($resource,)*> IntoSystem<($($resource,)*)>
-            for FnSystemBuilder<
-                    Func,
-                    hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
-                    ($($resource,)*)>
+        /// System created from a function
+        pub struct $sys<Func, $($resource,)*>
         where
             Func:
-                FnMut( $($resource,)*) +
-                FnMut( $(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*) +
+                FnMut( $($resource,)*) -> Result<TaskGroup, ECSError> +
+                FnMut( $(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*) -> Result<TaskGroup, ECSError> +
+                Send + Sync + 'static,
+            $($resource: ResourceQuery,)*
+        {
+            debug_name: Cow<'static, str>,
+            name: Option<SystemName>,
+            claims: hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
+            resource_claims: ResourceClaims,
+            func: Func,
+        }
+
+        impl<Func, $($resource,)*> $sys<Func, $($resource,)*>
+        where
+            Func:
+                FnMut( $($resource,)*) -> Result<TaskGroup, ECSError> +
+                FnMut( $(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*) -> Result<TaskGroup, ECSError> +
                 Send + Sync + 'static,
             $($resource: ResourceQuery,)*
         {
             #[allow(unused_mut)]
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
-            fn into_system(self) -> Result<Box<dyn System>, ECSError> {
-                let FnSystemBuilder{ mut func, name, claims, .. } = self;
+            pub fn new(
+                builder: FnSystemBuilder<
+                    Func,
+                    hlist_type![$(<$resource as ResourceQuery>::Claim,)*],
+                    ($($resource,)*),
+                >
+            ) -> Result<Self, ECSError> {
+                let FnSystemBuilder{ func, name, claims, .. } = builder;
                 let debug_name = any::type_name::<Func>().into();
                 let mut resource_claims = ResourceClaims::default();
 
@@ -243,44 +230,66 @@ macro_rules! impl_into_system {
                         $resource.to_claim()
                     });)*
 
-                Ok(Box::new(FnSystem {
+                Ok(Self {
                     name,
                     debug_name,
-                    resource_claims,
                     claims,
-                    func: move |resources, claims| {
-                        $(
-                            let mut $resource = <<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::fetch(
-                                resources,
-                                {
-                                    let $resource : &<$resource as ResourceQuery>::Claim = claims.get();
-                                    $resource
-                                }
-                            )?;
-                        )*
-                        fn_call!(func, ($($resource),*));
-                        Ok(())
-                    }
-                }))
+                    resource_claims,
+                    func
+                })
+            }
+        }
+
+        impl<Func, $($resource,)*> System for $sys<Func, $($resource,)*>
+        where
+            Func:
+                FnMut( $($resource,)*) -> Result<TaskGroup, ECSError> +
+                FnMut( $(<<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::Item,)*) -> Result<TaskGroup, ECSError> +
+                Send + Sync + 'static,
+            $($resource: ResourceQuery,)*
+        {
+            fn debug_name(&self) -> &str {
+                &self.debug_name
+            }
+
+            fn name(&self) -> Option<&SystemName> {
+                self.name.as_ref()
+            }
+
+            fn resource_claims(&self) -> &ResourceClaims {
+                &self.resource_claims
+            }
+
+            fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {                
+                $(
+                    let mut $resource = <<$resource as ResourceQuery>::Fetch as FetchResource<'_, <$resource as ResourceQuery>::Claim>>::fetch(
+                        resources,
+                        {
+                            let $resource : &<$resource as ResourceQuery>::Claim = self.claims.get();
+                            $resource
+                        }
+                    )?;
+                )*
+                (self.func)($($resource,)*)
             }
         }
     }
 }
 
 macro_rules! impl_into_systems {
-    ($($resource: ident),*) => {
-        impl_into_system!(($($resource),*));
+    ($sys: ident, $($resource: ident),*) => {
+        impl_into_system!($sys, ($($resource),*));
     };
 }
 
-impl_into_systems!();
-impl_into_systems!(Ra);
-impl_into_systems!(Ra, Rb);
-impl_into_systems!(Ra, Rb, Rc);
-impl_into_systems!(Ra, Rb, Rc, Rd);
-impl_into_systems!(Ra, Rb, Rc, Rd, Re);
-impl_into_systems!(Ra, Rb, Rc, Rd, Re, Rf);
-impl_into_systems!(Ra, Rb, Rc, Rd, Re, Rf, Rg);
-impl_into_systems!(Ra, Rb, Rc, Rd, Re, Rf, Rg, Rh);
-impl_into_systems!(Ra, Rb, Rc, Rd, Re, Rf, Rg, Rh, Ri);
-impl_into_systems!(Ra, Rb, Rc, Rd, Re, Rf, Rg, Rh, Ri, Rj);
+impl_into_systems!(FNSystem0,);
+impl_into_systems!(FNSystem1, Ra);
+impl_into_systems!(FNSystem2, Ra, Rb);
+impl_into_systems!(FNSystem3, Ra, Rb, Rc);
+impl_into_systems!(FNSystem4, Ra, Rb, Rc, Rd);
+impl_into_systems!(FNSystem5, Ra, Rb, Rc, Rd, Re);
+impl_into_systems!(FNSystem6, Ra, Rb, Rc, Rd, Re, Rf);
+impl_into_systems!(FNSystem7, Ra, Rb, Rc, Rd, Re, Rf, Rg);
+impl_into_systems!(FNSystem8, Ra, Rb, Rc, Rd, Re, Rf, Rg, Rh);
+impl_into_systems!(FNSystem9, Ra, Rb, Rc, Rd, Re, Rf, Rg, Rh, Ri);
+impl_into_systems!(FNSystem10, Ra, Rb, Rc, Rd, Re, Rf, Rg, Rh, Ri, Rj);

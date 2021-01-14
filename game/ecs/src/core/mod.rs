@@ -6,3 +6,6 @@ pub mod ids;
 pub mod observer;
 pub mod rwtoken;
 pub mod spscstate;
+
+mod finally;
+pub use finally::finally;

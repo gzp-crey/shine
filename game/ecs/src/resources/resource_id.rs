@@ -47,3 +47,10 @@ impl ResourceId {
         }
     }
 }
+
+impl AsRef<ResourceId> for ResourceId {
+    #[inline]
+    fn as_ref(&self) -> &ResourceId {
+        self
+    }
+}

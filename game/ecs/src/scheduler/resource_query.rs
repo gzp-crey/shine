@@ -192,7 +192,7 @@ impl<'a, T: Resource> FetchResource<'a, MultiResClaim<T>> for MultiResFetch<T> {
     type Item = MultiRes<'a, T>;
 
     fn fetch<'r: 'a>(resources: &'r Resources, claims: &'r MultiResClaim<T>) -> Result<Self::Item, ECSError> {
-        let resources = resources.get_with_ids::<T, _>(&claims.0)?;
+        let resources = resources.get_with_ids::<T, _>(claims.0.iter())?;
         Ok(MultiRes(resources, claims))
     }
 }

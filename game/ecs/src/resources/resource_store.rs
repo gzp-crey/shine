@@ -292,17 +292,18 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         Ok(ResourceRead::new(store, cell))
     }
 
-    pub fn get_with_ids<'i, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiRead<'store, T>, ECSError> {
+    pub fn get_with_ids<I>(&self, ids: I) -> Result<ResourceMultiRead<'store, T>, ECSError>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<ResourceId>,
+    {
         let store = self.clone();
         let cells = ids
             .into_iter()
             .map(|id| {
                 store
-                    .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.clone()))
+                    .get_cell(id.as_ref())
+                    .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.as_ref().clone()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiRead::new(store, cells))
@@ -320,17 +321,18 @@ impl<'store, T: Resource> ResourceStoreRead<'store, T> {
         Ok(ResourceWrite::new(store, cell))
     }
 
-    pub fn get_mut_with_ids<'i, I: IntoIterator<Item = &'i ResourceId>>(
-        &self,
-        ids: I,
-    ) -> Result<ResourceMultiWrite<'store, T>, ECSError> {
+    pub fn get_mut_with_ids<I>(&self, ids: I) -> Result<ResourceMultiWrite<'store, T>, ECSError>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<ResourceId>,
+    {
         let store = self.clone();
         let cells = ids
             .into_iter()
             .map(|id| {
                 store
-                    .get_cell(id)
-                    .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.clone()))
+                    .get_cell(id.as_ref())
+                    .ok_or_else(|| ECSError::ResourceNotFound(type_name::<T>().into(), id.as_ref().clone()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ResourceMultiWrite::new(store, cells))
