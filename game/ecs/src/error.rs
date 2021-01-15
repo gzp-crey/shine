@@ -1,11 +1,11 @@
 use crate::resources::ResourceId;
-use std::borrow::Cow;
+use std::{borrow::Cow, error::Error as StdError, sync::Arc};
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum ECSError {
-    #[error("Resource id error: {0:?}")]
-    ResourceId(#[from] Box<dyn std::error::Error>),
+    #[error("Resource id error")]
+    ResourceId(#[source] Arc<dyn StdError + Send + Sync>),
 
     #[error("Resource store for {0} already registered")]
     ResourceAlreadyRegistered(Cow<'static, str>),

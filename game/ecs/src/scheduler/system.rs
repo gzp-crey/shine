@@ -18,7 +18,7 @@ pub trait System: Send + Sync {
     //fn dependencies(&self) -> &Vec<SystemName>;
 
     /// Collect and return resources claims.  
-    fn resource_claims(&mut self) -> &ResourceClaims;
+    fn resource_claims(&mut self) -> Result<&ResourceClaims, ECSError>;
 
     /// Execute the task. On completion it can request a new set of system to be executed.
     fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError>;

@@ -1,8 +1,6 @@
 use crate::{
-    app::AppError,
     assets::vertex,
-    game::test1::into_game_err,
-    render::{FrameTarget, PipelineKey},
+    render::{FrameTarget, Pipeline, PipelineKey},
 };
 use shine_ecs::{
     resources::{ResourceId, Resources},
@@ -12,28 +10,22 @@ use shine_ecs::{
 
 pub struct TestPass {
     pipeline_key: PipelineKey,
-    pipeline_id: Option<ResourceId>,
-    claims: ResourceClaims,
+    resource_claims: Option<Result<ResourceClaims, ECSError>>,
 }
 
 impl TestPass {
-    pub fn new(pipeline: String) -> Box<TestPass> {
-        Box::new(TestPass {
+    pub fn new(pipeline: String) -> TestPass {
+        TestPass {
             pipeline_key: PipelineKey::new::<vertex::Null>(pipeline, Default::default()),
-            pipeline_id: None,
-            claims: Default::default(),
-        })
+            resource_claims: None,
+        }
     }
 
-    pub fn set_render_state(&mut self, target: &FrameTarget) -> Result<(), AppError> {
+    pub fn set_render_state(&mut self, target: &FrameTarget) {
         let pipeline_states = target.get_render_states();
         if self.pipeline_key.render_state != pipeline_states {
             self.pipeline_key.render_state = pipeline_states;
-            self.pipeline_id = None;
-            self.pipeline_id = Some(ResourceId::from_object(&self.pipeline_key).map_err(into_game_err)?);
         }
-
-        Ok(())
     }
 }
 
@@ -47,13 +39,21 @@ impl System for TestPass {
     }
 
     /// Resources claims. Claim shall not change once scheduler execution was started.
-    fn resource_claims(&self) -> &ResourceClaims {
-        &self.claims
+    fn resource_claims(&mut self) -> Result<&ResourceClaims, ECSError> {
+        let pipeline_key = &self.pipeline_key;
+        self.resource_claims
+            .get_or_insert_with(|| {
+                let mut claims = ResourceClaims::default();
+                claims.add_immutable::<Pipeline, _>(Some(ResourceId::from_object(pipeline_key)?));
+                Ok(claims)
+            })
+            .as_ref()
+            .map_err(|err| err.clone())
     }
 
     fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {
-        unimplemented!();
-        //Ok(TaskGroup::default())
+        //unimplemented!();
+        Ok(TaskGroup::default())
     }
 }
 

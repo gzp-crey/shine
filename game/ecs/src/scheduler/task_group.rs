@@ -23,18 +23,33 @@ pub struct TaskGroup {
 }
 
 impl TaskGroup {
+    pub fn from_system<S: 'static + System>(sys: S) -> TaskGroup {
+        Self::from_task(Task::new(sys))
+    }
+
+    pub fn add_system<S: 'static + System>(&mut self, sys: S) {
+        self.add_task(Task::new(sys));
+    }
+
+    pub fn from_task<S: 'static + System>(task: Arc<Task<S>>) -> TaskGroup {
+        let mut tg = TaskGroup::default();
+        tg.add_task(task);
+        tg
+    }
+
+    pub fn add_task<S: 'static + System>(&mut self, task: Arc<Task<S>>) {
+        let task : Arc<dyn Runnable> = task;
+        self.tasks.push(task);
+    }
+
     pub fn from_tasks<I>(tasks: I) -> TaskGroup
     where
         I: IntoIterator,
         I::Item: Into<Arc<dyn Runnable>>,
     {
-        let mut task = TaskGroup::default();
-        task.add_tasks(tasks);
-        task
-    }
-
-    pub fn add_task<T: Into<Arc<dyn Runnable>>>(&mut self, task: T) {
-        self.tasks.push(task.into());
+        let mut tg = TaskGroup::default();
+        tg.add_tasks(tasks);
+        tg
     }
 
     pub fn add_tasks<I>(&mut self, tasks: I)
@@ -43,18 +58,6 @@ impl TaskGroup {
         I::Item: Into<Arc<dyn Runnable>>,
     {
         self.tasks.extend(tasks.into_iter().map(|t| t.into()));
-    }
-
-    pub fn from_system<S: 'static + System>(&mut self, sys: S) -> TaskGroup {
-        let mut task = TaskGroup::default();
-        task.add_system(sys);
-        task
-    }
-
-    pub fn add_system<S: 'static + System>(&mut self, sys: S) {
-        let task = Task::new(sys);
-        let task: Arc<dyn Runnable> = task;
-        self.add_task(task);
     }
 }
 

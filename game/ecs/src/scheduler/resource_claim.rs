@@ -1,4 +1,4 @@
-use crate::resources::ResourceId;
+use crate::resources::{Resource, ResourceId};
 use std::{any::TypeId, collections::HashSet};
 
 #[derive(Default, Debug)]
@@ -50,6 +50,26 @@ impl ResourceClaims {
         let ResourceClaim { immutable, mutable } = claim;
         immutable.into_iter().for_each(|x| self.store_immutable(x));
         mutable.into_iter().for_each(|x| self.store_mutable(x));
+    }
+
+    pub fn add_immutable<T, I>(&mut self, immutable: I)
+    where
+        T: Resource,
+        I: IntoIterator<Item = ResourceId>,
+    {
+        immutable
+            .into_iter()
+            .for_each(|x| self.store_immutable((TypeId::of::<T>(), x)));
+    }
+
+    pub fn add_mutable<T, I>(&mut self, mutable: I)
+    where
+        T: Resource,
+        I: IntoIterator<Item = ResourceId>,
+    {
+        mutable
+            .into_iter()
+            .for_each(|x| self.store_mutable((TypeId::of::<T>(), x)));
     }
 
     /*pub fn is_claimed_immutable(&self, id: &(TypeId, ResourceId)) -> bool {

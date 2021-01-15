@@ -14,7 +14,7 @@ use crate::{
     World,
 };
 use serde::{Deserialize, Serialize};
-use shine_ecs::scheduler::{IntoSystemBuilder, TaskGroup};
+use shine_ecs::scheduler::{IntoSystem, TaskGroup};
 use std::error::Error as StdError;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,11 +64,7 @@ impl GameLifecycle for Test1 {
                 .quick_insert(Technique::new(self.pipeline.clone()))
                 .map_err(into_game_err)?;
 
-            {
-                let mut render_tasks = TaskGroup::default();
-                render_tasks.add(technique::render.system()).map_err(into_game_err)?;
-                world.add_stage("render", render_tasks);
-            }
+            world.add_stage("render", TaskGroup::from_system(technique::render.into_system()));
 
             Ok(())
         })

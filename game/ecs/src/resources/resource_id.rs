@@ -2,7 +2,7 @@ use crate::{
     core::{error::ErrorString, ids::SmallStringId},
     ECSError,
 };
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 pub type ResourceTag = SmallStringId<16>;
 
@@ -21,7 +21,7 @@ impl ResourceId {
 
     pub fn from_tag(tag: &str) -> Result<Self, ECSError> {
         Ok(ResourceId::Tag(
-            ResourceTag::from_str(tag).map_err(|err| ECSError::ResourceId(err.into()))?,
+            ResourceTag::from_str(tag).map_err(|err| ECSError::ResourceId(Arc::new(err)))?,
         ))
     }
 
@@ -30,7 +30,7 @@ impl ResourceId {
         T: serde::Serialize,
     {
         Ok(ResourceId::Binary(
-            bincode::serialize(&obj).map_err(|err| ECSError::ResourceId(err.into()))?,
+            bincode::serialize(&obj).map_err(|err| ECSError::ResourceId(Arc::new(err)))?,
         ))
     }
 
@@ -39,11 +39,9 @@ impl ResourceId {
         T: serde::Deserialize<'a>,
     {
         if let ResourceId::Binary(data) = self {
-            bincode::deserialize::<T>(&data).map_err(|err| ECSError::ResourceId(err.into()))
+            bincode::deserialize::<T>(&data).map_err(|err| ECSError::ResourceId(Arc::new(err)))
         } else {
-            Err(ECSError::ResourceId(Box::new(ErrorString(
-                "Not a binary id".to_owned(),
-            ))))
+            Err(ECSError::ResourceId(Arc::new(ErrorString(format!("Not a binary id")))))
         }
     }
 }

@@ -212,16 +212,16 @@ macro_rules! impl_into_system {
                 self.name.as_ref()
             }
 
-            fn resource_claims(&mut self) -> &ResourceClaims {
+            fn resource_claims(&mut self) -> Result<&ResourceClaims, ECSError> {
                 let claims = &self.claims;
-                self.resource_claims.get_or_insert_with(|| {
+                Ok(self.resource_claims.get_or_insert_with(|| {
                     let mut resource_claims = ResourceClaims::default();
                     $(resource_claims.add_claim({
                         let $resource : &<$resource as ResourceQuery>::Claim = claims.get();
                         $resource.to_claim()
                     });)*
                     resource_claims
-                })
+                }))
             }
 
             fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {

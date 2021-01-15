@@ -3,9 +3,10 @@ use shine_ecs::{
     scheduler::{Res, ResMut, Task, TaskGroup},
     ECSError,
 };
+use std::sync::Arc;
 
 pub struct Technique {
-    test_pass: Task,
+    test_pass: Arc<Task<TestPass>>,
 }
 
 impl Technique {
@@ -17,9 +18,6 @@ impl Technique {
 }
 
 pub fn render(tech: ResMut<Technique>, target: Res<FrameTarget>) -> Result<TaskGroup, ECSError> {
-    {
-        let mut system = tech.test_pass.system()?;
-        system.set_render_state(&target)?;
-    }
-    Ok(TaskGroup::from(Some(&tech.test_pass)))
+    tech.test_pass.system()?.set_render_state(&target);
+    Ok(TaskGroup::from_task(tech.test_pass.clone()))
 }
