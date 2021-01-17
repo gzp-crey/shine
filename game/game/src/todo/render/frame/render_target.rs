@@ -3,7 +3,7 @@ use crate::{
     render::{FrameTarget, FrameTargetResMut, TextureTarget, TextureTargetsResMut},
 };
 use shine_ecs::ecs::resources::{
-    FetchResource, IntoResourceClaim, ResourceClaim, ResourceClaimScope, ResourceClaims, ResourceQuery, ResourceTag,
+    FetchResource, ResourceQuery, ResourceClaim, ResourceClaimScope, ResourceClaims, ResourceAccess, ResourceTag,
     Resources, TagMut,
 };
 
@@ -194,7 +194,7 @@ impl RenderTargetClaim {
     }
 }
 
-impl IntoResourceClaim for RenderTargetClaim {
+impl ResourceQuery for RenderTargetClaim {
     fn into_claim(&self) -> ResourceClaim {
         //let render_target = Some(ResourceIndex::new::<RenderTarget>(Some(render_target_name)));
         //let color_targets = descriptor.map(|descriptor| descriptor.colors.target)
@@ -211,7 +211,7 @@ pub struct RenderTargetRes<'a> {
     texture_targets: TextureTargetsResMut<'a>,
 }
 
-impl<'a> ResourceQuery for RenderTargetRes<'a> {
+impl<'a> ResourceAccess for RenderTargetRes<'a> {
     type Fetch = FetchRenderTarget;
     type Claim = Option<RenderTargetClaim>;
 

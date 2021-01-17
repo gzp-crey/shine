@@ -9,6 +9,8 @@ mod resource;
 pub use resource::*;
 mod resource_store;
 pub use resource_store::*;
+mod resource_query;
+pub use resource_query::*;
 mod resources;
 pub use resources::*;
 

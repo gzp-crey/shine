@@ -52,6 +52,8 @@ impl System for TestPass {
     }
 
     fn run(&mut self, resources: &Resources) -> Result<TaskGroup, ECSError> {
+        //todo: request pipeline
+        // resources.claim(MultiResClaim<Pipeline>())
         //unimplemented!();
         Ok(TaskGroup::default())
     }

@@ -1,6 +1,6 @@
 use shine_ecs::{
-    resources::Resources,
-    scheduler::{IntoSystem, MultiRes, MultiResMut, Res, ResMut, Scheduler, TaskGroup, WithMultiRes, WithMultiResMut},
+    resources::{MultiRes, MultiResMut, Res, ResMut, Resources},
+    scheduler::{IntoSystem, Scheduler, TaskGroup, WithMultiRes, WithMultiResMut},
     ECSError,
 };
 
@@ -68,8 +68,8 @@ fn resource_access() {
     tasks.add_task(sys3.into_system().with_name(None));
     tasks.add_tasks(Some(
         sys4.into_system()
-            .claim_res::<u8, _>(|claim| claim.try_append_tags(&["five", "six"]).unwrap())
-            .claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["16"]).unwrap()),
+            .claim_res::<u8, _>(|claim| claim.try_add_tags(&["five", "six"]).unwrap())
+            .claim_res_mut::<u16, _>(|claim| claim.try_add_tags(&["16"]).unwrap()),
     ));
 
     log::info!("runing systems...");

@@ -1,6 +1,7 @@
 use crate::{game::test1::TestPass, render::FrameTarget};
 use shine_ecs::{
-    scheduler::{Res, ResMut, Task, TaskGroup},
+    resources::{Res, ResMut},
+    scheduler::{Task, TaskGroup},
     ECSError,
 };
 use std::sync::Arc;
