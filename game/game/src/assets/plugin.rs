@@ -35,14 +35,17 @@ impl Plugin for AssetPlugin {
     fn init(self, world: &mut World) -> PluginFuture<()> {
         Box::pin(async move {
             let asset_io = AssetIO::new(self.config.virtual_schemes).map_err(into_plugin_err)?;
-            world.resources.quick_insert(asset_io).map_err(into_plugin_err)?;
+            world
+                .resources
+                .register_with_instance(asset_io)
+                .map_err(into_plugin_err)?;
             Ok(())
         })
     }
 
     fn deinit(world: &mut World) -> PluginFuture<()> {
         Box::pin(async move {
-            world.resources.remove::<AssetIO>();
+            world.resources.unregister::<AssetIO>();
             Ok(())
         })
     }

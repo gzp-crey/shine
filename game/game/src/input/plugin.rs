@@ -75,15 +75,15 @@ impl Plugin for InputPlugin {
         Box::pin(async move {
             world
                 .resources
-                .quick_insert(InputHandler::default())
+                .register_with_instance(InputHandler::default())
                 .map_err(into_plugin_err)?;
             world
                 .resources
-                .quick_insert(CurrentInputState::default())
+                .register_with_instance(CurrentInputState::default())
                 .map_err(into_plugin_err)?;
             world
                 .resources
-                .quick_insert(WrapInputMapper::wrap(mappers::Unmapped))
+                .register_with_instance(WrapInputMapper::wrap(mappers::Unmapped))
                 .map_err(into_plugin_err)?;
             Ok(())
         })
@@ -91,9 +91,9 @@ impl Plugin for InputPlugin {
 
     fn deinit(world: &mut World) -> PluginFuture<()> {
         Box::pin(async move {
-            let _ = world.resources.remove::<InputHandler>();
-            let _ = world.resources.remove::<CurrentInputState>();
-            let _ = world.resources.remove::<WrapInputMapper>();
+            let _ = world.resources.unregister::<InputHandler>();
+            let _ = world.resources.unregister::<CurrentInputState>();
+            let _ = world.resources.unregister::<WrapInputMapper>();
             Ok(())
         })
     }

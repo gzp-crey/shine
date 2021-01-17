@@ -64,13 +64,13 @@ fn resource_access() {
     let mut tasks = TaskGroup::default();
     let mut scheduler = Scheduler::default();
 
-    tasks.add_system(sys0.into_system());
-    tasks.add_system(sys3.into_system().with_name(None));
-    tasks.add_system(
+    tasks.add_task(sys0.into_system());
+    tasks.add_task(sys3.into_system().with_name(None));
+    tasks.add_tasks(Some(
         sys4.into_system()
             .claim_res::<u8, _>(|claim| claim.try_append_tags(&["five", "six"]).unwrap())
             .claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["16"]).unwrap()),
-    );
+    ));
 
     log::info!("runing systems...");
     scheduler.run(&mut resources, &tasks).unwrap();

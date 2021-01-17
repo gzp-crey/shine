@@ -52,23 +52,27 @@ fn simple_test_core(case: TestCase) {
     resources
         .get_with_id::<SimpleTest>(&ida)
         .unwrap()
-        .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+        .assert_eq("one Tag(4880695660552532730, SmallStringId(\"a\"))", 1);
     resources
         .get_mut_with_id::<SimpleTest>(&ida)
         .unwrap()
-        .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+        .assert_eq("one Tag(4880695660552532730, SmallStringId(\"a\"))", 1);
 
     let ha = resources.get_handle::<SimpleTest>(&ida).unwrap();
-    resources.at(&ha).assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+    resources
+        .at(&ha)
+        .assert_eq("one Tag(4880695660552532730, SmallStringId(\"a\"))", 1);
 
     {
         // create now, counter incremented
         let hb = resources.get_handle::<SimpleTest>(&idb).unwrap();
-        resources.at(&hb).assert_eq("one Tag(SmallStringId(\"b\"))", 2);
+        resources
+            .at(&hb)
+            .assert_eq("one Tag(17063579327565171656, SmallStringId(\"b\"))", 2);
         resources
             .get_with_id::<SimpleTest>(&idb)
             .unwrap()
-            .assert_eq("one Tag(SmallStringId(\"b\"))", 2);
+            .assert_eq("one Tag(17063579327565171656, SmallStringId(\"b\"))", 2);
 
         {
             let store_one = resources.get_store::<SimpleTest>().unwrap();
@@ -77,17 +81,17 @@ fn simple_test_core(case: TestCase) {
             resources
                 .get_mut_with_id::<SimpleTest>(&ida)
                 .unwrap()
-                .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+                .assert_eq("one Tag(4880695660552532730, SmallStringId(\"a\"))", 1);
 
             {
                 // read resource a
                 let res_a = store_one.at(&ha);
-                res_a.assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+                res_a.assert_eq("one Tag(4880695660552532730, SmallStringId(\"a\"))", 1);
                 // read + read is ok
                 resources
                     .get_with_id::<SimpleTest>(&ida)
                     .unwrap()
-                    .assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+                    .assert_eq("one Tag(4880695660552532730, SmallStringId(\"a\"))", 1);
                 if let TestCase::Panic1 = case {
                     // read + write is panic
                     let _ = resources.get_mut_with_id::<SimpleTest>(&ida).unwrap();
@@ -96,7 +100,7 @@ fn simple_test_core(case: TestCase) {
 
                 // write resource b
                 let res_b = store_one.at_mut(&hb);
-                res_b.assert_eq("one Tag(SmallStringId(\"b\"))", 2);
+                res_b.assert_eq("one Tag(17063579327565171656, SmallStringId(\"b\"))", 2);
                 // write + read is panic
                 if let TestCase::Panic2 = case {
                     let _ = resources.get_with_id::<SimpleTest>(&idb).unwrap();
@@ -115,11 +119,15 @@ fn simple_test_core(case: TestCase) {
     resources.get_store_mut::<SimpleTest>().unwrap().bake(true);
 
     //handle was kept alive, no change in version
-    resources.at(&ha).assert_eq("one Tag(SmallStringId(\"a\"))", 1);
+    resources
+        .at(&ha)
+        .assert_eq("one Tag(4880695660552532730, SmallStringId(\"a\"))", 1);
 
     //handle was dropped, change in version
     let hb = resources.get_handle::<SimpleTest>(&idb).unwrap();
-    resources.at(&hb).assert_eq("one Tag(SmallStringId(\"b\"))", 3);
+    resources
+        .at(&hb)
+        .assert_eq("one Tag(17063579327565171656, SmallStringId(\"b\"))", 3);
 }
 
 #[test]

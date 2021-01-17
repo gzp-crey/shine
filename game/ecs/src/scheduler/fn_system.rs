@@ -18,8 +18,7 @@ use std::{any, borrow::Cow};
 ///    Ok(TaskGroup::default())
 /// }
 ///
-/// let mut tg = TaskGroup::default();
-/// tg.add_system(
+/// let tg = TaskGroup::from_task(
 ///    some_system.into_system()
 ///        .claim_res::<u8, _>(|claim| claim.append_ids(Some(ResourceId::Global)))
 ///        .try_claim_res::<u16, _>(|claim| claim.try_append_tags(&["tag"])).unwrap(),
@@ -49,8 +48,7 @@ pub trait WithMultiRes<C, HIndex> {
 ///    Ok(TaskGroup::default())
 /// }
 ///
-/// let mut tg = TaskGroup::default();
-/// tg.add_system(
+/// let tg = TaskGroup::from_task(
 ///    some_system.into_system()
 ///        .claim_res_mut::<u8, _>(|claim| claim.append_ids(Some(ResourceId::Global)))
 ///        .try_claim_res_mut::<u16, _>(|claim| claim.try_append_tags(&["tag"])).unwrap(),

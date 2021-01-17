@@ -169,6 +169,7 @@ where
     }
 
     fn post_bake(&mut self, context: &mut ResourceBakeContext<'_, Self::Resource>) {
+        //log::trace!("Resource loader async post bake");
         while let Some((handle, rp)) = self.next_response() {
             log::trace!("[{:?}] Received load response", handle);
 

@@ -2,11 +2,17 @@ use crate::{
     core::{error::ErrorString, ids::SmallStringId},
     ECSError,
 };
-use std::{str::FromStr, sync::Arc};
+use std::{
+    collections::hash_map::DefaultHasher,
+    fmt,
+    hash::{Hash, Hasher},
+    str::FromStr,
+    sync::Arc,
+};
 
 pub type ResourceTag = SmallStringId<16>;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ResourceId {
     Global,
     Tag(ResourceTag),
@@ -42,6 +48,22 @@ impl ResourceId {
             bincode::deserialize::<T>(&data).map_err(|err| ECSError::ResourceId(Arc::new(err)))
         } else {
             Err(ECSError::ResourceId(Arc::new(ErrorString(format!("Not a binary id")))))
+        }
+    }
+}
+
+impl fmt::Debug for ResourceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let hash = {
+            let mut h = DefaultHasher::new();
+            self.hash(&mut h);
+            h.finish()
+        };
+        match self {
+            ResourceId::Global => f.debug_tuple("Global").field(&hash).finish(),
+            ResourceId::Tag(tag) => f.debug_tuple("Tag").field(&hash).field(tag).finish(),
+            ResourceId::Counter(cnt) => f.debug_tuple("Counter").field(&hash).field(cnt).finish(),
+            ResourceId::Binary(bin) => f.debug_tuple("Binary").field(&hash).field(&bin.len()).finish(),
         }
     }
 }

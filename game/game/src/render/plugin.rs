@@ -52,9 +52,18 @@ impl Plugin for RenderPlugin {
             let device = context.device();
             let frame_target = FrameTarget::default();
 
-            world.resources.quick_insert(self.surface).map_err(into_plugin_err)?;
-            world.resources.quick_insert(context).map_err(into_plugin_err)?;
-            world.resources.quick_insert(frame_target).map_err(into_plugin_err)?;
+            world
+                .resources
+                .register_with_instance(self.surface)
+                .map_err(into_plugin_err)?;
+            world
+                .resources
+                .register_with_instance(context)
+                .map_err(into_plugin_err)?;
+            world
+                .resources
+                .register_with_instance(frame_target)
+                .map_err(into_plugin_err)?;
 
             Shader::register_resource(&mut world.resources, assetio.clone(), device.clone())
                 .map_err(into_plugin_err)?;
@@ -66,9 +75,9 @@ impl Plugin for RenderPlugin {
 
     fn deinit(world: &mut World) -> PluginFuture<()> {
         Box::pin(async move {
-            let _ = world.resources.remove::<FrameTarget>();
-            let _ = world.resources.remove::<Context>();
-            let _ = world.resources.remove::<Surface>();
+            let _ = world.resources.unregister::<FrameTarget>();
+            let _ = world.resources.unregister::<Context>();
+            let _ = world.resources.unregister::<Surface>();
 
             Shader::unregister_resource(&mut world.resources);
             Pipeline::unregister_resource(&mut world.resources);
@@ -90,6 +99,7 @@ impl World {
     }
 
     fn bake_resources(&mut self, gc: bool) {
+        //log::trace!("Baking render resources");
         Shader::bake_resource(&mut self.resources, gc);
         Pipeline::bake_resource(&mut self.resources, gc);
     }

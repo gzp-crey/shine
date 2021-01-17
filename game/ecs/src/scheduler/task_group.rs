@@ -16,55 +16,73 @@ pub trait Runnable {
     fn unlock(&self);
 }
 
+/// Warb a Runnable for more ergonomic use.
+#[derive(Clone)]
+pub struct TaskItem(Arc<dyn Runnable>);
+
+impl Deref for TaskItem {
+    type Target = Arc<dyn Runnable>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<S: 'static + System> From<S> for TaskItem {
+    fn from(task: S) -> TaskItem {
+        let task = Task::new(task);
+        let task: Arc<dyn Runnable> = task;
+        TaskItem(task)
+    }
+}
+
+impl<S: 'static + System> From<Arc<Task<S>>> for TaskItem {
+    fn from(task: Arc<Task<S>>) -> TaskItem {
+        let task: Arc<dyn Runnable> = task;
+        TaskItem(task)
+    }
+}
+
 /// A group of tasks
 #[derive(Default)]
 pub struct TaskGroup {
-    tasks: Vec<Arc<dyn Runnable>>,
+    tasks: Vec<TaskItem>,
 }
 
 impl TaskGroup {
-    pub fn from_system<S: 'static + System>(sys: S) -> TaskGroup {
-        Self::from_task(Task::new(sys))
+    pub fn from_task<T: Into<TaskItem>>(task: T) -> TaskGroup {
+        TaskGroup {
+            tasks: vec![task.into()],
+        }
     }
 
-    pub fn add_system<S: 'static + System>(&mut self, sys: S) {
-        self.add_task(Task::new(sys));
+    pub fn add_task<T: Into<TaskItem>>(&mut self, task: T) {
+        self.tasks.push(task.into());
     }
 
-    pub fn from_task<S: 'static + System>(task: Arc<Task<S>>) -> TaskGroup {
-        let mut tg = TaskGroup::default();
-        tg.add_task(task);
-        tg
-    }
-
-    pub fn add_task<S: 'static + System>(&mut self, task: Arc<Task<S>>) {
-        let task : Arc<dyn Runnable> = task;
-        self.tasks.push(task);
-    }
-
-    pub fn from_tasks<I>(tasks: I) -> TaskGroup
+    pub fn from_tasks<I, T>(tasks: I) -> TaskGroup
     where
-        I: IntoIterator,
-        I::Item: Into<Arc<dyn Runnable>>,
+        I: IntoIterator<Item = T>,
+        T: Into<TaskItem>,
     {
-        let mut tg = TaskGroup::default();
-        tg.add_tasks(tasks);
-        tg
+        TaskGroup {
+            tasks: tasks.into_iter().map(|task| task.into()).collect(),
+        }
     }
 
-    pub fn add_tasks<I>(&mut self, tasks: I)
+    pub fn add_tasks<I, T>(&mut self, tasks: I)
     where
-        I: IntoIterator,
-        I::Item: Into<Arc<dyn Runnable>>,
+        I: IntoIterator<Item = T>,
+        T: Into<TaskItem>,
     {
-        self.tasks.extend(tasks.into_iter().map(|t| t.into()));
+        self.tasks.extend(tasks.into_iter().map(|task| task.into()))
     }
 }
 
 impl Deref for TaskGroup {
-    type Target = [Arc<dyn Runnable>];
+    type Target = [TaskItem];
 
-    fn deref(&self) -> &[Arc<dyn Runnable>] {
+    fn deref(&self) -> &[TaskItem] {
         &self.tasks
     }
 }

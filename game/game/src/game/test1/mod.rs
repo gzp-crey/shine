@@ -61,10 +61,10 @@ impl GameLifecycle for Test1 {
         Box::pin(async move {
             world
                 .resources
-                .quick_insert(Technique::new(self.pipeline.clone()))
+                .register_with_instance(Technique::new(self.pipeline.clone()))
                 .map_err(into_game_err)?;
 
-            world.add_stage("render", TaskGroup::from_system(technique::render.into_system()));
+            world.add_stage("render", TaskGroup::from_task(technique::render.into_system()));
 
             Ok(())
         })
@@ -73,7 +73,7 @@ impl GameLifecycle for Test1 {
     fn destroy<'a>(&'a mut self, world: &'a mut World) -> GameFuture<'a, Result<(), AppError>> {
         Box::pin(async move {
             world.clear_stages();
-            let _ = world.resources.remove::<Technique>();
+            let _ = world.resources.unregister::<Technique>();
 
             Ok(())
         })
