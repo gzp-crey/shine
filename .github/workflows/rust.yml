@@ -1,0 +1,29 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Test ecs
+      run: cd game/ecs
+           cargo test --features native -- --test-threads=1 
+    - name: Test game
+      run: cd game/game
+           cargo test --features native -- --test-threads=1 
+    - name: Build cooker
+      run: cargo build -p shine-cooker
+    - name: Build game (native)
+      run: cargo build -p shine-native
+      
