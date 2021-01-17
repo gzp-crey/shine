@@ -16,17 +16,25 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Test ecs
-      run: pwd
-           ls
-           cd game
-           cd ecs
-           cargo test --features native -- --test-threads=1 
-    - name: Test game
-      run: cd game/game
-           cargo test --features native -- --test-threads=1 
-    - name: Build cooker
-      run: cargo build -p shine-cooker
-    - name: Build game (native)
-      run: cargo build -p shine-native
       
+    - name: Test ecs
+      run: |
+        cd game/ecs
+        cargo clippy --features native
+        cargo test --features native -- --test-threads=1 
+        
+    - name: Test game
+      run: |
+        cd game/game
+        cargo clippy --features native
+        cargo test --features native -- --test-threads=1 
+        
+    - name: Build cooker
+      run: |
+        cargo clippy -p shine-cooker
+        cargo build -p shine-cooker
+      
+    - name: Build game (native)
+      run: |
+        cargo clippy -p shine-native
+        cargo build -p shine-native
